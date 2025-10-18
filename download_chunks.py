@@ -1,15 +1,16 @@
-import logging
 import contextlib
 import io
 import json
+import logging
 import os
-import sys
 import sqlite3
 import tarfile
+
 import jmespath
+
 from dotenv import load_dotenv
 
-from wme_sdk.api.snapshot import Snapshot
+# from wme_sdk.api.snapshot import Snapshot
 from wme_sdk.auth.auth_client import AuthClient
 from wme_sdk.api.api_client import Client, Request, Filter
 
@@ -75,7 +76,7 @@ def get_enterprise_api_client(access_token) -> Client:
   
 
 @contextlib.contextmanager
-def revoke_token_on_exit(auth_client, refresh_token):
+def revoke_token_on_exit(auth_client: Client, refresh_token: str):
     try:
         yield
     finally:
@@ -158,10 +159,9 @@ def download_chunk(api_client: Client,
         logger.exception(f"Failed to download chunk data: {e}")
         return
 
-import tarfile
-import os
 
-def extract_single_file_from_tar_gz(tar_gz_path: str, extract_to: str = '.'):
+
+def extract_single_file_from_tar_gz(tar_gz_path: str, extract_to: str='.'):
     """
     Extract a single file from a tar.gz archive
     
