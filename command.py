@@ -238,9 +238,19 @@ class DownloadChunksCommand(Command):
         )
     
     def execute(self, args: Dict[str, Any]) -> str:
-        limit = args.get("limit", 1)
+        limit_arg = args.get("limit", 1)
         namespace = args.get("namespace")
         
+        limit = None
+        if limit_arg is not None:
+            try:
+                limit = int(limit_arg)
+                if limit <= 0:
+                    return "✗ Limit must be a positive integer"
+            except ValueError:
+                return "✗ Invalid limit value. Please provide a positive integer."
+            
+
         try:
             sqlconn = get_sql_conn()
             ensure_tables(sqlconn)
@@ -248,12 +258,12 @@ class DownloadChunksCommand(Command):
             # Get chunks that need downloading
             if namespace:
                 cursor = sqlconn.execute(
-                    "SELECT chunk_name, namespace FROM chunk_log WHERE namespace = ? AND downloaded_at IS NULL LIMIT ?",
+                    "SELECT chunk_name, namespace FROM chunk_log WHERE namespace = ? AND downloaded_at IS NULL ORDER BY chunk_name ASC LIMIT ?",
                     (namespace, limit)
                 )
             else:
                 cursor = sqlconn.execute(
-                    "SELECT chunk_name, namespace FROM chunk_log WHERE downloaded_at IS NULL LIMIT ?",
+                    "SELECT chunk_name, namespace FROM chunk_log WHERE downloaded_at IS NULL ORDER BY namespace ASC, chunk_name ASC LIMIT ?",
                     (limit,)
                 )
             
@@ -265,6 +275,11 @@ class DownloadChunksCommand(Command):
             api_client = self._get_api_client()
             downloaded_count = 0
             
+            if limit:
+                logger.info("Limiting download to %d chunks at most", limit)
+                chunks_to_download = chunks_to_download[:limit] 
+            logger.info("Planning to download %d chunks", len(chunks_to_download))
+
             for chunk in chunks_to_download:
                 chunk_name = chunk['chunk_name']
                 chunk_namespace = chunk['namespace']
