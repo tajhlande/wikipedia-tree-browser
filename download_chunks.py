@@ -187,6 +187,10 @@ def parse_chunk_file(sqlconn: sqlite3.Connection, chunk_name: str, chunk_file_pa
                 }
                 #logger.debug(f"Extracted page data: {json.dumps(page_data_extract, indent=2)}")
                 logger.debug(f"Processing page on line {line_number}. Page ID: {page_data_extract['page_id']}, Page title: {page_data_extract['title']}")
+                if line_number % 10000 == 0:
+                    logger.info(f"Processed {line_number} lines so far...")
+                
+                 # Upsert page data into the database
                 upsert_new_page_data(page_data_extract, sqlconn)
         return line_number
                   
