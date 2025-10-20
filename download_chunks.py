@@ -5,6 +5,7 @@ import logging
 import os
 import sqlite3
 import tarfile
+import time
 
 from dotenv import load_dotenv
 
@@ -12,6 +13,7 @@ from dotenv import load_dotenv
 from common import ensure_tables, get_sql_conn, upsert_new_chunk_data, upsert_new_page_data
 from wme_sdk.auth.auth_client import AuthClient
 from wme_sdk.api.api_client import Client, Request, Filter
+from progress_utils import ProgressTracker
 
 # Load environment variables from .env file 
 load_dotenv()
@@ -65,7 +67,7 @@ def get_enterprise_auth_client() -> tuple[AuthClient, str, str]:
 
 def get_enterprise_api_client(access_token) -> Client:
     logger.debug("Creating API Client with access token")
-    api_client = Client()
+    api_client = Client(download_chunk_size = 1024*1024, download_concurrency=4)
     api_client.set_access_token(access_token)
     return api_client
   
@@ -104,18 +106,18 @@ def download_chunk(api_client: Client,
                    namespace: str, # "enwiki_namespace_0"
                    chunk_name: str, # "enwiki_namespace_0_chunk_0"
                    chunk_file_path: str, # "enwiki_namespace_0_chunk_0.tar.gz"
+                   tracker: ProgressTracker = None
                    ):
     try:
         # Create a BytesIO object to hold the downloaded content
         chunk_writer = io.BytesIO()
-        api_client.download_chunk(namespace, chunk_name, chunk_writer)
+        api_client.download_chunk(namespace, chunk_name, chunk_writer, tracker)
         # Save the content to a file
         chunk_data = chunk_writer.getvalue()
-        logger.info(f"Downloaded {len(chunk_data)} bytes")
+        #logger.info(f"Downloaded {len(chunk_data)} bytes")
         with open(chunk_file_path, "wb") as f:
             f.write(chunk_data)
-        logger.info("Chunk data saved to %s", chunk_file_path)
-
+        
     except Exception as e:
         logger.exception(f"Failed to download chunk data: {e}")
         return
@@ -170,28 +172,44 @@ def parse_chunk_file(sqlconn: sqlite3.Connection, chunk_name: str, chunk_file_pa
     """
     try:
         logger.info(f"Parsing chunk file: {chunk_file_path}")
+        
+        # First, count total lines for progress tracking
+        total_lines = 0
         with open(chunk_file_path, 'r', encoding='utf-8') as f:
-            line_number = 0
-            for line in f:
-                line_number += 1
-                # Assuming each line is a JSON object representing a page
-                #logger.debug(f"Reading line {line_number}: {line.strip()[:1000]}")
-                raw_page_data = json.loads(line)
-                #logger.debug(f"Parsed JSON: {json.dumps(page_data)[:1000]}")
-                page_data_extract = {
-                    'page_id': raw_page_data.get('id'),
-                    'title': raw_page_data.get('name'),
-                    'chunk_name': chunk_name,
-                    'url': raw_page_data.get('url'),
-                    'abstract': raw_page_data.get('abstract'),
-                }
-                #logger.debug(f"Extracted page data: {json.dumps(page_data_extract, indent=2)}")
-                logger.debug(f"Processing page on line {line_number}. Page ID: {page_data_extract['page_id']}, Page title: {page_data_extract['title']}")
-                if line_number % 10000 == 0:
-                    logger.info(f"Processed {line_number} lines so far...")
-                
-                 # Upsert page data into the database
-                upsert_new_page_data(page_data_extract, sqlconn)
+            for _ in f:
+                total_lines += 1
+        
+        logger.info(f"Found {total_lines} lines to process")
+        
+        # Parse with progress bar - reduce logging frequency to avoid interference
+        with ProgressTracker(f"Parsing {chunk_name}", total=total_lines, unit="lines") as tracker:
+            with open(chunk_file_path, 'r', encoding='utf-8') as f:
+                line_number = 0
+                for line in f:
+                    line_number += 1
+                    # Assuming each line is a JSON object representing a page
+                    raw_page_data = json.loads(line)
+                    page_data_extract = {
+                        'page_id': raw_page_data.get('id'),
+                        'title': raw_page_data.get('name'),
+                        'chunk_name': chunk_name,
+                        'url': raw_page_data.get('url'),
+                        'abstract': raw_page_data.get('abstract'),
+                    }
+                    
+                    # Only log debug info occasionally to avoid progress bar interference
+                    if line_number % 50000 == 0:
+                        logger.debug(f"Processing page on line {line_number}. Page ID: {page_data_extract['page_id']}, Page title: {page_data_extract['title']}")
+                    
+                    # Log progress less frequently than before
+                    if line_number % 50000 == 0:
+                        logger.info(f"Processed {line_number} lines so far...")
+                    
+                    # Upsert page data into the database
+                    upsert_new_page_data(page_data_extract, sqlconn)
+                    tracker.update(1)
+        
+        logger.info(f"Completed parsing {chunk_name}: {line_number} lines processed")
         return line_number
                   
                 

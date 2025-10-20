@@ -1950,6 +1950,7 @@ dependencies = [
     { name = "pytest" },
     { name = "python-dotenv" },
     { name = "requests" },
+    { name = "tqdm" },
 ]
 
 [package.metadata]
@@ -1961,6 +1962,7 @@ requires-dist = [
     { name = "pytest", specifier = "==8.3.3" },
     { name = "python-dotenv", specifier = "==1.0.1" },
     { name = "requests", specifier = "==2.32.3" },
+    { name = "tqdm", specifier = ">=4.67.1" },
 ]
 
 [[package]]

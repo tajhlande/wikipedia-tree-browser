@@ -12,6 +12,7 @@ from chromadb.api.types import EmbeddingFunction, Embeddings
 from chromadb.api.models.Collection import Collection as ChromaCollection
 
 from common import get_any_page, get_page_by_id, get_page_ids_needing_embedding_for_chunk, get_sql_conn, update_embeddings_for_page
+from progress_utils import ProgressTracker
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -105,16 +106,20 @@ def compute_embeddings_for_chunk(chunk_name: str, embedding_function: EmbeddingF
             page_id_list = page_id_list[:limit]
             logger.info("Processing first %d pages (limit applied)", limit)
         
-        counter = 0
-        for page_id in page_id_list:
-            page_data = get_page_by_id(page_id, sqlconn)
-            embeddings = compute_page_embeddings(page_data, embedding_function)
-            if len(embeddings) > 1:
-                logger.warning("More than one embedding returned, only storing the first one.")
-            page_data['embedding_vector'] = embeddings[0]
-            update_embeddings_for_page(page_data, sqlconn)
-            logger.debug("Stored embedding for page_id %d", page_id)
-            counter += 1
+        # Use progress bar for embedding computation
+        with ProgressTracker(f"Computing embeddings for {chunk_name}", total=len(page_id_list), unit="pages") as tracker:
+            counter = 0
+            for page_id in page_id_list:
+                page_data = get_page_by_id(page_id, sqlconn)
+                embeddings = compute_page_embeddings(page_data, embedding_function)
+                if len(embeddings) > 1:
+                    logger.warning("More than one embedding returned, only storing the first one.")
+                page_data['embedding_vector'] = embeddings[0]
+                update_embeddings_for_page(page_data, sqlconn)
+                logger.debug("Stored embedding for page_id %d", page_id)
+                counter += 1
+                tracker.update(1)
+    
     logger.info("Computed and stored embeddings for %d pages in chunk %s in %.2f seconds", counter, chunk_name, elapsed())
 
         

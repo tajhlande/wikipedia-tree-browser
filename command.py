@@ -8,8 +8,9 @@ import sqlite3
 
 # Import existing modules
 from common import get_sql_conn, ensure_tables, get_page_ids_needing_embedding_for_chunk
-from download_chunks import get_enterprise_auth_client, get_enterprise_api_client, get_chunk_info_for_namespace, download_chunk as original_download_chunk, extract_single_file_from_tar_gz, parse_chunk_file
+from download_chunks import get_enterprise_auth_client, get_enterprise_api_client, get_chunk_info_for_namespace, download_chunk, extract_single_file_from_tar_gz, parse_chunk_file
 from index_pages import get_embedding_function, compute_embeddings_for_chunk
+from progress_utils import ProgressTracker
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -293,8 +294,10 @@ class DownloadChunksCommand(Command):
                     chunk_file_path = f"{download_dir}/{chunk_name}.tar.gz"
                     
                     # Download chunk
-                    original_download_chunk(api_client, chunk_namespace, chunk_name, chunk_file_path)
-                    
+                    with ProgressTracker("Downloading chunk", unit="bytes") as tracker:
+                        download_chunk(api_client, chunk_namespace, chunk_name, chunk_file_path, tracker)
+                    logger.info("Chunk saved to %s", chunk_file_path)
+
                     # Update database
                     sqlconn.execute(
                         "UPDATE chunk_log SET chunk_archive_path = ?, downloaded_at = CURRENT_TIMESTAMP WHERE chunk_name = ?",

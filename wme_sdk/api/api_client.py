@@ -6,6 +6,8 @@ import datetime
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Any, List, Optional, Dict
 
+from progress_utils import ProgressTracker
+
 
 DATE_FORMAT = "%Y-%m-%d"
 HOUR_FORMAT = "%H"
@@ -119,9 +121,10 @@ class Client:
         }
         return headers
 
-    def _download_entity(self, path: str, writer: io.BytesIO):
+    def _download_entity(self, path: str, writer: io.BytesIO, tracker: ProgressTracker = None):
         headers = self._head_entity(path)
         content_length = headers['Content-Length']
+        tracker.set_total(content_length) if tracker else None
         if self.download_chunk_size > 0:
             chunk_size = min(self.download_chunk_size, content_length)
             chunks = [(i, min(i + chunk_size, content_length)) for i in range(0, content_length, chunk_size)]
@@ -134,6 +137,7 @@ class Client:
             res = self._do(req)
             writer.seek(start)
             writer.write(res.content)
+            tracker.update(end - start) if tracker else None    
 
         with ThreadPoolExecutor(max_workers=self.download_concurrency) as executor:
             futures = [executor.submit(download_chunk, start, end) for start, end in chunks]
@@ -226,8 +230,8 @@ class Client:
     def read_batch(self, time: datetime.datetime, idr: str, cbk: Callable[[dict], Any]):
         self._read_entity(f"b{self._get_batches_prefix(time)}/{idr}/download", cbk)
 
-    def download_batch(self, time: datetime.datetime, idr: str, writer: io.BytesIO):
-        self._download_entity(f"{self._get_batches_prefix(time)}/{idr}/download", writer)
+    def download_batch(self, time: datetime.datetime, idr: str, writer: io.BytesIO, tracker: ProgressTracker = None):
+        self._download_entity(f"{self._get_batches_prefix(time)}/{idr}/download", writer, tracker)
 
     def get_snapshots(self, req: Request) -> List[dict]:
         snapshots = []
@@ -245,8 +249,8 @@ class Client:
     def read_snapshot(self, idr: str, cbk: Callable[[dict], Any]):
         self._read_entity(f"snapshots/{idr}/download", cbk)
 
-    def download_snapshot(self, idr: str, writer: io.BytesIO):
-        self._download_entity(f"snapshots/{idr}/download", writer)
+    def download_snapshot(self, idr: str, writer: io.BytesIO, tracker: ProgressTracker = None):
+        self._download_entity(f"snapshots/{idr}/download", writer, tracker)
 
     def get_chunks(self, sid: str, req: Request) -> List[dict]:
         chunks = []
@@ -264,8 +268,8 @@ class Client:
     def read_chunk(self, sid: str, idr: str, cbk: Callable[[dict], Any]):
         self._read_entity(f"snapshots/{sid}/chunks/{idr}/download", cbk)
 
-    def download_chunk(self, sid: str, idr: str, writer: io.BytesIO):
-        self._download_entity(f"snapshots/{sid}/chunks/{idr}/download", writer)
+    def download_chunk(self, sid: str, idr: str, writer: io.BytesIO, tracker: ProgressTracker = None):
+        self._download_entity(f"snapshots/{sid}/chunks/{idr}/download", writer, tracker)
 
     def get_articles(self, name: str, req: Request) -> List[dict]:
         articles = []
@@ -294,8 +298,8 @@ class Client:
     def read_structured_snapshot(self, idr: str, cbk: Callable[[dict], Any]):
         self._read_entity(f"snapshots/structured-contents/{idr}/download", cbk)
 
-    def download_structured_snapshot(self, idr: str, writer: io.BytesIO):
-        self._download_entity(f"snapshots/structured-contents/{idr}/download", writer)
+    def download_structured_snapshot(self, idr: str, writer: io.BytesIO, tracker: ProgressTracker = None):
+        self._download_entity(f"snapshots/structured-contents/{idr}/download", writer, tracker)
 
     def stream_articles(self, req: Request, cbk: Callable[[dict], Any]):
         self._subscribe_to_entity("articles", req, cbk)
