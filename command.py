@@ -320,12 +320,24 @@ class UnpackProcessChunksCommand(Command):
             name="unpack",
             description="Unpack and process downloaded chunks",
             required_args=[],
-            optional_args={"namespace": None}
+            optional_args={"namespace": None, "limit": None}
         )
     
     def execute(self, args: Dict[str, Any]) -> str:
         namespace = args.get("namespace")
-        
+        limit = args.get("limit")
+
+        # Validate and convert limit parameter
+        limit_int = None
+        if limit is not None:
+            try:
+                limit_int = int(limit)
+                if limit_int <= 0:
+                    return "✗ Limit must be a positive integer"
+            except ValueError:
+                return "✗ Invalid limit value. Please provide a positive integer."
+            
+
         try:
             sqlconn = get_sql_conn()
             ensure_tables(sqlconn)
@@ -349,6 +361,12 @@ class UnpackProcessChunksCommand(Command):
             processed_count = 0
             total_pages = 0
             
+            if limit_int:
+                chunks_to_unpack = chunks_to_unpack[:limit_int] 
+                logger.info("Limiting unpacking to %d chunks at most", limit_int)
+
+            logger.info("Planning to unpack to %d chunks", len(chunks_to_unpack))
+
             for chunk in chunks_to_unpack:
                 chunk_name = chunk['chunk_name']
                 chunk_namespace = chunk['namespace']
@@ -361,11 +379,13 @@ class UnpackProcessChunksCommand(Command):
                     os.makedirs(extract_dir, exist_ok=True)
                     
                     # Extract archive
+                    logger.info("Extracting archive %s to %s", archive_path, extract_dir)
                     extracted_file = extract_single_file_from_tar_gz(archive_path, extract_dir)
                     
                     if extracted_file:
                         # Parse chunk file
                         chunk_file_path = f"{extract_dir}/{extracted_file}"
+                        logger.info("Parsing pages out of chunk file %s", chunk_file_path)
                         line_count = parse_chunk_file(sqlconn, chunk_name, chunk_file_path)
                         
                         # Update database
@@ -376,6 +396,7 @@ class UnpackProcessChunksCommand(Command):
                         sqlconn.commit()
                         
                         # Remove extracted file
+                        logger.info("Cleaning up extracted file %s", extracted_file)
                         try:
                             os.remove(extracted_file)
                         except Exception as e:
@@ -390,7 +411,7 @@ class UnpackProcessChunksCommand(Command):
                         total_pages += pages_in_chunk
                         
                         processed_count += 1
-                        logger.info(f"Unpacked and processed {chunk_name} with {pages_in_chunk} pages")
+                        logger.info(f"Unpacked and processed {chunk_name} with {pages_in_chunk} pages.")
                     else:
                         logger.error(f"Failed to extract {archive_path}")
                 
