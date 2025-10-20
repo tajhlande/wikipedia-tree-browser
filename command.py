@@ -400,7 +400,7 @@ class UnpackProcessChunksCommand(Command):
                     if extracted_file:
                         # Parse chunk file
                         chunk_file_path = f"{extract_dir}/{extracted_file}"
-                        logger.info("Parsing pages out of chunk file %s", chunk_file_path)
+                        #logger.info("Parsing pages out of chunk file %s", chunk_file_path)
                         line_count = parse_chunk_file(sqlconn, chunk_name, chunk_file_path)
                         
                         # Update database
