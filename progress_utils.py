@@ -23,7 +23,7 @@ class ProgressTracker:
             'desc': self.description,
             'unit': self.unit,
             'ascii': True,
-            'ncols': 80
+            'ncols': 120
         }
         
         # Only add total if it's not None

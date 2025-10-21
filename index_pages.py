@@ -14,9 +14,13 @@ from chromadb.api.models.Collection import Collection as ChromaCollection
 from common import get_any_page, get_page_by_id, get_page_ids_needing_embedding_for_chunk, get_sql_conn, update_embeddings_for_page
 from progress_utils import ProgressTracker
 
-logging.basicConfig(level=logging.DEBUG)
+# Configure logging to suppress INFO messages from httpx
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
+
+# Suppress INFO level logs from httpx
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def get_embedding_function(model_name: str,
@@ -94,33 +98,38 @@ def timer():
     start_time = time.perf_counter()
     yield lambda: time.perf_counter() - start_time
 
-def compute_embeddings_for_chunk(chunk_name: str, embedding_function: EmbeddingFunction, sqlconn: sqlite3.Connection, limit: int = None) -> None:
+def compute_embeddings_for_chunk(chunk_name: str, 
+                                 embedding_function: EmbeddingFunction, 
+                                 sqlconn: sqlite3.Connection, 
+                                 limit: int = None, 
+                                 tracker: ProgressTracker = None) -> None:
 
-    logger.info("Computing embeddings for chunk %s", chunk_name)
-    with timer() as elapsed:
-        page_id_list = get_page_ids_needing_embedding_for_chunk(chunk_name, sqlconn)
-        logger.info("Found %d pages needing embeddings in chunk %s", len(page_id_list), chunk_name)
-        
-        # Apply limit if specified
-        if limit and limit < len(page_id_list):
-            page_id_list = page_id_list[:limit]
-            logger.info("Processing first %d pages (limit applied)", limit)
-        
-        # Use progress bar for embedding computation
-        with ProgressTracker(f"Computing embeddings for {chunk_name}", total=len(page_id_list), unit="pages") as tracker:
-            counter = 0
-            for page_id in page_id_list:
-                page_data = get_page_by_id(page_id, sqlconn)
-                embeddings = compute_page_embeddings(page_data, embedding_function)
-                if len(embeddings) > 1:
-                    logger.warning("More than one embedding returned, only storing the first one.")
-                page_data['embedding_vector'] = embeddings[0]
-                update_embeddings_for_page(page_data, sqlconn)
-                logger.debug("Stored embedding for page_id %d", page_id)
-                counter += 1
-                tracker.update(1)
+    #logger.info("Computing embeddings for chunk %s", chunk_name)
+    page_id_list = get_page_ids_needing_embedding_for_chunk(chunk_name, sqlconn)
+    #logger.info("Found %d pages needing embeddings in chunk %s", len(page_id_list), chunk_name)
     
-    logger.info("Computed and stored embeddings for %d pages in chunk %s in %.2f seconds", counter, chunk_name, elapsed())
+    # Apply limit if specified
+    if limit and limit < len(page_id_list):
+        page_id_list = page_id_list[:limit]
+        #logger.info("Processing first %d pages (limit applied)", limit)
+    #else:
+        #logger.info("Processing all %d pages", len(page_id_list))
+    
+    tracker.set_total(len(page_id_list)) if tracker else None   
+    # Use progress bar for embedding computation
+    counter = 0
+    for page_id in page_id_list:
+        page_data = get_page_by_id(page_id, sqlconn)
+        embeddings = compute_page_embeddings(page_data, embedding_function)
+        # if len(embeddings) > 1:
+        #     logger.warning("More than one embedding returned, only storing the first one.")
+        page_data['embedding_vector'] = embeddings[0]
+        update_embeddings_for_page(page_data, sqlconn)
+        #logger.debug("Stored embedding for page_id %d", page_id)
+        counter += 1
+        tracker.update(1)
+    
+    #logger.info("Computed and stored embeddings for %d pages in chunk %s in %.2f seconds", counter, chunk_name, elapsed())
 
         
 if __name__ == "__main__":

@@ -463,19 +463,19 @@ class EmbedPagesCommand(Command):
     
     def execute(self, args: Dict[str, Any]) -> str:
         chunk_name = args.get("chunk")
-        limit = args.get("limit")
+        limit_arg = args.get("limit")
         
         # Validate and convert limit parameter
-        limit_int = None
-        if limit is not None:
+        limit = None
+        if limit_arg is not None:
             try:
-                limit_int = int(limit)
-                if limit_int <= 0:
+                limit = int(limit_arg)
+                if limit <= 0:
                     return "✗ Limit must be a positive integer"
             except ValueError:
                 return "✗ Invalid limit value. Please provide a positive integer."
             
-        logger.info("Computing embeddings for pages%s%s...", f" in chunk {chunk_name}" if chunk_name else "", f" with limit {limit_int}" if limit_int else "")
+        logger.info("Computing embeddings for pages%s%s...", f" in chunk {chunk_name}" if chunk_name else "", f" with limit {limit}" if limit else "")
         
         try:
             sqlconn = get_sql_conn()
@@ -492,62 +492,80 @@ class EmbedPagesCommand(Command):
                 # Process specific chunk
                 page_ids = get_page_ids_needing_embedding_for_chunk(chunk_name, sqlconn)
                 
-                if limit_int:
-                    page_ids = page_ids[:limit_int]
-                
+                if limit:
+                    pages_to_process = min(len(page_ids), limit)
+                    if limit < len(page_ids):
+                        logger.info("Pages to process: %d for chunk %s (limit applied)", pages_to_process, chunk_name)
+                    else:
+                        logger.info("Pages to process: %d for chunk %s (limit not restricting)", pages_to_process, chunk_name)
+                else:
+                    pages_to_process = len(page_ids)
+                    logger.info("Pages to process: %d for chunk %s (not limited)", pages_to_process, chunk_name)
+
                 if not page_ids:
                     return f"✓ No pages needing embeddings in chunk {chunk_name}"
-                
+
+                #logger.info("Processing %d embeddings for named chunk %s...", len(page_ids), chunk_name)
+
                 # Compute embeddings
-                compute_embeddings_for_chunk(chunk_name, embedding_function, sqlconn)
+                with ProgressTracker(f"Computing embeddings for chunk {chunk_name}", total=pages_to_process, unit="pages") as tracker:
+                    compute_embeddings_for_chunk(chunk_name, embedding_function, sqlconn, limit=pages_to_process, tracker=tracker)
                 
                 return f"✓ Processed {len(page_ids)} pages for chunk {chunk_name}"
             
             else:
                 # Process all chunks
+                logger.info("Processing %sembeddings for next available chunk...", f"up to {limit} " if limit else "")
+
                 cursor = sqlconn.execute(
                     "SELECT DISTINCT chunk_name FROM page_log WHERE embedding_vector IS NULL"
                 )
-                chunks = [row['chunk_name'] for row in cursor.fetchall()]
+                chunk_name_list = [row['chunk_name'] for row in cursor.fetchall()]
                 
-                if not chunks:
+                if not chunk_name_list:
                     return "✓ No pages needing embeddings"
                 
                 total_processed = 0
                 
-                for chunk in chunks:
+                for chunk_name in chunk_name_list:
                     try:
                         # Check if we have remaining limit capacity
-                        if limit_int and total_processed >= limit_int:
+                        if limit and total_processed >= limit:
                             break
                             
                         # Get pages needing embeddings for this chunk
-                        page_ids = get_page_ids_needing_embedding_for_chunk(chunk, sqlconn)
+                        page_ids = get_page_ids_needing_embedding_for_chunk(chunk_name, sqlconn)
                         
                         if not page_ids:
                             continue
                         
                         # Calculate how many pages we can process in this chunk
-                        if limit_int:
-                            remaining = limit_int - total_processed
+                        if limit:
+                            remaining = limit - total_processed
                             pages_to_process = min(len(page_ids), remaining)
+                            if pages_to_process < len(page_ids):
+                                logger.info("Pages to process: %d for chunk %s (limit applied)", pages_to_process, chunk_name)
+                            else:
+                                logger.info("Pages to process: %d for chunk %s (limit not restricting)", pages_to_process, chunk_name)
                         else:
                             pages_to_process = len(page_ids)
-                        
+                            logger.info("Pages to process: %d for chunk %s (not limited)", pages_to_process, chunk_name)
+
                         if pages_to_process > 0:
                             # Pass the limit to the compute function
-                            compute_embeddings_for_chunk(chunk, embedding_function, sqlconn, limit=pages_to_process)
+                            with ProgressTracker(f"Computing embeddings for chunk {chunk_name}", total=pages_to_process, unit="pages") as tracker:
+                                compute_embeddings_for_chunk(chunk_name, embedding_function, sqlconn, limit=pages_to_process, tracker=tracker)
                             total_processed += pages_to_process
-                            logger.info(f"Processed {pages_to_process} pages for chunk {chunk}")
+                            logger.info(f"Processed {pages_to_process} pages for chunk {chunk_name}")
                     
                     except Exception as e:
-                        logger.error(f"Failed to process chunk {chunk}: {e}")
+                        logger.error(f"Failed to process chunk {chunk_name}: {e}")
                         continue
                 
-                return f"✓ Processed {total_processed} pages across {len(chunks)} chunk(s)"
+                return f"✓ Processed {total_processed} pages across {len(chunk_name_list)} chunk(s)"
         
         except Exception as e:
-            logger.error(f"Failed to process pages: {e}")
+            logger.exception(f"Failed to process pages: {e}")
             return f"✗ Failed to process pages: {e}"
 
 class StatusCommand(Command):
