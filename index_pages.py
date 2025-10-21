@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import sqlite3
 import time
 
@@ -11,7 +12,7 @@ import chromadb.utils.embedding_functions as embedding_functions
 from chromadb.api.types import EmbeddingFunction, Embeddings
 from chromadb.api.models.Collection import Collection as ChromaCollection
 
-from common import get_any_page, get_page_by_id, get_page_ids_needing_embedding_for_chunk, get_sql_conn, update_embeddings_for_page
+from database import get_any_page, get_page_by_id, get_page_ids_needing_embedding_for_chunk, get_sql_conn, update_embeddings_for_page
 from progress_utils import ProgressTracker
 
 # Configure logging to suppress INFO messages from httpx
@@ -32,9 +33,9 @@ def get_embedding_function(model_name: str,
     return embedding_functions.OpenAIEmbeddingFunction(
                     # api_type='OpenAI',
                     api_key=openai_api_key,
-                    api_base=openai_compatible_url, #'http://llmhost1:8080/v1',
-                    api_version=openai_api_version, #'v1',
-                    model_name=model_name #'jina-embeddings-v4-text-retrieval-GGUF',
+                    api_base=openai_compatible_url, 
+                    api_version=openai_api_version, 
+                    model_name=model_name 
                 )
 
 def init_chroma_db(collection_name: str, 
@@ -61,10 +62,11 @@ def compute_page_embeddings(page_data: dict, embedding_function: EmbeddingFuncti
 
 def test_one_embedding():
     sqlconn = get_sql_conn()
+    embedding_model_name, embedding_model_api_url, embedding_model_api_key = get_embedding_model_config()
     embedding_function = get_embedding_function(
-        model_name="jina-embeddings-v4-text-matching-GGUF",
-        openai_compatible_url='http://llmhost1.internal.tajh.house:8080/v1',
-        openai_api_key='no-key-necessary'
+        model_name=embedding_model_name,
+        openai_compatible_url=embedding_model_api_url,
+        openai_api_key=embedding_model_api_key
     )
 
     page_data = get_any_page(sqlconn)
@@ -131,14 +133,45 @@ def compute_embeddings_for_chunk(chunk_name: str,
     
     #logger.info("Computed and stored embeddings for %d pages in chunk %s in %.2f seconds", counter, chunk_name, elapsed())
 
+EMBEDDING_MODEL_NAME_KEY = 'EMBEDDING_MODEL_NAME'
+EMBEDDING_MODEL_API_URL_KEY = 'EMBEDDING_MODEL_API_URL'
+EMBEDDING_MODEL_API_KEY_KEY = 'EMBEDDING_MODEL_API_KEY'
         
+DEFAULT_EMBEDDING_MODEL_NAME = "jina-embeddings-v4-text-matching-GGUF"
+
+def get_embedding_model_config() -> tuple[str, str, str]:
+    """
+    Retrieve embedding model configuration from environment variables.
+    Returns: A tuple containing the embedding model name, API URL, and API key.
+    Raises: ValueError if required environment variables are missing.
+    """
+    missing_env_vars = []
+    embedding_model_name = os.environ.get(EMBEDDING_MODEL_NAME_KEY)
+    if not os.environ.get(EMBEDDING_MODEL_NAME_KEY):
+        embedding_model_name = DEFAULT_EMBEDDING_MODEL_NAME
+        logger.warning("%s environment variable not set, using default value: %s", EMBEDDING_MODEL_NAME_KEY, embedding_model_name)
+    if not os.environ.get(EMBEDDING_MODEL_API_URL_KEY):
+        missing_env_vars.append(EMBEDDING_MODEL_API_URL_KEY)
+    if not os.environ.get(EMBEDDING_MODEL_API_KEY_KEY):   
+        missing_env_vars.append(EMBEDDING_MODEL_API_KEY_KEY)
+    if missing_env_vars:    
+        raise ValueError(f"Missing required environment variables: {', '.join(missing_env_vars)}\n Add them to .env or to enviroment by other means.")
+    embedding_model_api_url = os.environ[EMBEDDING_MODEL_API_URL_KEY]
+    embedding_model_api_key = os.environ[EMBEDDING_MODEL_API_KEY_KEY]
+    return embedding_model_name, embedding_model_api_url, embedding_model_api_key
+
+
 if __name__ == "__main__":
     sqlconn = get_sql_conn()
+
+    embedding_model_name, embedding_model_api_url, embedding_model_api_key = get_embedding_model_config()
+        
     jina_text_matching_function = get_embedding_function(
-        model_name="jina-embeddings-v4-text-matching-GGUF",
-        openai_compatible_url='http://llmhost1.internal.tajh.house:8080/v1',
-        openai_api_key='no-key-necessary'
+        model_name=embedding_model_name,
+        openai_compatible_url=embedding_model_api_url,
+        openai_api_key=embedding_model_api_key
     )
+
     enwiki_ns_0 = "enwiki_namespace_0"
     enwiki_chunk_0 = "enwiki_namespace_0_chunk_0"
     compute_embeddings_for_chunk(chunk_name=enwiki_chunk_0, embedding_function=jina_text_matching_function, sqlconn=sqlconn)

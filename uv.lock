@@ -1939,7 +1939,7 @@ wheels = [
 ]
 
 [[package]]
-name = "wp-snapshot-dl"
+name = "wp-embeddings"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

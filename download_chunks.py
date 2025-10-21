@@ -10,7 +10,7 @@ import time
 from dotenv import load_dotenv
 
 # from wme_sdk.api.snapshot import Snapshot
-from common import ensure_tables, get_sql_conn, upsert_new_chunk_data, upsert_new_page_data
+from database import ensure_tables, get_sql_conn, upsert_new_chunk_data, upsert_new_page_data
 from wme_sdk.auth.auth_client import AuthClient
 from wme_sdk.api.api_client import Client, Request, Filter
 from progress_utils import ProgressTracker

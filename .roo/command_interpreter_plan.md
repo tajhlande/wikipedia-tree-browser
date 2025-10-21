@@ -1,7 +1,7 @@
 # Command Interpreter Implementation Plan
 
 ## Overview
-This document outlines the implementation plan for a command interpreter for the wp-snapshot-dl project. The interpreter will provide four main commands for managing chunk data downloading, processing, and embedding computation.
+This document outlines the implementation plan for a command interpreter for the wp-embeddings project. The interpreter will provide four main commands for managing chunk data downloading, processing, and embedding computation.
 
 ## Architecture Design
 
@@ -177,11 +177,7 @@ class ProcessRemainingPagesCommand(Command):
         limit = args.get("limit")
         
         # Setup embedding function
-        embedding_function = get_embedding_function(
-            model_name="jina-embeddings-v4-text-matching-GGUF",
-            openai_compatible_url='http://llmhost1.internal.tajh.house:8080/v1',
-            openai_api_key='no-key-necessary'
-        )
+        
         
         # Get pages needing embeddings
         sqlconn = get_sql_conn()
@@ -368,4 +364,4 @@ The command interpreter will leverage existing dependencies:
 - Optimize memory usage for large chunk files
 - Implement proper cleanup of temporary files
 
-This implementation plan provides a comprehensive foundation for building a robust command interpreter that integrates seamlessly with the existing wp-snapshot-dl codebase.
+This implementation plan provides a comprehensive foundation for building a robust command interpreter that integrates seamlessly with the existing wp-embeddings codebase.

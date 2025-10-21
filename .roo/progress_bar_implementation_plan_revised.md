@@ -1,4 +1,4 @@
-# Terminal Progress Bar Implementation Plan for wp-snapshot-dl (Revised)
+# Terminal Progress Bar Implementation Plan for wp-embeddings (Revised)
 
 ## Overview
 This document outlines a revised plan for adding terminal progress bars to chunk parsing operations, addressing concerns about nested progress bar complexity.

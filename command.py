@@ -7,9 +7,9 @@ from typing import Dict, List, Optional, Any
 import sqlite3
 
 # Import existing modules
-from common import get_sql_conn, ensure_tables, get_page_ids_needing_embedding_for_chunk
+from database import get_sql_conn, ensure_tables, get_page_ids_needing_embedding_for_chunk
 from download_chunks import count_lines_in_file, get_enterprise_auth_client, get_enterprise_api_client, get_chunk_info_for_namespace, download_chunk, extract_single_file_from_tar_gz, parse_chunk_file
-from index_pages import get_embedding_function, compute_embeddings_for_chunk
+from index_pages import get_embedding_function, compute_embeddings_for_chunk, get_embedding_model_config
 from progress_utils import ProgressTracker
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -462,6 +462,10 @@ class EmbedPagesCommand(Command):
             required_args=[],
             optional_args={"chunk": None, "limit": None}
         )
+        embedding_model_name, embedding_model_api_url, embedding_model_api_key = get_embedding_model_config()
+        self.embedding_model_name = embedding_model_name
+        self.embedding_model_api_url = embedding_model_api_url
+        self.embedding_model_api_key = embedding_model_api_key
     
     def execute(self, args: Dict[str, Any]) -> str:
         chunk_name = args.get("chunk")
@@ -485,9 +489,9 @@ class EmbedPagesCommand(Command):
             
             # Setup embedding function
             embedding_function = get_embedding_function(
-                model_name="jina-embeddings-v4-text-matching-GGUF",
-                openai_compatible_url='http://llmhost1.internal.tajh.house:8080/v1',
-                openai_api_key='no-key-necessary'
+                model_name=self.embedding_model_name,
+                openai_compatible_url=self.embedding_model_api_url,
+                openai_api_key=self.embedding_model_api_key
             )
             
             if chunk_name:
@@ -674,6 +678,7 @@ class HelpCommand(Command):
             for cmd_name in self.parser.get_available_commands():
                 cmd = self.parser.commands[cmd_name]
                 help_text += f"  {cmd_name} - {cmd.description}\n"
+            
             help_text += "\nUse 'help <command>' for more information about a specific command."
             return help_text
 
@@ -697,7 +702,7 @@ class CommandInterpreter:
     
     def run_interactive(self):
         """Run interactive command interpreter."""
-        print("Welcome to wp-snapshot-dl command interpreter!")
+        print("Welcome to wp-embeddings command interpreter!")
         print("Type 'help' for available commands or 'quit' to exit.")
         print()
         
