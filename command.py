@@ -391,7 +391,7 @@ class UnpackProcessChunksCommand(Command):
                 chunk_name = chunk['chunk_name']
                 chunk_namespace = chunk['namespace']
                 archive_path = chunk['chunk_archive_path']
-                logger.info("Unpacking chunk %s from namespace %s...", chunk_name, chunk_namespace)
+                logger.debug("Unpacking chunk %s from namespace %s...", chunk_name, chunk_namespace)
                 
                 try:
                     # Create extraction directory
@@ -399,7 +399,7 @@ class UnpackProcessChunksCommand(Command):
                     os.makedirs(extract_dir, exist_ok=True)
                     
                     # Extract archive
-                    logger.info("Extracting archive %s to %s", archive_path, extract_dir)
+                    logger.info("Extracting archive %s to directory %s...", archive_path, extract_dir)
                     extracted_file = extract_single_file_from_tar_gz(archive_path, extract_dir)
                     
                     if extracted_file:
@@ -412,7 +412,7 @@ class UnpackProcessChunksCommand(Command):
                         #logger.info("Parsing pages out of chunk file %s", chunk_file_path)
                         with ProgressTracker("Parsing chunk file", total=file_line_count, unit="pages") as tracker:
                             line_count = parse_chunk_file(sqlconn, chunk_name, chunk_file_path, tracker)
-                        logger.info("Parsed %d pages from chunk file %s", line_count, chunk_file_path)
+                        logger.debug("Parsed %d pages from chunk file %s", line_count, chunk_file_path)
                         
                         # Update database
                         sqlconn.execute(
@@ -422,7 +422,7 @@ class UnpackProcessChunksCommand(Command):
                         sqlconn.commit()
                         
                         # Remove extracted file
-                        logger.info("Cleaning up extracted file %s", chunk_file_path)
+                        logger.debug("Cleaning up extracted file %s", chunk_file_path)
                         try:
                             os.remove(chunk_file_path)
                         except Exception as e:
@@ -437,7 +437,7 @@ class UnpackProcessChunksCommand(Command):
                         total_pages += pages_in_chunk
                         
                         processed_count += 1
-                        logger.info(f"Unpacked and processed {chunk_name} with {pages_in_chunk} pages.")
+                        logger.debug(f"Unpacked and processed {chunk_name} with {pages_in_chunk} pages.")
                     else:
                         logger.error(f"Failed to extract {archive_path}")
                 
