@@ -1,6 +1,8 @@
 import argparse
+import atexit
 import logging
 import os
+import readline
 import sys
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any
@@ -17,6 +19,19 @@ from transform import run_pca
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+
+# Store the command history (feel free to change the path)
+_HISTFILE = os.path.join(os.path.expanduser("."), ".wp_transform_history")
+
+# Load existing history, ignore errors if the file does not exist yet
+if os.path.exists(_HISTFILE):
+    readline.read_history_file(_HISTFILE)
+
+# Save the history when the interpreter exits
+atexit.register(readline.write_history_file, _HISTFILE)
+
+# Limit the size of the history file
+readline.set_history_length(1000)          # keep last 1000 lines
 
 class Command(ABC):
     """Abstract base class for all commands."""
