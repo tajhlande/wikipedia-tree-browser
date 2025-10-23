@@ -111,10 +111,6 @@ def run_pca(sqlconn, target_dim: int = 100, batch_size: int = 10_000, tracker: O
             total_vectors += len(batch)
 
     # Second pass - transform and store
-    if tracker:
-        tracker.set_total(batch_counter * 2)
-        tracker.set_progress(batch_counter)
-        
     for batch in _batch_iterator(sqlconn, ["embedding_vector"], batch_size):
         # Process each vector in the batch
         for row in batch:

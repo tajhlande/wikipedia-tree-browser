@@ -589,7 +589,7 @@ class ReduceCommand(Command):
             name="reduce", 
             description="Reduce dimension of embeddings", 
             required_args=[], 
-            optional_args={'target_dim': 100, 'batch_size': 10_000}
+            optional_args={'target-dim': 100, 'batch-size': 10_000}
         )
 
     def execute(self, args: Dict[str, Any]) -> str:
@@ -597,18 +597,27 @@ class ReduceCommand(Command):
             sqlconn = get_sql_conn()
             ensure_tables(sqlconn)
 
-            target_dim = args.get('target_dim', 100)
-            batch_size = args.get('batch_size', 10_000)
+            target_dim = args.get('target-dim', 100)
+            batch_size = args.get('batch-size', 10_000)
+            print(f"Target dimension: {target_dim}, batch size: {batch_size}")
+
+            if target_dim > batch_size:
+                return f"✗ Batch size must be equal to or greater than target dimension."
+
             logger.info(f"Target dimension: {target_dim}")
             logger.info(f"Batch size: {batch_size}")
 
             estimated_vector_count = get_embedding_count(sqlconn)
+            estimated_batch_count = estimated_vector_count // batch_size + 1
+
+            if estimated_vector_count < target_dim:
+                return f"✗ Only found {estimated_vector_count} records, need at least {target_dim} to do PCA at that dimension"
             
             if estimated_vector_count < batch_size:
-                logger.info(f"Reducing batch size to match estimated vector count: %d", estimated_vector_count)
+                print(f"Reducing batch size to match estimated vector count: %d", estimated_vector_count)
                 batch_size = estimated_vector_count
 
-            with ProgressTracker("PCA Reduction", unit="batches") as tracker:
+            with ProgressTracker("PCA Reduction (two pass)", unit="batches", total=estimated_batch_count * 2) as tracker:
                 batch_count, total_vector_count = run_pca(sqlconn, target_dim=target_dim, batch_size=batch_size, tracker=tracker)
             return f"✓ Reduced {total_vector_count} page embeddings in {batch_count} batch{'' if batch_count == 1 else 'es'}"
         except Exception as e:
