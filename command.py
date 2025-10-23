@@ -3,12 +3,13 @@ import logging
 import os
 import sys
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Any
-import sqlite3
+from typing import Dict, List, Any
 
 # Import existing modules
 from database import get_sql_conn, ensure_tables, get_page_ids_needing_embedding_for_chunk
-from download_chunks import count_lines_in_file, get_enterprise_auth_client, get_enterprise_api_client, get_chunk_info_for_namespace, download_chunk, extract_single_file_from_tar_gz, parse_chunk_file
+from download_chunks import count_lines_in_file, get_enterprise_auth_client, get_enterprise_api_client, \
+                            get_chunk_info_for_namespace, download_chunk, \
+                            extract_single_file_from_tar_gz, parse_chunk_file
 from index_pages import get_embedding_function, compute_embeddings_for_chunk, get_embedding_model_config
 from progress_utils import ProgressTracker
 
@@ -19,11 +20,11 @@ logger = logging.getLogger(__name__)
 class Command(ABC):
     """Abstract base class for all commands."""
     
-    def __init__(self, name: str, description: str, required_args: List[str] = None, optional_args: Dict[str, Any] = None):
+    def __init__(self, name: str, description: str, required_args: List[str] = [], optional_args: Dict[str, Any] = {}):
         self.name = name
         self.description = description
-        self.required_args = required_args or []
-        self.optional_args = optional_args or {}
+        self.required_args = required_args 
+        self.optional_args = optional_args 
     
     @abstractmethod
     def execute(self, args: Dict[str, Any]) -> str:

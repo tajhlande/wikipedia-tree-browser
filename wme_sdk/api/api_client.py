@@ -121,7 +121,7 @@ class Client:
         }
         return headers
 
-    def _download_entity(self, path: str, writer: io.BytesIO, tracker: ProgressTracker = None):
+    def _download_entity(self, path: str, writer: io.BytesIO, tracker: Optional[ProgressTracker] = None):
         headers = self._head_entity(path)
         content_length = headers['Content-Length']
         tracker.set_total(content_length) if tracker else None
@@ -230,7 +230,7 @@ class Client:
     def read_batch(self, time: datetime.datetime, idr: str, cbk: Callable[[dict], Any]):
         self._read_entity(f"b{self._get_batches_prefix(time)}/{idr}/download", cbk)
 
-    def download_batch(self, time: datetime.datetime, idr: str, writer: io.BytesIO, tracker: ProgressTracker = None):
+    def download_batch(self, time: datetime.datetime, idr: str, writer: io.BytesIO, tracker: Optional[ProgressTracker] = None):
         self._download_entity(f"{self._get_batches_prefix(time)}/{idr}/download", writer, tracker)
 
     def get_snapshots(self, req: Request) -> List[dict]:
@@ -249,7 +249,7 @@ class Client:
     def read_snapshot(self, idr: str, cbk: Callable[[dict], Any]):
         self._read_entity(f"snapshots/{idr}/download", cbk)
 
-    def download_snapshot(self, idr: str, writer: io.BytesIO, tracker: ProgressTracker = None):
+    def download_snapshot(self, idr: str, writer: io.BytesIO, tracker: Optional[ProgressTracker] = None):
         self._download_entity(f"snapshots/{idr}/download", writer, tracker)
 
     def get_chunks(self, sid: str, req: Request) -> List[dict]:
@@ -268,7 +268,7 @@ class Client:
     def read_chunk(self, sid: str, idr: str, cbk: Callable[[dict], Any]):
         self._read_entity(f"snapshots/{sid}/chunks/{idr}/download", cbk)
 
-    def download_chunk(self, sid: str, idr: str, writer: io.BytesIO, tracker: ProgressTracker = None):
+    def download_chunk(self, sid: str, idr: str, writer: io.BytesIO, tracker: Optional[ProgressTracker] = None):
         self._download_entity(f"snapshots/{sid}/chunks/{idr}/download", writer, tracker)
 
     def get_articles(self, name: str, req: Request) -> List[dict]:
@@ -298,7 +298,7 @@ class Client:
     def read_structured_snapshot(self, idr: str, cbk: Callable[[dict], Any]):
         self._read_entity(f"snapshots/structured-contents/{idr}/download", cbk)
 
-    def download_structured_snapshot(self, idr: str, writer: io.BytesIO, tracker: ProgressTracker = None):
+    def download_structured_snapshot(self, idr: str, writer: io.BytesIO, tracker: Optional[ProgressTracker] = None):
         self._download_entity(f"snapshots/structured-contents/{idr}/download", writer, tracker)
 
     def stream_articles(self, req: Request, cbk: Callable[[dict], Any]):

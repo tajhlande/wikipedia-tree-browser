@@ -6,11 +6,12 @@ import os
 import sqlite3
 import tarfile
 import time
+from typing import Optional
 
 from dotenv import load_dotenv
 
 # from wme_sdk.api.snapshot import Snapshot
-from classes import Page
+from classes import Chunk, Page
 from database import ensure_tables, get_sql_conn, upsert_new_chunk_data, upsert_new_page_data
 from wme_sdk.auth.auth_client import AuthClient
 from wme_sdk.api.api_client import Client, Request, Filter
@@ -59,8 +60,8 @@ def get_enterprise_auth_client() -> tuple[AuthClient, str, str]:
     try:
         login_response = auth_client.login()
     except Exception as e:
-        logger.exception(f"Login failed: {e}")
-        return
+        logger.error(f"Login failed: {e}")
+        raise
 
     refresh_token = login_response['refresh_token']
     access_token = login_response['access_token']
@@ -74,7 +75,7 @@ def get_enterprise_api_client(access_token) -> Client:
   
 
 @contextlib.contextmanager
-def revoke_token_on_exit(auth_client: Client, refresh_token: str):
+def revoke_token_on_exit(auth_client: AuthClient, refresh_token: str):
     try:
         yield
     finally:
@@ -94,7 +95,8 @@ def find_chunks(api_client: Client, sqlconn: sqlite3.Connection, request: Reques
     try:
         for chunk_name in snapshot_json['chunks']:
             logger.info(f"Chunk: {chunk_name}")
-            upsert_new_chunk_data(chunk_name, namespace, sqlconn)
+            chunk = Chunk(chunk_name=chunk_name, namespace=namespace)
+            upsert_new_chunk_data(chunk, sqlconn)
             # logger.info(f"Name: {chunk_json['date_modified']}")
             # logger.info(f"Abstract: {chunk_json['identifier']}")
             # logger.info(f"Description: {chunk_json['size']}")  
@@ -107,7 +109,7 @@ def download_chunk(api_client: Client,
                    namespace: str, # "enwiki_namespace_0"
                    chunk_name: str, # "enwiki_namespace_0_chunk_0"
                    chunk_file_path: str, # "enwiki_namespace_0_chunk_0.tar.gz"
-                   tracker: ProgressTracker = None
+                   tracker: Optional[ProgressTracker] = None
                    ):
     try:
         # Create a BytesIO object to hold the downloaded content
@@ -183,7 +185,7 @@ def count_lines_in_file(file_path: str) -> int:
         logger.exception(f"Error counting lines in file {file_path}: {e}")
         raise
 
-def parse_chunk_file(sqlconn: sqlite3.Connection, chunk_name: str, chunk_file_path: str, tracker: ProgressTracker = None) -> int:
+def parse_chunk_file(sqlconn: sqlite3.Connection, chunk_name: str, chunk_file_path: str, tracker: Optional[ProgressTracker] = None) -> int:
     """
     Parse the extracted chunk file to read its contents.
     
@@ -307,13 +309,10 @@ def get_chunk_info_for_namespace(namespace: str, api_client: Client, sqlconn: sq
         filters=[Filter(field="in_language.identifier", value="en")]
     )
     chunk_data_list: list[dict] = api_client.get_chunks(namespace, request)
-    for chunk_data in chunk_data_list:
+    chunk_list = [Chunk(chunk_name=chunk_data.get('identifier'), namespace=namespace) for chunk_data in chunk_data_list if chunk_data.get('identifier')] # type: ignore
+    for chunk in chunk_list:
         #logger.info(f"Found chunk: {json.dumps(chunk_data)}")
-        chunk_name = chunk_data.get('identifier')
-        if chunk_name:
-            upsert_new_chunk_data(chunk_name, namespace, sqlconn)
-        else:
-            logger.warning(f"Chunk data without a name field: {json.dumps(chunk_data)}")
+        upsert_new_chunk_data(chunk, sqlconn)
     logger.info(f"Total chunks found: {len(chunk_data_list)}")
 
 if __name__ == "__main__":

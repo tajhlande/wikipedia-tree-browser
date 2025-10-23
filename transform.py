@@ -22,13 +22,14 @@ from typing import Iterable, List
 import numpy as np
 from sklearn.decomposition import IncrementalPCA
 from sklearn.cluster import KMeans
-import umap
+import umap.umap_ as umap
 
 from database import (
     get_sql_conn,
-    fetch_page_vectors,
-    store_blob,
-    store_json,
+    get_page_embeddings,
+    get_page_reduced_vectors,
+    update_reduced_vector_for_page,
+    update_three_d_vector_for_page,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,7 +85,7 @@ def run_pca(sqlconn, target_dim: int = 100, batch_size: int = 10_000) -> None:
     for batch in _batch_iterator(sqlconn, ["embedding_vector"], batch_size):
         vec = np.frombuffer(batch["embedding_vector"], dtype=np.float32).reshape(1, -1)
         reduced = ipca.transform(vec).astype(np.float32).squeeze()
-        store_blob(sqlconn, batch["page_id"], "reduced_vector", reduced)
+        update_reduced_vector_for_page(batch["page_id"], reduced, sqlconn)
 
     logger.info("PCA completed and reduced vectors stored.")
 
@@ -159,16 +160,16 @@ def run_umap_per_cluster(
             [np.frombuffer(r["reduced_vector"], dtype=np.float32) for r in rows]
         )
         reducer = umap.UMAP(n_components=n_components, random_state=42)
-        embedding = reducer.fit_transform(vectors).astype(np.float32)
+        three_space_vectors = reducer.fit_transform(vectors).astype(np.float32) # type: ignore
         # Store each 3-D vector as JSON.
-        for pid, vec in zip(page_ids, embedding):
-            store_json(sqlconn, pid, "three_d_vector", vec.tolist())
+        for pid, vec in zip(page_ids, three_space_vectors):
+            update_three_d_vector_for_page(pid, vec.tolist(), sqlconn)
         # Update centroid in cluster_info.
-        centroid = embedding.mean(axis=0).tolist()
-        sqlconn.execute(
-            "UPDATE cluster_info SET centroid_3d = ? WHERE cluster_id = ?",
-            (json.dumps(centroid), cl_id),
-        )
+        # centroid = three_space_vectors.mean(axis=0).tolist()
+        # sqlconn.execute(
+        #     "UPDATE cluster_info SET centroid_3d = ? WHERE cluster_id = ?",
+        #     (json.dumps(centroid), cl_id),
+        # )
         processed += 1
     sqlconn.commit()
     logger.info("UMAP mapping completed for %s clusters.", processed)

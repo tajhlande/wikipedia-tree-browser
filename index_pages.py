@@ -152,7 +152,7 @@ def get_embedding_model_config() -> tuple[str, str, str]:
     """
     missing_env_vars = []
     embedding_model_name = os.environ.get(EMBEDDING_MODEL_NAME_KEY)
-    if not os.environ.get(EMBEDDING_MODEL_NAME_KEY):
+    if not embedding_model_name:
         embedding_model_name = DEFAULT_EMBEDDING_MODEL_NAME
         logger.warning("%s environment variable not set, using default value: %s", EMBEDDING_MODEL_NAME_KEY, embedding_model_name)
     if not os.environ.get(EMBEDDING_MODEL_API_URL_KEY):
