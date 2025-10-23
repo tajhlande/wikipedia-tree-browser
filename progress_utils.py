@@ -53,7 +53,13 @@ class ProgressTracker:
         """Update progress"""
         if self.progress_bar:
             self.progress_bar.update(n)
-    
+
+    def set_progress(self, progress):
+        """Set progress to explicit value"""
+        if self.progress_bar:
+            self.progress_bar.n = progress
+            self.progress_bar.refresh()
+
     def close(self):
         """Close the progress bar"""
         if self.progress_bar:

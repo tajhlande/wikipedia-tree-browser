@@ -6,12 +6,13 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any
 
 # Import existing modules
-from database import get_sql_conn, ensure_tables, get_page_ids_needing_embedding_for_chunk
+from database import get_embedding_count, get_sql_conn, ensure_tables, get_page_ids_needing_embedding_for_chunk
 from download_chunks import count_lines_in_file, get_enterprise_auth_client, get_enterprise_api_client, \
                             get_chunk_info_for_namespace, download_chunk, \
                             extract_single_file_from_tar_gz, parse_chunk_file
 from index_pages import get_embedding_function, compute_embeddings_for_chunk, get_embedding_model_config
 from progress_utils import ProgressTracker
+from transform import run_pca
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -574,11 +575,46 @@ class EmbedPagesCommand(Command):
                         logger.exception(f"Failed to process chunk {chunk_name}: {e}")
                         continue
                 
-                return f"✓ Processed {total_processed} pages across {len(chunk_name_list)} chunk(s)"
+                return f"✓ Embedded {total_processed} pages across {len(chunk_name_list)} chunk(s)"
         
         except Exception as e:
             logger.exception(f"Failed to process pages: {e}")
             return f"✗ Failed to process pages: {e}"
+
+class ReduceCommand(Command):
+    """Transform embedding vectors to a smaller vector space."""
+
+    def __init__(self):
+        super().__init__(
+            name="reduce", 
+            description="Reduce dimension of embeddings", 
+            required_args=[], 
+            optional_args={'target_dim': 100, 'batch_size': 10_000}
+        )
+
+    def execute(self, args: Dict[str, Any]) -> str:
+        try:
+            sqlconn = get_sql_conn()
+            ensure_tables(sqlconn)
+
+            target_dim = args.get('target_dim', 100)
+            batch_size = args.get('batch_size', 10_000)
+            logger.info(f"Target dimension: {target_dim}")
+            logger.info(f"Batch size: {batch_size}")
+
+            estimated_vector_count = get_embedding_count(sqlconn)
+            
+            if estimated_vector_count < batch_size:
+                logger.info(f"Reducing batch size to match estimated vector count: %d", estimated_vector_count)
+                batch_size = estimated_vector_count
+
+            with ProgressTracker("PCA Reduction", unit="batches") as tracker:
+                batch_count, total_vector_count = run_pca(sqlconn, target_dim=target_dim, batch_size=batch_size, tracker=tracker)
+            return f"✓ Reduced {total_vector_count} page embeddings in {batch_count} batch{'' if batch_count == 1 else 'es'}"
+        except Exception as e:
+            logger.exception(f"Failed to reduce embeddings: {e}")
+            return f"✗ Failed to reduce embeddings: {e}"
+
 
 class StatusCommand(Command):
     """Show current system status."""
@@ -705,6 +741,7 @@ class CommandInterpreter:
         self.parser.register_command(DownloadChunksCommand())
         self.parser.register_command(UnpackProcessChunksCommand())
         self.parser.register_command(EmbedPagesCommand())
+        self.parser.register_command(ReduceCommand())
         self.parser.register_command(StatusCommand())
         self.parser.register_command(HelpCommand(self.parser))
     

@@ -17,9 +17,12 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Iterable, List
+logger = logging.getLogger(__name__)
+from typing import Iterable, List, Optional
 
 import numpy as np
+
+logger.info("Initializing scikit-learn...")
 from sklearn.decomposition import IncrementalPCA
 from sklearn.cluster import KMeans
 import umap.umap_ as umap
@@ -31,17 +34,18 @@ from database import (
     update_reduced_vector_for_page,
     update_three_d_vector_for_page,
 )
+from progress_utils import ProgressTracker
 
 logger = logging.getLogger(__name__)
 
 
 def _batch_iterator(
     sqlconn, columns: List[str], batch_size: int = 10_000
-) -> Iterable[dict]:
-    """Yield rows in batches to avoid loading the entire table into memory.
+) -> Iterable[List[dict]]:
+    """Yield batches of rows to avoid loading the entire table into memory.
 
-    ``columns`` are passed to ``fetch_page_vectors``. Each yielded dict contains
-    the requested columns plus ``page_id``.
+    ``columns`` are passed to ``fetch_page_vectors``. Each yielded list contains
+    batch_size dicts, each with the requested columns plus ``page_id``.
     """
     offset = 0
     while True:
@@ -56,38 +60,71 @@ def _batch_iterator(
         rows = cursor.fetchall()
         if not rows:
             break
+        
+        batch = []
         for row in rows:
             result = {"page_id": row["page_id"]}
             for col in columns:
                 result[col] = row[col]
-            yield result
+            batch.append(result)
+        
+        yield batch
         offset += batch_size
 
 
-def run_pca(sqlconn, target_dim: int = 100, batch_size: int = 10_000) -> None:
-    """Fit Incremental PCA on all ``embedding_vector`` blobs and store the result.
+def run_pca(sqlconn, target_dim: int = 100, batch_size: int = 10_000, tracker: Optional[ProgressTracker] = None) -> tuple[int, int]:
+    """
+    Fit Incremental PCA on all ``embedding_vector`` blobs and store the result.
 
     The function streams data in batches to keep memory usage low. After fitting,
     it performs a second pass to transform each vector and stores the reduced
     representation in ``page_vector.reduced_vector``.
+
+    Returns a tuple of the total batch count and the total vector count.
     """
-    logger.info("Starting Incremental PCA (target_dim=%s)", target_dim)
+    # logger.info("Starting Incremental PCA (target_dim=%s)", target_dim)
+
+    # Ensure batch_size is at least target_dim for the first partial_fit call
+    effective_batch_size = max(batch_size, target_dim)
+    # logger.info("Using effective batch size: %s (requested: %s, target_dim: %s)",
+    #             effective_batch_size, batch_size, target_dim)
 
     # First pass - fit
     ipca = IncrementalPCA(n_components=target_dim)
-    for batch in _batch_iterator(sqlconn, ["embedding_vector"], batch_size):
-        vectors = np.frombuffer(batch["embedding_vector"], dtype=np.float32)
-        # Original embeddings are 2048-dimensional; reshape accordingly.
-        vectors = vectors.reshape(1, -1)  # each batch here is a single row
-        ipca.partial_fit(vectors)
+    batch_counter = 0
+    total_vectors = 0
+
+    for batch in _batch_iterator(sqlconn, ["embedding_vector"], effective_batch_size):
+        # Stack all vectors in this batch into a single matrix
+        batch_vectors = []
+        for row in batch:
+            vectors = np.frombuffer(row["embedding_vector"], dtype=np.float32)
+            # Original embeddings are 2048-dimensional; reshape accordingly.
+            vectors = vectors.reshape(1, -1)  # each row is a single vector
+            batch_vectors.append(vectors)
+        
+        if batch_vectors:
+            batch_matrix = np.vstack(batch_vectors)
+            ipca.partial_fit(batch_matrix)
+            tracker.update(1) if tracker else None
+            batch_counter += 1
+            total_vectors += len(batch)
 
     # Second pass - transform and store
+    if tracker:
+        tracker.set_total(batch_counter * 2)
+        tracker.set_progress(batch_counter)
+        
     for batch in _batch_iterator(sqlconn, ["embedding_vector"], batch_size):
-        vec = np.frombuffer(batch["embedding_vector"], dtype=np.float32).reshape(1, -1)
-        reduced = ipca.transform(vec).astype(np.float32).squeeze()
-        update_reduced_vector_for_page(batch["page_id"], reduced, sqlconn)
+        # Process each vector in the batch
+        for row in batch:
+            vec = np.frombuffer(row["embedding_vector"], dtype=np.float32).reshape(1, -1)
+            reduced = ipca.transform(vec).astype(np.float32).squeeze()
+            update_reduced_vector_for_page(row["page_id"], reduced, sqlconn)
+        tracker.update(1) if tracker else None
 
-    logger.info("PCA completed and reduced vectors stored.")
+    # logger.info("PCA completed and reduced vectors stored.")
+    return batch_counter, total_vectors
 
 
 def run_kmeans(sqlconn, n_clusters: int = 100, batch_size: int = 10_000) -> None:
@@ -102,8 +139,9 @@ def run_kmeans(sqlconn, n_clusters: int = 100, batch_size: int = 10_000) -> None
     rows = []
     ids = []
     for batch in _batch_iterator(sqlconn, ["reduced_vector"], batch_size):
-        ids.append(batch["page_id"])
-        rows.append(np.frombuffer(batch["reduced_vector"], dtype=np.float32))
+        for row in batch:
+            ids.append(row["page_id"])
+            rows.append(np.frombuffer(row["reduced_vector"], dtype=np.float32))
     if not rows:
         logger.warning("No reduced vectors found - aborting K-Means.")
         return

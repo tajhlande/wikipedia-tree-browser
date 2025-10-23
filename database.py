@@ -222,6 +222,17 @@ def get_chunk_data(chunk_name: str, sqlconn: sqlite3.Connection) -> Optional[Chu
 # Vector storage helper utilities (new for dimensionality processing)
 # ---------------------------------------------------------------------------
 
+def get_embedding_count(sqlconn: sqlite3.Connection) -> int:
+    select_sql = """
+        SELECT COUNT(embedding_vector)
+        FROM page_vector
+        WHERE embedding_vector IS NOT NULL
+    """
+
+    cursor = sqlconn.execute(select_sql)
+    row = cursor.fetchone()
+    return row[0]
+
 def get_page_vectors(page_id: int, sqlconn: sqlite3.Connection) -> Optional[PageVectors]:
     select_sql = """
         SELECT page_id, embedding_vector, reduced_vector, cluster_id, three_d_vector
