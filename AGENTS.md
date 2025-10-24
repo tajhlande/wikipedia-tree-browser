@@ -5,24 +5,28 @@ These guidelines help contributors work efficiently with **wp-embeddings**.  Fol
 ## Project Structure & Module Organization
 ```
 .
-├─ wme_sdk/          # Modified Wikimedia Enterprise SDK. Avoid changes here.
-├─ downloaded/       # Raw .tar.gz chunk files per namespace
-├─ extracted/        # Extracted NDJSON files (temporary)
-├─ command.py        # CLI entry point
-├─ database.py       # SQLite helper
-├─ progress_utils.py # Helper to show progress bars on long activities
-├─ test_*.py         # PyTest unit/integration tests and other manual tests
-└─ pyproject.toml    # Project metadata & dependencies
+├─ wme_sdk/           # Copied and slightly modified Wikimedia Enterprise API SDK. Avoid making changes here.
+├─ downloaded/        # Raw .tar.gz chunk files per namespace 
+├─ extracted/         # Extracted NDJSON files (temporary)
+├─ classes.py         # Dataclass objects for the application
+├─ command.py         # CLI entry point
+├─ database.py        # SQLite database helper methods
+├─ download_chunks.py # Methods to download and extract Wikipedia content archives from the Wikimedia Enterprise API
+├─ index_pages.py     # Methods to compute embeddings on the extracted page content
+├─ progress_utils.py  # Helper to show progress bars on long-running activities
+├─ test_*.py          # PyTest unit/integration tests and other manual tests
+├─ transform.py       # Sci-kit Learn and UMAP functions to reduce, cluster, and project embeddings down to 3-space
+└─ pyproject.toml     # Project metadata & dependencies
 ```
 Source lives in the top‑level package files; tests start with `test_` and reside alongside the code they verify.
 
 ## Build, Test, and Development Commands
-| Command | Description |
-|---------|-------------|
-| `uv sync` | Install/upgrade all dependencies into the virtual environment. |
-| `python -m command <subcommand>` | Run the interactive or one‑off CLI (e.g. `status`, `download`). |
-| `pytest -q` | Execute the test suite. |
-| `uv run black .` | Reformat code with Black (if needed). |
+| Command                       | Description                                                     |
+|-------------------------------|-----------------------------------------------------------------|
+| `uv sync`                     | Install/upgrade all dependencies into the virtual environment.  |
+| `python -m command <options>` | Run the interactive or one‑off CLI (e.g. `status`, `download`). |
+| `pytest -q`                   | Execute the test suite.                                         |
+| `uv run black .`              | Reformat code with Black (if needed).                           |
 
 ## Coding Style & Naming Conventions
 * **Indentation** – 4 spaces, no tabs.
