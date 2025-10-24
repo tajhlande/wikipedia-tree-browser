@@ -16,7 +16,9 @@ class TestClient(unittest.TestCase):
         client = Client()
         self.assertEqual(client.user_agent, "WME Python SDK")
         self.assertEqual(client.base_url, "https://api.enterprise.wikimedia.com/")
-        self.assertEqual(client.realtime_url, "https://realtime.enterprise.wikimedia.com/")
+        self.assertEqual(
+            client.realtime_url, "https://realtime.enterprise.wikimedia.com/"
+        )
         self.assertEqual(client.access_token, "")
         self.assertEqual(client.download_chunk_size, -1)
         self.assertEqual(client.download_concurrency, 10)
@@ -48,12 +50,12 @@ class TestClient(unittest.TestCase):
 
         expected_data = '{"since": "2024-01-01T00:00:00"}'
         expected_headers = {
-            'User-Agent': 'WME Python SDK',
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer test_access_token',
-            'Accept': '*/*',
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive'
+            "User-Agent": "WME Python SDK",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer test_access_token",
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
         }
 
         request = self.client._new_request(url, method, path, req)
@@ -109,7 +111,7 @@ class TestClient(unittest.TestCase):
         mock_cbk = MagicMock()
 
         # Patch the _do method to return a mock response with byte content
-        with patch.object(self.client, '_do', autospec=True) as mock_do:
+        with patch.object(self.client, "_do", autospec=True) as mock_do:
             mock_response = MagicMock()
             mock_response.content = b'{"key": "value"}'
             mock_do.return_value = mock_response
@@ -141,7 +143,9 @@ class TestRequest(unittest.TestCase):
         parts = [1, 2, 3]
         offsets = {1: 10, 2: 20}
         since_per_partition = {1: datetime(2024, 1, 1), 2: datetime(2024, 1, 2)}
-        req = Request(since, fields, filters, limit, parts, offsets, since_per_partition)
+        req = Request(
+            since, fields, filters, limit, parts, offsets, since_per_partition
+        )
         self.assertEqual(req.since, since)
         self.assertEqual(req.fields, fields)
         self.assertEqual(req.filters, filters)
@@ -160,5 +164,5 @@ class TestFilter(unittest.TestCase):
         self.assertEqual(filter.value, value)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

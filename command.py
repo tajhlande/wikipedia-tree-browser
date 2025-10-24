@@ -8,15 +8,33 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any
 
 # Import existing modules
-from database import get_embedding_count, get_reduced_vector_count, get_sql_conn, ensure_tables, get_page_ids_needing_embedding_for_chunk
-from download_chunks import count_lines_in_file, get_enterprise_auth_client, get_enterprise_api_client, \
-                            get_chunk_info_for_namespace, download_chunk, \
-                            extract_single_file_from_tar_gz, parse_chunk_file
-from index_pages import get_embedding_function, compute_embeddings_for_chunk, get_embedding_model_config
+from database import (
+    get_embedding_count,
+    get_reduced_vector_count,
+    get_sql_conn,
+    ensure_tables,
+    get_page_ids_needing_embedding_for_chunk,
+)
+from download_chunks import (
+    count_lines_in_file,
+    get_enterprise_auth_client,
+    get_enterprise_api_client,
+    get_chunk_info_for_namespace,
+    download_chunk,
+    extract_single_file_from_tar_gz,
+    parse_chunk_file,
+)
+from index_pages import (
+    get_embedding_function,
+    compute_embeddings_for_chunk,
+    get_embedding_model_config,
+)
 from progress_utils import ProgressTracker
 from transform import run_kmeans, run_pca
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -31,37 +49,44 @@ if os.path.exists(_HISTFILE):
 atexit.register(readline.write_history_file, _HISTFILE)
 
 # Limit the size of the history file
-readline.set_history_length(1000)          # keep last 1000 lines
+readline.set_history_length(1000)  # keep last 1000 lines
+
 
 class Command(ABC):
     """Abstract base class for all commands."""
-    
-    def __init__(self, name: str, description: str, required_args: List[str] = [], optional_args: Dict[str, Any] = {}):
+
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        required_args: List[str] = [],
+        optional_args: Dict[str, Any] = {},
+    ):
         self.name = name
         self.description = description
-        self.required_args = required_args 
-        self.optional_args = optional_args 
-    
+        self.required_args = required_args
+        self.optional_args = optional_args
+
     @abstractmethod
     def execute(self, args: Dict[str, Any]) -> str:
         """Execute the command with given arguments."""
         pass
-    
+
     def validate(self, args: Dict[str, Any]) -> bool:
         """Validate command arguments."""
         # Check required arguments
         for arg in self.required_args:
             if arg not in args or args[arg] is None:
                 raise ValueError(f"Missing required argument: {arg}")
-        
+
         # Check argument types and values
         for arg, default_value in self.optional_args.items():
             if arg in args and args[arg] is not None:
                 # Add specific validation rules here
                 pass
-        
+
         return True
-    
+
     def get_help(self) -> str:
         """Get help text for the command."""
         help_text = f"{self.name}: {self.description}\n"
@@ -74,49 +99,49 @@ class Command(ABC):
 
 class CommandParser:
     """Parse user input into command and arguments."""
-    
+
     def __init__(self):
         self.commands = {}
-    
+
     def register_command(self, command: Command):
         """Register a command."""
         self.commands[command.name] = command
-    
+
     def parse_input(self, input_str: str) -> tuple[str, Dict[str, Any]]:
         """Parse user input into command and arguments."""
         input_str = input_str.strip()
-        
+
         if not input_str:
             return "", {}
-        
+
         # Split into command and arguments
         parts = input_str.split()
         if not parts:
             return "", {}
-        
+
         command_name = parts[0].lower()
         args = {}
-        
+
         # Parse arguments
         for i in range(1, len(parts)):
             part = parts[i]
-            if part.startswith('--'):
+            if part.startswith("--"):
                 # Long argument --value
-                if '=' in part:
-                    key, value = part[2:].split('=', 1)
+                if "=" in part:
+                    key, value = part[2:].split("=", 1)
                     args[key] = self._convert_value(value)
                 else:
                     key = part[2:]
                     # Check if next part is a value
-                    if i + 1 < len(parts) and not parts[i + 1].startswith('--'):
+                    if i + 1 < len(parts) and not parts[i + 1].startswith("--"):
                         args[key] = self._convert_value(parts[i + 1])
                         i += 1  # Skip next part as it's been consumed
                     else:
                         args[key] = True
-            elif part.startswith('-'):
+            elif part.startswith("-"):
                 # Short argument -v
                 key = part[1:]
-                if i + 1 < len(parts) and not parts[i + 1].startswith('-'):
+                if i + 1 < len(parts) and not parts[i + 1].startswith("-"):
                     args[key] = self._convert_value(parts[i + 1])
                     i += 1  # Skip next part as it's been consumed
                 else:
@@ -130,13 +155,13 @@ class CommandParser:
                     # For other commands, we could handle positional arguments here
                     # For now, just ignore or handle as needed
                     pass
-        
+
         return command_name, args
-    
+
     def _convert_value(self, value: str) -> Any:
         """Convert string value to appropriate type."""
-        if value.lower() in ('true', 'false'):
-            return value.lower() == 'true'
+        if value.lower() in ("true", "false"):
+            return value.lower() == "true"
         try:
             return int(value)
         except ValueError:
@@ -144,17 +169,17 @@ class CommandParser:
                 return float(value)
             except ValueError:
                 return value
-    
+
     def validate_command(self, command_name: str) -> bool:
         """Check if command exists."""
         return command_name in self.commands
-    
+
     def get_command_help(self, command_name: str) -> str:
         """Get help for a specific command."""
         if command_name in self.commands:
             return self.commands[command_name].get_help()
         return f"Unknown command: {command_name}"
-    
+
     def get_available_commands(self) -> List[str]:
         """Get list of available commands."""
         return list(self.commands.keys())
@@ -162,30 +187,32 @@ class CommandParser:
 
 class CommandDispatcher:
     """Dispatch commands to appropriate command classes."""
-    
+
     def __init__(self, parser: CommandParser):
         self.parser = parser
         self.api_client = None
         self.auth_client = None
         self.refresh_token = None
         self.access_token = None
-    
+
     def _get_api_client(self):
         """Get or create API client with authentication."""
         if self.api_client is None:
             try:
-                self.auth_client, self.refresh_token, self.access_token = get_enterprise_auth_client()
+                self.auth_client, self.refresh_token, self.access_token = (
+                    get_enterprise_auth_client()
+                )
                 self.api_client = get_enterprise_api_client(self.access_token)
             except Exception as e:
                 logger.error(f"Failed to authenticate: {e}")
                 raise
         return self.api_client
-    
+
     def dispatch(self, command_name: str, args: Dict[str, Any]) -> str:
         """Dispatch command to appropriate handler."""
         if not self.parser.validate_command(command_name):
             return f"Unknown command: {command_name}"
-        
+
         try:
             command = self.parser.commands[command_name]
             command.validate(args)
@@ -199,42 +226,42 @@ class CommandDispatcher:
 
 class RefreshChunkDataCommand(Command):
     """Refresh chunk data for a namespace."""
-    
+
     def __init__(self):
         super().__init__(
             name="refresh",
             description="Refresh chunk data for a namespace",
-            required_args=['namespace'],
-            optional_args={}
+            required_args=["namespace"],
+            optional_args={},
         )
-    
+
     def execute(self, args: Dict[str, Any]) -> str:
-        namespace = args['namespace']
+        namespace = args["namespace"]
         logger.info("Refreshing chunk data for namespace: %s", namespace)
-        
+
         try:
             sqlconn = get_sql_conn()
             ensure_tables(sqlconn)
-            
+
             api_client = self._get_api_client()
             get_chunk_info_for_namespace(namespace, api_client, sqlconn)
-            
+
             # Get count of chunks for the namespace
             cursor = sqlconn.execute(
                 "SELECT COUNT(*) as count FROM chunk_log WHERE namespace = ?",
-                (namespace,)
+                (namespace,),
             )
-            count = cursor.fetchone()['count']
-            
+            count = cursor.fetchone()["count"]
+
             return f"✓ Refreshed chunk data for namespace: {namespace}\nFound {count} chunks in namespace {namespace}"
-        
+
         except Exception as e:
             logger.error(f"Failed to refresh chunk data: {e}")
             return f"✗ Failed to refresh chunk data: {e}"
-    
+
     def _get_api_client(self):
         """Get or create API client with authentication."""
-        if not hasattr(self, 'api_client') or self.api_client is None:
+        if not hasattr(self, "api_client") or self.api_client is None:
             try:
                 auth_client, refresh_token, access_token = get_enterprise_auth_client()
                 self.api_client = get_enterprise_api_client(access_token)
@@ -246,19 +273,19 @@ class RefreshChunkDataCommand(Command):
 
 class DownloadChunksCommand(Command):
     """Download chunks that haven't been downloaded yet."""
-    
+
     def __init__(self):
         super().__init__(
             name="download",
             description="Download chunks that haven't been downloaded yet",
             required_args=[],
-            optional_args={"limit": 1, "namespace": None}
+            optional_args={"limit": 1, "namespace": None},
         )
-    
+
     def execute(self, args: Dict[str, Any]) -> str:
         limit_arg = args.get("limit", 1)
         namespace = args.get("namespace")
-        
+
         limit = None
         if limit_arg is not None:
             try:
@@ -267,79 +294,88 @@ class DownloadChunksCommand(Command):
                     return "✗ Limit must be a positive integer"
             except ValueError:
                 return "✗ Invalid limit value. Please provide a positive integer."
-            
 
         try:
             sqlconn = get_sql_conn()
             ensure_tables(sqlconn)
-            
+
             # Get chunks that need downloading
             if namespace:
                 cursor = sqlconn.execute(
                     "SELECT chunk_name, namespace FROM chunk_log WHERE namespace = ? AND downloaded_at IS NULL ORDER BY chunk_name ASC LIMIT ?",
-                    (namespace, limit)
+                    (namespace, limit),
                 )
             else:
                 cursor = sqlconn.execute(
                     "SELECT chunk_name, namespace FROM chunk_log WHERE downloaded_at IS NULL ORDER BY namespace ASC, chunk_name ASC LIMIT ?",
-                    (limit,)
+                    (limit,),
                 )
-            
+
             chunks_to_download = cursor.fetchall()
-            
+
             if not chunks_to_download:
                 return "✓ No chunks available for download"
-            
+
             api_client = self._get_api_client()
             downloaded_count = 0
-            
+
             if limit:
                 logger.info("Limiting download to %d chunks at most", limit)
-                chunks_to_download = chunks_to_download[:limit] 
-                logger.info("Planning to download %d chunks (limited)", len(chunks_to_download))
+                chunks_to_download = chunks_to_download[:limit]
+                logger.info(
+                    "Planning to download %d chunks (limited)", len(chunks_to_download)
+                )
             else:
                 logger.info("Planning to download %d chunks", len(chunks_to_download))
 
             for chunk in chunks_to_download:
-                chunk_name = chunk['chunk_name']
-                chunk_namespace = chunk['namespace']
-                #logger.info("Downloading chunk %s from namespace %s...", chunk_name, chunk_namespace)
-                
+                chunk_name = chunk["chunk_name"]
+                chunk_namespace = chunk["namespace"]
+                # logger.info("Downloading chunk %s from namespace %s...", chunk_name, chunk_namespace)
+
                 try:
                     # Create download directory
                     download_dir = f"downloaded/{chunk_namespace}"
                     os.makedirs(download_dir, exist_ok=True)
-                    
+
                     chunk_file_path = f"{download_dir}/{chunk_name}.tar.gz"
-                    
+
                     # Download chunk
-                    with ProgressTracker(f"Downloading {chunk_name}", unit="bytes") as tracker:
-                        download_chunk(api_client, chunk_namespace, chunk_name, chunk_file_path, tracker)
+                    with ProgressTracker(
+                        f"Downloading {chunk_name}", unit="bytes"
+                    ) as tracker:
+                        download_chunk(
+                            api_client,
+                            chunk_namespace,
+                            chunk_name,
+                            chunk_file_path,
+                            tracker,
+                        )
                     logger.debug("Chunk saved to %s", chunk_file_path)
 
                     # Update database
                     sqlconn.execute(
                         "UPDATE chunk_log SET chunk_archive_path = ?, downloaded_at = CURRENT_TIMESTAMP WHERE chunk_name = ?",
-                        (chunk_file_path, chunk_name)
+                        (chunk_file_path, chunk_name),
                     )
                     sqlconn.commit()
-                    
+
                     downloaded_count += 1
                     logger.debug(f"Downloaded %s", chunk_name)
-                    
+
                 except Exception as e:
                     logger.error(f"Failed to download {chunk_name}: {e}")
                     continue
-            
+
             return f"✓ Downloaded {downloaded_count} chunk(s) in namespace {namespace or 'all'}"
-        
+
         except Exception as e:
             logger.error(f"Failed to download chunks: {e}")
             return f"✗ Failed to download chunks: {e}"
-    
+
     def _get_api_client(self):
         """Get or create API client with authentication."""
-        if not hasattr(self, 'api_client') or self.api_client is None:
+        if not hasattr(self, "api_client") or self.api_client is None:
             try:
                 auth_client, refresh_token, access_token = get_enterprise_auth_client()
                 self.api_client = get_enterprise_api_client(access_token)
@@ -351,15 +387,15 @@ class DownloadChunksCommand(Command):
 
 class UnpackProcessChunksCommand(Command):
     """Unpack and process downloaded chunks."""
-    
+
     def __init__(self):
         super().__init__(
             name="unpack",
             description="Unpack and process downloaded chunks",
             required_args=[],
-            optional_args={"namespace": None, "limit": None}
+            optional_args={"namespace": None, "limit": None},
         )
-    
+
     def execute(self, args: Dict[str, Any]) -> str:
         namespace = args.get("namespace")
         limit = args.get("limit")
@@ -373,97 +409,118 @@ class UnpackProcessChunksCommand(Command):
                     return "✗ Limit must be a positive integer"
             except ValueError:
                 return "✗ Invalid limit value. Please provide a positive integer."
-            
 
         try:
             sqlconn = get_sql_conn()
             ensure_tables(sqlconn)
-            
+
             # Get chunks that need unpacking
             if namespace:
                 cursor = sqlconn.execute(
                     "SELECT chunk_name, namespace, chunk_archive_path FROM chunk_log WHERE namespace = ? AND chunk_archive_path IS NOT NULL AND chunk_extracted_path IS NULL ORDER BY chunk_name ASC",
-                    (namespace,)
+                    (namespace,),
                 )
             else:
                 cursor = sqlconn.execute(
                     "SELECT chunk_name, namespace, chunk_archive_path FROM chunk_log WHERE chunk_archive_path IS NOT NULL AND chunk_extracted_path IS NULL ORDER BY namespace ASC, chunk_name ASC"
                 )
-            
+
             chunks_to_unpack = cursor.fetchall()
-            
+
             if not chunks_to_unpack:
                 return "✓ No chunks available for unpacking"
-            
+
             processed_count = 0
             total_pages = 0
-            
+
             if limit_int:
-                chunks_to_unpack = chunks_to_unpack[:limit_int] 
+                chunks_to_unpack = chunks_to_unpack[:limit_int]
                 logger.info("Limiting unpacking to %d chunks at most", limit_int)
 
             logger.info("Planning to unpack to %d chunks", len(chunks_to_unpack))
 
             for chunk in chunks_to_unpack:
-                chunk_name = chunk['chunk_name']
-                chunk_namespace = chunk['namespace']
-                archive_path = chunk['chunk_archive_path']
-                logger.debug("Unpacking chunk %s from namespace %s...", chunk_name, chunk_namespace)
-                
+                chunk_name = chunk["chunk_name"]
+                chunk_namespace = chunk["namespace"]
+                archive_path = chunk["chunk_archive_path"]
+                logger.debug(
+                    "Unpacking chunk %s from namespace %s...",
+                    chunk_name,
+                    chunk_namespace,
+                )
+
                 try:
                     # Create extraction directory
                     extract_dir = f"extracted/{chunk_namespace}"
                     os.makedirs(extract_dir, exist_ok=True)
-                    
+
                     # Extract archive
-                    logger.info("Extracting archive %s to directory %s...", archive_path, extract_dir)
-                    extracted_file = extract_single_file_from_tar_gz(archive_path, extract_dir)
-                    
+                    logger.info(
+                        "Extracting archive %s to directory %s...",
+                        archive_path,
+                        extract_dir,
+                    )
+                    extracted_file = extract_single_file_from_tar_gz(
+                        archive_path, extract_dir
+                    )
+
                     if extracted_file:
                         chunk_file_path = f"{extract_dir}/{extracted_file}"
-                        
+
                         # count lines in chunk file
                         file_line_count = count_lines_in_file(chunk_file_path)
 
                         # Parse chunk file
-                        #logger.info("Parsing pages out of chunk file %s", chunk_file_path)
-                        with ProgressTracker("Parsing chunk file", total=file_line_count, unit="pages") as tracker:
-                            line_count = parse_chunk_file(sqlconn, chunk_name, chunk_file_path, tracker)
-                        logger.debug("Parsed %d pages from chunk file %s", line_count, chunk_file_path)
-                        
+                        # logger.info("Parsing pages out of chunk file %s", chunk_file_path)
+                        with ProgressTracker(
+                            "Parsing chunk file", total=file_line_count, unit="pages"
+                        ) as tracker:
+                            line_count = parse_chunk_file(
+                                sqlconn, chunk_name, chunk_file_path, tracker
+                            )
+                        logger.debug(
+                            "Parsed %d pages from chunk file %s",
+                            line_count,
+                            chunk_file_path,
+                        )
+
                         # Update database
                         sqlconn.execute(
                             "UPDATE chunk_log SET chunk_extracted_path = ? WHERE chunk_name = ?",
-                            (chunk_file_path, chunk_name)
+                            (chunk_file_path, chunk_name),
                         )
                         sqlconn.commit()
-                        
+
                         # Remove extracted file
                         logger.debug("Cleaning up extracted file %s", chunk_file_path)
                         try:
                             os.remove(chunk_file_path)
                         except Exception as e:
-                            logger.warning(f"Failed to remove extracted file {chunk_file_path}: {e}")
-                        
+                            logger.warning(
+                                f"Failed to remove extracted file {chunk_file_path}: {e}"
+                            )
+
                         # Count pages processed
                         page_cursor = sqlconn.execute(
                             "SELECT COUNT(*) as count FROM page_log WHERE chunk_name = ?",
-                            (chunk_name,)
+                            (chunk_name,),
                         )
-                        pages_in_chunk = page_cursor.fetchone()['count']
+                        pages_in_chunk = page_cursor.fetchone()["count"]
                         total_pages += pages_in_chunk
-                        
+
                         processed_count += 1
-                        logger.debug(f"Unpacked and processed {chunk_name} with {pages_in_chunk} pages.")
+                        logger.debug(
+                            f"Unpacked and processed {chunk_name} with {pages_in_chunk} pages."
+                        )
                     else:
                         logger.error(f"Failed to extract {archive_path}")
-                
+
                 except Exception as e:
                     logger.error(f"Failed to unpack {chunk_name}: {e}")
                     continue
-            
+
             return f"✓ Unpacked and processed {processed_count} chunk(s). Processed {total_pages} pages from {processed_count} chunks"
-        
+
         except Exception as e:
             logger.error(f"Failed to unpack chunks: {e}")
             return f"✗ Failed to unpack chunks: {e}"
@@ -471,23 +528,25 @@ class UnpackProcessChunksCommand(Command):
 
 class EmbedPagesCommand(Command):
     """Process remaining pages for embedding computation."""
-    
+
     def __init__(self):
         super().__init__(
             name="embed",
             description="Process remaining pages for embedding computation",
             required_args=[],
-            optional_args={"chunk": None, "limit": None}
+            optional_args={"chunk": None, "limit": None},
         )
-        embedding_model_name, embedding_model_api_url, embedding_model_api_key = get_embedding_model_config()
+        embedding_model_name, embedding_model_api_url, embedding_model_api_key = (
+            get_embedding_model_config()
+        )
         self.embedding_model_name = embedding_model_name
         self.embedding_model_api_url = embedding_model_api_url
         self.embedding_model_api_key = embedding_model_api_key
-    
+
     def execute(self, args: Dict[str, Any]) -> str:
         chunk_name = args.get("chunk")
         limit_arg = args.get("limit")
-        
+
         # Validate and convert limit parameter
         limit = None
         if limit_arg is not None:
@@ -497,48 +556,77 @@ class EmbedPagesCommand(Command):
                     return "✗ Limit must be a positive integer"
             except ValueError:
                 return "✗ Invalid limit value. Please provide a positive integer."
-            
-        logger.info("Computing embeddings for pages%s%s...", f" in chunk {chunk_name}" if chunk_name else "", f" with limit {limit}" if limit else "")
-        
+
+        logger.info(
+            "Computing embeddings for pages%s%s...",
+            f" in chunk {chunk_name}" if chunk_name else "",
+            f" with limit {limit}" if limit else "",
+        )
+
         try:
             sqlconn = get_sql_conn()
             ensure_tables(sqlconn)
-            
+
             # Setup embedding function
             embedding_function = get_embedding_function(
                 model_name=self.embedding_model_name,
                 openai_compatible_url=self.embedding_model_api_url,
-                openai_api_key=self.embedding_model_api_key
+                openai_api_key=self.embedding_model_api_key,
             )
-            
+
             if chunk_name:
                 # Process specific chunk
                 page_ids = get_page_ids_needing_embedding_for_chunk(chunk_name, sqlconn)
-                
+
                 if limit:
                     pages_to_process = min(len(page_ids), limit)
                     if limit < len(page_ids):
-                        logger.info("Pages to process: %d for chunk %s (limit applied)", pages_to_process, chunk_name)
+                        logger.info(
+                            "Pages to process: %d for chunk %s (limit applied)",
+                            pages_to_process,
+                            chunk_name,
+                        )
                     else:
-                        logger.info("Pages to process: %d for chunk %s (limit not restricting)", pages_to_process, chunk_name)
+                        logger.info(
+                            "Pages to process: %d for chunk %s (limit not restricting)",
+                            pages_to_process,
+                            chunk_name,
+                        )
                 else:
                     pages_to_process = len(page_ids)
-                    logger.info("Pages to process: %d for chunk %s (not limited)", pages_to_process, chunk_name)
+                    logger.info(
+                        "Pages to process: %d for chunk %s (not limited)",
+                        pages_to_process,
+                        chunk_name,
+                    )
 
                 if not page_ids:
                     return f"✓ No pages needing embeddings in chunk {chunk_name}"
 
-                #logger.info("Processing %d embeddings for named chunk %s...", len(page_ids), chunk_name)
+                # logger.info("Processing %d embeddings for named chunk %s...", len(page_ids), chunk_name)
 
                 # Compute embeddings
-                with ProgressTracker(f"Computing embeddings for chunk {chunk_name}", total=pages_to_process, unit="pages") as tracker:
-                    compute_embeddings_for_chunk(chunk_name, embedding_function, sqlconn, limit=pages_to_process, tracker=tracker)
-                
+                with ProgressTracker(
+                    f"Computing embeddings for chunk {chunk_name}",
+                    total=pages_to_process,
+                    unit="pages",
+                ) as tracker:
+                    compute_embeddings_for_chunk(
+                        chunk_name,
+                        embedding_function,
+                        sqlconn,
+                        limit=pages_to_process,
+                        tracker=tracker,
+                    )
+
                 return f"✓ Processed {len(page_ids)} pages for chunk {chunk_name}"
-            
+
             else:
                 # Process all chunks
-                logger.info("Processing %sembeddings for next available chunk...", f"up to {limit} " if limit else "")
+                logger.info(
+                    "Processing %sembeddings for next available chunk...",
+                    f"up to {limit} " if limit else "",
+                )
 
                 cursor = sqlconn.execute(
                     """
@@ -548,50 +636,76 @@ class EmbedPagesCommand(Command):
                     WHERE page_vector.embedding_vector IS NULL;
                     """
                 )
-                chunk_name_list = [row['chunk_name'] for row in cursor.fetchall()]
-                
+                chunk_name_list = [row["chunk_name"] for row in cursor.fetchall()]
+
                 if not chunk_name_list:
                     return "✓ No pages needing embeddings"
-                
+
                 total_processed = 0
-                
+
                 for chunk_name in chunk_name_list:
                     try:
                         # Check if we have remaining limit capacity
                         if limit and total_processed >= limit:
                             break
-                            
+
                         # Get pages needing embeddings for this chunk
-                        page_ids = get_page_ids_needing_embedding_for_chunk(chunk_name, sqlconn)
-                        
+                        page_ids = get_page_ids_needing_embedding_for_chunk(
+                            chunk_name, sqlconn
+                        )
+
                         if not page_ids:
                             continue
-                        
+
                         # Calculate how many pages we can process in this chunk
                         if limit:
                             remaining = limit - total_processed
                             pages_to_process = min(len(page_ids), remaining)
                             if pages_to_process < len(page_ids):
-                                logger.info("Pages to process: %d for chunk %s (limit applied)", pages_to_process, chunk_name)
+                                logger.info(
+                                    "Pages to process: %d for chunk %s (limit applied)",
+                                    pages_to_process,
+                                    chunk_name,
+                                )
                             else:
-                                logger.info("Pages to process: %d for chunk %s (limit not restricting)", pages_to_process, chunk_name)
+                                logger.info(
+                                    "Pages to process: %d for chunk %s (limit not restricting)",
+                                    pages_to_process,
+                                    chunk_name,
+                                )
                         else:
                             pages_to_process = len(page_ids)
-                            logger.info("Pages to process: %d for chunk %s (not limited)", pages_to_process, chunk_name)
+                            logger.info(
+                                "Pages to process: %d for chunk %s (not limited)",
+                                pages_to_process,
+                                chunk_name,
+                            )
 
                         if pages_to_process > 0:
                             # Pass the limit to the compute function
-                            with ProgressTracker(f"Computing embeddings for chunk {chunk_name}", total=pages_to_process, unit="pages") as tracker:
-                                compute_embeddings_for_chunk(chunk_name, embedding_function, sqlconn, limit=pages_to_process, tracker=tracker)
+                            with ProgressTracker(
+                                f"Computing embeddings for chunk {chunk_name}",
+                                total=pages_to_process,
+                                unit="pages",
+                            ) as tracker:
+                                compute_embeddings_for_chunk(
+                                    chunk_name,
+                                    embedding_function,
+                                    sqlconn,
+                                    limit=pages_to_process,
+                                    tracker=tracker,
+                                )
                             total_processed += pages_to_process
-                            logger.info(f"Processed {pages_to_process} pages for chunk {chunk_name}")
-                    
+                            logger.info(
+                                f"Processed {pages_to_process} pages for chunk {chunk_name}"
+                            )
+
                     except Exception as e:
                         logger.exception(f"Failed to process chunk {chunk_name}: {e}")
                         continue
-                
+
                 return f"✓ Embedded {total_processed} pages across {len(chunk_name_list)} chunk(s)"
-        
+
         except Exception as e:
             logger.exception(f"Failed to process pages: {e}")
             return f"✗ Failed to process pages: {e}"
@@ -602,39 +716,53 @@ class ReduceCommand(Command):
 
     def __init__(self):
         super().__init__(
-            name="reduce", 
-            description="Reduce dimension of embeddings", 
-            required_args=['namespace'], 
-            optional_args={'target-dim': 100, 'batch-size': 10_000}
+            name="reduce",
+            description="Reduce dimension of embeddings",
+            required_args=["namespace"],
+            optional_args={"target-dim": 100, "batch-size": 10_000},
         )
 
     def execute(self, args: Dict[str, Any]) -> str:
         try:
-            namespace = args['namespace']
-
+            namespace = args["namespace"]
 
             sqlconn = get_sql_conn()
             ensure_tables(sqlconn)
 
-            target_dim = args.get('target-dim', 100)
-            batch_size = args.get('batch-size', 10_000)
+            target_dim = args.get("target-dim", 100)
+            batch_size = args.get("batch-size", 10_000)
             print(f"Target dimension: {target_dim}, batch size: {batch_size}")
 
             if target_dim > batch_size:
-                return f"✗ Batch size must be equal to or greater than target dimension."
+                return (
+                    f"✗ Batch size must be equal to or greater than target dimension."
+                )
 
             estimated_vector_count = get_embedding_count(namespace, sqlconn)
             estimated_batch_count = estimated_vector_count // batch_size + 1
 
             if estimated_vector_count < target_dim:
                 return f"✗ Only found {estimated_vector_count} records, need at least {target_dim} to do PCA at that dimension"
-            
+
             if estimated_vector_count < batch_size:
-                print(f"Reducing batch size to match estimated vector count: %d", estimated_vector_count)
+                print(
+                    f"Reducing batch size to match estimated vector count: %d",
+                    estimated_vector_count,
+                )
                 batch_size = estimated_vector_count
 
-            with ProgressTracker("PCA Reduction (two pass)", unit="batches", total=estimated_batch_count * 2) as tracker:
-                batch_count, total_vector_count = run_pca(sqlconn, namespace=namespace, target_dim=target_dim, batch_size=batch_size, tracker=tracker)
+            with ProgressTracker(
+                "PCA Reduction (two pass)",
+                unit="batches",
+                total=estimated_batch_count * 2,
+            ) as tracker:
+                batch_count, total_vector_count = run_pca(
+                    sqlconn,
+                    namespace=namespace,
+                    target_dim=target_dim,
+                    batch_size=batch_size,
+                    tracker=tracker,
+                )
             return f"✓ Reduced {total_vector_count} page embeddings in {batch_count} batch{'' if batch_count == 1 else 'es'}"
         except Exception as e:
             logger.exception(f"Failed to reduce embeddings: {e}")
@@ -648,30 +776,42 @@ class ClusterCommand(Command):
         super().__init__(
             name="cluster",
             description="Cluster reduced vectors with k-means",
-            required_args=['namespace'],
-            optional_args={'clusters': 100, 'batch-size': 10_000}
+            required_args=["namespace"],
+            optional_args={"clusters": 100, "batch-size": 10_000},
         )
 
     def execute(self, args: Dict[str, Any]) -> str:
         try:
-            namespace = args['namespace']
+            namespace = args["namespace"]
 
             sqlconn = get_sql_conn()
             ensure_tables(sqlconn)
 
-            num_clusters = args.get('clusters', 100)
-            batch_size = args.get('batch-size', 10_000)
+            num_clusters = args.get("clusters", 100)
+            batch_size = args.get("batch-size", 10_000)
 
             estimated_vector_count = get_reduced_vector_count(namespace, sqlconn)
             estimated_batch_count = estimated_vector_count // batch_size + 1
 
             if estimated_vector_count < batch_size:
-                print(f"Reducing batch size to match estimated vector count: {estimated_vector_count}")
+                print(
+                    f"Reducing batch size to match estimated vector count: {estimated_vector_count}"
+                )
                 batch_size = estimated_vector_count
 
-            with ProgressTracker("K-means Clustering (two pass)", unit="batches", total=estimated_batch_count*2) as tracker:
-                run_kmeans(sqlconn, namespace=namespace, n_clusters=num_clusters, batch_size=batch_size, tracker=tracker)
-            
+            with ProgressTracker(
+                "K-means Clustering (two pass)",
+                unit="batches",
+                total=estimated_batch_count * 2,
+            ) as tracker:
+                run_kmeans(
+                    sqlconn,
+                    namespace=namespace,
+                    n_clusters=num_clusters,
+                    batch_size=batch_size,
+                    tracker=tracker,
+                )
+
             return f"✓ Clustered reduced page embeddings in namespace {namespace} using incremental K-means"
         except Exception as e:
             logger.exception(f"Failed to cluster embeddings: {e}")
@@ -680,30 +820,32 @@ class ClusterCommand(Command):
 
 class StatusCommand(Command):
     """Show current system status."""
-    
+
     def __init__(self):
         super().__init__(
             name="status",
             description="Show current system status",
             required_args=[],
-            optional_args={}
+            optional_args={},
         )
-    
+
     def execute(self, args: Dict[str, Any]) -> str:
         try:
             sqlconn = get_sql_conn()
             ensure_tables(sqlconn)
-            
+
             # Get chunk statistics
-            chunk_cursor = sqlconn.execute("""
+            chunk_cursor = sqlconn.execute(
+                """
                 SELECT 
                     COUNT(*) as total_chunks,
                     SUM(CASE WHEN downloaded_at IS NOT NULL THEN 1 ELSE 0 END) as downloaded_chunks,
                     SUM(CASE WHEN chunk_extracted_path IS NOT NULL THEN 1 ELSE 0 END) as extracted_chunks
                 FROM chunk_log                     
-            """)
+            """
+            )
             chunk_stats = chunk_cursor.fetchone()
-            
+
             chunk_completion_cursor = sqlconn.execute(
                 """
                 SELECT SUM(CASE WHEN total_pages > 0 AND pending_embeddings = 0 THEN 1 ELSE 0 END) as "complete_chunks",
@@ -722,41 +864,46 @@ class StatusCommand(Command):
                         LEFT JOIN page_vector ON page_log.page_id = page_vector.page_id
                         GROUP BY chunk_log.chunk_name
                     );
-            """)
+            """
+            )
             chunk_completion_stats = chunk_completion_cursor.fetchone()
 
             # Get page statistics
-            page_cursor = sqlconn.execute("""
+            page_cursor = sqlconn.execute(
+                """
                 SELECT 
                     COUNT(*) as total_pages,
                     SUM(CASE WHEN embedding_vector IS NOT NULL THEN 1 ELSE 0 END) as pages_with_embeddings
                 FROM page_log
                 LEFT JOIN page_vector ON page_log.page_id = page_vector.page_id
-            """)
+            """
+            )
             page_stats = page_cursor.fetchone()
-            
+
             status_text = f"System Status:\n"
             status_text += f"Chunks: {chunk_stats['total_chunks']} total, {chunk_stats['downloaded_chunks']} downloaded, {chunk_stats['extracted_chunks']} extracted\n"
             status_text += f"Pages: {page_stats['total_pages']} total, {page_stats['pages_with_embeddings']} with embeddings\n"
             status_text += f"Chunk Completion: {chunk_completion_stats['complete_chunks']} complete, {chunk_completion_stats['incomplete_chunks']} incomplete\n"
             status_text += f"Page Completion: {chunk_completion_stats['pending_embeddings_count']} pending embeddings, {chunk_completion_stats['completed_embeddings_count']} complete, {chunk_completion_stats['total_pages_count']} total pages.\n"
-            
+
             # Get namespace breakdown
-            namespace_cursor = sqlconn.execute("""
+            namespace_cursor = sqlconn.execute(
+                """
                 SELECT namespace, 
                        COUNT(*) as chunk_count,
                        SUM(CASE WHEN downloaded_at IS NOT NULL THEN 1 ELSE 0 END) as downloaded_count
                 FROM chunk_log 
                 GROUP BY namespace
                 ORDER BY namespace
-            """)
-            
+            """
+            )
+
             status_text += "\nNamespace breakdown:\n"
             for row in namespace_cursor.fetchall():
                 status_text += f"  {row['namespace']}: {row['chunk_count']} chunks, {row['downloaded_count']} downloaded\n"
-            
+
             return status_text
-        
+
         except Exception as e:
             logger.error(f"Failed to get status: {e}")
             return f"✗ Failed to get status: {e}"
@@ -764,19 +911,19 @@ class StatusCommand(Command):
 
 class HelpCommand(Command):
     """Show help information."""
-    
+
     def __init__(self, parser: CommandParser):
         super().__init__(
             name="help",
             description="Show help information",
             required_args=[],
-            optional_args={"command": None}
+            optional_args={"command": None},
         )
         self.parser = parser
-    
+
     def execute(self, args: Dict[str, Any]) -> str:
         command_name = args.get("command")
-        
+
         if command_name:
             return self.parser.get_command_help(command_name)
         else:
@@ -784,19 +931,21 @@ class HelpCommand(Command):
             for cmd_name in self.parser.get_available_commands():
                 cmd = self.parser.commands[cmd_name]
                 help_text += f"  {cmd_name} - {cmd.description}\n"
-            
-            help_text += "\nUse 'help <command>' for more information about a specific command."
+
+            help_text += (
+                "\nUse 'help <command>' for more information about a specific command."
+            )
             return help_text
 
 
 class CommandInterpreter:
     """Main command interpreter class."""
-    
+
     def __init__(self):
         self.parser = CommandParser()
         self.dispatcher = CommandDispatcher(self.parser)
         self._register_commands()
-    
+
     def _register_commands(self):
         """Register all commands."""
         self.parser.register_command(RefreshChunkDataCommand())
@@ -807,33 +956,33 @@ class CommandInterpreter:
         self.parser.register_command(ClusterCommand())
         self.parser.register_command(StatusCommand())
         self.parser.register_command(HelpCommand(self.parser))
-    
+
     def run_interactive(self):
         """Run interactive command interpreter."""
         print("Welcome to wp-embeddings command interpreter!")
         print("Type 'help' for available commands or 'quit' to exit.")
         print()
-        
+
         while True:
             try:
                 user_input = input("> ").strip()
-                
+
                 if not user_input:
                     continue
-                
-                if user_input.lower() in ('quit', 'exit', 'q'):
+
+                if user_input.lower() in ("quit", "exit", "q"):
                     print("Goodbye!")
                     break
-                
+
                 command_name, args = self.parser.parse_input(user_input)
-                
+
                 if not command_name:
                     continue
-                
+
                 result = self.dispatcher.dispatch(command_name, args)
                 print(result)
                 print()
-                
+
             except KeyboardInterrupt:
                 print("\nGoodbye!")
                 break
@@ -843,48 +992,52 @@ class CommandInterpreter:
             except Exception as e:
                 print(f"Error: {e}")
                 logger.error(f"Interactive mode error: {e}")
-    
+
     def run_command(self, command_args: List[str]):
         """Run a single command."""
         if not command_args:
             print("Usage: python command.py <command> [options]")
             return
-        
+
         command_name = command_args[0]
-        
+
         # Special handling for help command
         if command_name == "help":
             # Parse help command manually
             help_args = {}
             if len(command_args) > 1:
                 help_args["command"] = command_args[1]
-            
+
             help_command = self.parser.commands.get("help")
             if help_command:
                 result = help_command.execute(help_args)
                 print(result)
             return
-        
+
         args = {}
-        
+
         # Parse command line arguments
         parser = argparse.ArgumentParser(description=f"Execute {command_name} command")
-        
+
         # Add command-specific arguments
         command = self.parser.commands.get(command_name)
         if command:
             for arg in command.required_args:
-                parser.add_argument(f"--{arg}", required=True, help=f"Required argument: {arg}")
-            
+                parser.add_argument(
+                    f"--{arg}", required=True, help=f"Required argument: {arg}"
+                )
+
             for arg, default in command.optional_args.items():
-                parser.add_argument(f"--{arg}", default=default, help=f"Optional argument: {arg}")
-        
+                parser.add_argument(
+                    f"--{arg}", default=default, help=f"Optional argument: {arg}"
+                )
+
         try:
             parsed_args = parser.parse_args(command_args[1:])
             args = vars(parsed_args)
         except SystemExit:
             return
-        
+
         result = self.dispatcher.dispatch(command_name, args)
         print(result)
 
@@ -892,7 +1045,7 @@ class CommandInterpreter:
 def main():
     """Main entry point."""
     interpreter = CommandInterpreter()
-    
+
     if len(sys.argv) > 1:
         # Run single command
         interpreter.run_command(sys.argv[1:])

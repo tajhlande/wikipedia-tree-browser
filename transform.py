@@ -16,6 +16,7 @@ operate directly on the SQLite database via the helper utilities defined in
 from __future__ import annotations
 
 import logging
+
 logger = logging.getLogger(__name__)
 import sqlite3
 from typing import Iterable, List, Optional
@@ -38,10 +39,10 @@ logger = logging.getLogger(__name__)
 
 
 def _batch_iterator(
-    sqlconn: sqlite3.Connection, 
-    namespace: str, 
-    columns: List[str], 
-    batch_size: int = 10_000
+    sqlconn: sqlite3.Connection,
+    namespace: str,
+    columns: List[str],
+    batch_size: int = 10_000,
 ) -> Iterable[List[dict]]:
     """Yield batches of rows to avoid loading the entire table into memory.
 
@@ -53,8 +54,7 @@ def _batch_iterator(
         # SQLite does not support OFFSET in a straightforward way without
         # ordering, but for our use-case ordering is not required - we simply
         # fetch a limited number of rows each iteration.
-        sql = (
-            f"""
+        sql = f"""
             SELECT page_vector.page_id, {', '.join(columns)} 
             FROM page_vector 
             INNER JOIN page_log ON page_vector.page_id = page_log.page_id
@@ -64,24 +64,29 @@ def _batch_iterator(
             ORDER BY chunk_log.chunk_name ASC, page_log.page_id ASC
             LIMIT {batch_size} OFFSET {offset};
             """
-        )
-        cursor = sqlconn.execute(sql, {'namespace': namespace})
+        cursor = sqlconn.execute(sql, {"namespace": namespace})
         rows = cursor.fetchall()
         if not rows:
             break
-        
+
         batch = []
         for row in rows:
             result = {"page_id": row["page_id"]}
             for col in columns:
                 result[col] = row[col]
             batch.append(result)
-        
+
         yield batch
         offset += batch_size
 
 
-def run_pca(sqlconn: sqlite3.Connection, namespace: str, target_dim: int = 100, batch_size: int = 10_000, tracker: Optional[ProgressTracker] = None) -> tuple[int, int]:
+def run_pca(
+    sqlconn: sqlite3.Connection,
+    namespace: str,
+    target_dim: int = 100,
+    batch_size: int = 10_000,
+    tracker: Optional[ProgressTracker] = None,
+) -> tuple[int, int]:
     """
     Fit Incremental PCA on all ``embedding_vector`` blobs and store the result.
 
@@ -103,7 +108,9 @@ def run_pca(sqlconn: sqlite3.Connection, namespace: str, target_dim: int = 100, 
     batch_counter = 0
     total_vectors = 0
 
-    for batch in _batch_iterator(sqlconn, namespace, ["embedding_vector"], effective_batch_size):
+    for batch in _batch_iterator(
+        sqlconn, namespace, ["embedding_vector"], effective_batch_size
+    ):
         # Stack all vectors in this batch into a single matrix
         batch_vectors = []
         for row in batch:
@@ -111,7 +118,7 @@ def run_pca(sqlconn: sqlite3.Connection, namespace: str, target_dim: int = 100, 
             # Original embeddings are 2048-dimensional; reshape accordingly.
             vectors = vectors.reshape(1, -1)  # each row is a single vector
             batch_vectors.append(vectors)
-        
+
         if batch_vectors:
             batch_matrix = np.vstack(batch_vectors)
             ipca.partial_fit(batch_matrix)
@@ -123,7 +130,9 @@ def run_pca(sqlconn: sqlite3.Connection, namespace: str, target_dim: int = 100, 
     for batch in _batch_iterator(sqlconn, namespace, ["embedding_vector"], batch_size):
         # Process each vector in the batch
         for row in batch:
-            vec = np.frombuffer(row["embedding_vector"], dtype=np.float32).reshape(1, -1)
+            vec = np.frombuffer(row["embedding_vector"], dtype=np.float32).reshape(
+                1, -1
+            )
             reduced = ipca.transform(vec).astype(np.float32).squeeze()
             update_reduced_vector_for_page(row["page_id"], reduced, sqlconn)
         tracker.update(1) if tracker else None
@@ -132,11 +141,13 @@ def run_pca(sqlconn: sqlite3.Connection, namespace: str, target_dim: int = 100, 
     return batch_counter, total_vectors
 
 
-def run_kmeans(sqlconn: sqlite3.Connection,
-               namespace: str,
-               n_clusters: int = 100,
-               batch_size: int = 10_000,
-               tracker: Optional[ProgressTracker] = None) -> None:
+def run_kmeans(
+    sqlconn: sqlite3.Connection,
+    namespace: str,
+    n_clusters: int = 100,
+    batch_size: int = 10_000,
+    tracker: Optional[ProgressTracker] = None,
+) -> None:
     """Cluster the PCA-reduced vectors and persist cluster assignments.
 
     Args:
@@ -153,10 +164,12 @@ def run_kmeans(sqlconn: sqlite3.Connection,
 
     # if use_incremental:
     # Use MiniBatchKMeans for incremental processing
-    kmeans = MiniBatchKMeans(n_clusters=n_clusters, random_state=42, batch_size=batch_size)
+    kmeans = MiniBatchKMeans(
+        n_clusters=n_clusters, random_state=42, batch_size=batch_size
+    )
     ids = []
     partial_fit_done = False
-    
+
     # First pass: partial fit on all batches
     # logger.info("Performing partial fit on all batches...")
     for batch in _batch_iterator(sqlconn, namespace, ["reduced_vector"], batch_size):
@@ -166,7 +179,7 @@ def run_kmeans(sqlconn: sqlite3.Connection,
             batch_ids.append(row["page_id"])
             vectors = np.frombuffer(row["reduced_vector"], dtype=np.float32)
             batch_vectors.append(vectors)
-        
+
         if batch_vectors:
             batch_matrix = np.vstack(batch_vectors)
             if not partial_fit_done:
@@ -174,14 +187,14 @@ def run_kmeans(sqlconn: sqlite3.Connection,
                 partial_fit_done = True
             else:
                 kmeans.partial_fit(batch_matrix)
-            
+
             ids.extend(batch_ids)
         tracker.update(1) if tracker else None
-    
+
     if not ids:
         logger.warning("No reduced vectors found - aborting K-Means.")
         return
-    
+
     # Second pass: predict on batches to get cluster assignments
     # logger.info("Predicting cluster assignments...")
     cluster_ids = []
@@ -192,7 +205,7 @@ def run_kmeans(sqlconn: sqlite3.Connection,
             batch_ids.append(row["page_id"])
             vectors = np.frombuffer(row["reduced_vector"], dtype=np.float32)
             batch_vectors.append(vectors)
-        
+
         if batch_vectors:
             batch_matrix = np.vstack(batch_vectors)
             batch_cluster_ids = kmeans.predict(batch_matrix)
@@ -212,7 +225,7 @@ def run_kmeans(sqlconn: sqlite3.Connection,
             "INSERT OR IGNORE INTO cluster_info (cluster_id, namespace) VALUES (?, ?)",
             (int(cl_id), namespace),
         )
-    
+
     # Save cluster centroids as BLOB
     logger.info("Saving cluster centroids...")
     for cluster_id in range(n_clusters):
@@ -236,7 +249,9 @@ def run_umap_per_cluster(
         "Running UMAP per cluster (n_components=%s, limit=%s)", n_components, limit
     )
     # Determine distinct cluster ids.
-    cur = sqlconn.execute("SELECT DISTINCT cluster_id FROM page_vector WHERE cluster_id IS NOT NULL")
+    cur = sqlconn.execute(
+        "SELECT DISTINCT cluster_id FROM page_vector WHERE cluster_id IS NOT NULL"
+    )
     cluster_ids = [row["cluster_id"] for row in cur.fetchall()][:limit]
 
     processed = 0
@@ -254,7 +269,7 @@ def run_umap_per_cluster(
             [np.frombuffer(r["reduced_vector"], dtype=np.float32) for r in rows]
         )
         reducer = umap.UMAP(n_components=n_components, random_state=42)
-        three_space_vectors = reducer.fit_transform(vectors).astype(np.float32) # type: ignore
+        three_space_vectors = reducer.fit_transform(vectors).astype(np.float32)  # type: ignore
         # Store each 3-D vector as JSON.
         for pid, vec in zip(page_ids, three_space_vectors):
             update_three_d_vector_for_page(pid, vec.tolist(), sqlconn)

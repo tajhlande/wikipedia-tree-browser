@@ -11,7 +11,9 @@ class Helper:
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
         # default is 23 hours and 59 minutes
-        self.wait_seconds = wait_seconds if wait_seconds is not None else 23 * 3600 + 59 * 60
+        self.wait_seconds = (
+            wait_seconds if wait_seconds is not None else 23 * 3600 + 59 * 60
+        )
         self.refresh_thread = threading.Thread(target=self._refresh_token_periodically)
         self.refresh_thread.start()
 

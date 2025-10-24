@@ -11,6 +11,7 @@ import threading
 # Export a logger that tests can patch
 logger = _base_logger
 
+
 class Helper(_BaseHelper):
     """Shim that ensures the ``logger`` used in the refresh loop is patchable.
 

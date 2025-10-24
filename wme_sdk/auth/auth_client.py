@@ -43,11 +43,15 @@ class AuthClient:
             if not os.path.exists(self.token_store_file):
                 return self._login_and_store_tokens()
 
-            with open(self.token_store_file, 'r') as f:
+            with open(self.token_store_file, "r") as f:
                 token_store = json.load(f)
 
-            access_token_generated_at = datetime.fromisoformat(token_store["access_token_generated_at"])
-            refresh_token_generated_at = datetime.fromisoformat(token_store["refresh_token_generated_at"])
+            access_token_generated_at = datetime.fromisoformat(
+                token_store["access_token_generated_at"]
+            )
+            refresh_token_generated_at = datetime.fromisoformat(
+                token_store["refresh_token_generated_at"]
+            )
 
             if datetime.now() - access_token_generated_at < timedelta(hours=24):
                 return token_store["access_token"]
@@ -63,7 +67,7 @@ class AuthClient:
             "access_token": response["access_token"],
             "access_token_generated_at": datetime.now().isoformat(),
             "refresh_token": response["refresh_token"],
-            "refresh_token_generated_at": datetime.now().isoformat()
+            "refresh_token_generated_at": datetime.now().isoformat(),
         }
         self._store_tokens(token_store)
         return response["access_token"]
@@ -74,13 +78,13 @@ class AuthClient:
             "access_token": response["access_token"],
             "access_token_generated_at": datetime.now().isoformat(),
             "refresh_token": refresh_token,
-            "refresh_token_generated_at": datetime.now().isoformat()
+            "refresh_token_generated_at": datetime.now().isoformat(),
         }
         self._store_tokens(token_store)
         return response["access_token"]
 
     def _store_tokens(self, token_store):
-        with open(self.token_store_file, 'w') as f:
+        with open(self.token_store_file, "w") as f:
             json.dump(token_store, f)
 
     def clear_state(self):
@@ -88,7 +92,7 @@ class AuthClient:
             if not os.path.exists(self.token_store_file):
                 return
 
-            with open(self.token_store_file, 'r') as f:
+            with open(self.token_store_file, "r") as f:
                 token_store = json.load(f)
 
             refresh_token = token_store.get("refresh_token")

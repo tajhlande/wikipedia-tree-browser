@@ -8,4 +8,3 @@ from wme_sdk.auth.auth_client import AuthClient as _AuthClient
 
 # Export under the expected name
 AuthClient = _AuthClient
-

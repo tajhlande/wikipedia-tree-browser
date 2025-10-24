@@ -8,65 +8,73 @@ from .language import Language
 
 
 class Link:
-    def __init__(self,
-                 url: Optional[str] = None,
-                 text: Optional[str] = None,
-                 images: Optional[List[Image]] = None):
+    def __init__(
+        self,
+        url: Optional[str] = None,
+        text: Optional[str] = None,
+        images: Optional[List[Image]] = None,
+    ):
         self.url = url
         self.text = text
         self.images = images or []
 
     @staticmethod
-    def from_json(data: dict) -> 'Link':
+    def from_json(data: dict) -> "Link":
         return Link(
-            url=data['url'],
-            text=data['text'],
-            images=[Image.from_json(image) for image in data['images']]
+            url=data["url"],
+            text=data["text"],
+            images=[Image.from_json(image) for image in data["images"]],
         )
 
     @staticmethod
-    def to_json(link: 'Link') -> dict:
+    def to_json(link: "Link") -> dict:
         return {
-            'url': link.url,
-            'text': link.text,
-            'images': [Image.to_json(image) for image in link.images]
+            "url": link.url,
+            "text": link.text,
+            "images": [Image.to_json(image) for image in link.images],
         }
 
+
 class Citation:
-    def __init__(self,
-                 identifier: Optional[str] = None,
-                 group: Optional[str] = None,
-                 text: Optional[str] = None):
+    def __init__(
+        self,
+        identifier: Optional[str] = None,
+        group: Optional[str] = None,
+        text: Optional[str] = None,
+    ):
         self.identifier = identifier
         self.group = group
         self.text = text
 
     @staticmethod
-    def from_json(data: dict) -> 'Citation':
+    def from_json(data: dict) -> "Citation":
         return Citation(
-            identifier=data.get('identifier', ""),
-            group=data.get('group', ""),
-            text=data.get('text', "")
+            identifier=data.get("identifier", ""),
+            group=data.get("group", ""),
+            text=data.get("text", ""),
         )
 
     @staticmethod
-    def to_json(citation: 'Citation') -> dict:
+    def to_json(citation: "Citation") -> dict:
         return {
-            'identifier': citation.identifier,
-            'group': citation.group,
-            'text': citation.text
+            "identifier": citation.identifier,
+            "group": citation.group,
+            "text": citation.text,
         }
 
+
 class Part:
-    def __init__(self,
-                 name: Optional[str] = None,
-                 part_type: Optional[str] = None,
-                 value: Optional[str] = None,
-                 values: Optional[List[str]] = None,
-                 images: Optional[List[Image]] = None,
-                 links: Optional[List[Link]] = None,
-                 has_parts: Optional[List['Part']] = None,
-                 citations: Optional[List[Citation]] = None):
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        part_type: Optional[str] = None,
+        value: Optional[str] = None,
+        values: Optional[List[str]] = None,
+        images: Optional[List[Image]] = None,
+        links: Optional[List[Link]] = None,
+        has_parts: Optional[List["Part"]] = None,
+        citations: Optional[List[Citation]] = None,
+    ):
         self.name = name
         self.part_type = part_type
         self.value = value
@@ -77,60 +85,62 @@ class Part:
         self.citations = citations or []
 
     @staticmethod
-    def from_json(data: dict) -> 'Part':
+    def from_json(data: dict) -> "Part":
         return Part(
-            name=data['name'],
-            part_type=data['type'],
-            value=data['value'],
-            values=data['values'],
-            images=[Image.from_json(image) for image in data['images']],
-            links=[Link.from_json(link) for link in data['links']],
-            has_parts=[Part.from_json(part) for part in data['hasParts']],
-            citations=[Citation.from_json(citation) for citation in data['citations']]
+            name=data["name"],
+            part_type=data["type"],
+            value=data["value"],
+            values=data["values"],
+            images=[Image.from_json(image) for image in data["images"]],
+            links=[Link.from_json(link) for link in data["links"]],
+            has_parts=[Part.from_json(part) for part in data["hasParts"]],
+            citations=[Citation.from_json(citation) for citation in data["citations"]],
         )
 
     @staticmethod
-    def to_json(part: 'Part') -> dict:
+    def to_json(part: "Part") -> dict:
         return {
-            'name': part.name,
-            'type': part.part_type,
-            'value': part.value,
-            'values': part.values,
-            'images': [Image.to_json(image) for image in part.images],
-            'links': [Link.to_json(link) for link in part.links],
-            'hasParts': [Part.to_json(sub_part) for sub_part in part.has_parts],
-            'citations': [Citation.to_json(citation) for citation in part.citations]
+            "name": part.name,
+            "type": part.part_type,
+            "value": part.value,
+            "values": part.values,
+            "images": [Image.to_json(image) for image in part.images],
+            "links": [Link.to_json(link) for link in part.links],
+            "hasParts": [Part.to_json(sub_part) for sub_part in part.has_parts],
+            "citations": [Citation.to_json(citation) for citation in part.citations],
         }
 
+
 class ReferenceText:
-    def __init__(self,
-                 value: Optional[str] = None,
-                 links: Optional[List[Link]] = None):
+    def __init__(self, value: Optional[str] = None, links: Optional[List[Link]] = None):
         self.value = value
         self.links = links or []
 
     @staticmethod
-    def from_json(data: dict) -> 'ReferenceText':
+    def from_json(data: dict) -> "ReferenceText":
         return ReferenceText(
-            value=data.get('value', ""),
-            links=[Link.from_json(link) for link in data.get('links', [])]
+            value=data.get("value", ""),
+            links=[Link.from_json(link) for link in data.get("links", [])],
         )
 
     @staticmethod
-    def to_json(text: 'ReferenceText') -> dict:
+    def to_json(text: "ReferenceText") -> dict:
         return {
-            'value': text.value,
-            'links': [Link.to_json(link) for link in text.links]
+            "value": text.value,
+            "links": [Link.to_json(link) for link in text.links],
         }
 
+
 class Reference:
-    def __init__(self,
-                 identifier: Optional[str] = "",
-                 group: Optional[str] = "",
-                 ref_type: Optional[str] = "",
-                 metadata: Optional[Dict[str, str]] = None,
-                 text: Optional[ReferenceText] = None,
-                 source: Optional[ReferenceText] = None):
+    def __init__(
+        self,
+        identifier: Optional[str] = "",
+        group: Optional[str] = "",
+        ref_type: Optional[str] = "",
+        metadata: Optional[Dict[str, str]] = None,
+        text: Optional[ReferenceText] = None,
+        source: Optional[ReferenceText] = None,
+    ):
         self.identifier = identifier
         self.group = group
         self.ref_type = ref_type
@@ -139,59 +149,67 @@ class Reference:
         self.source = source
 
     @staticmethod
-    def from_json(data: dict) -> 'ReferenceText':
+    def from_json(data: dict) -> "ReferenceText":
         return ReferenceText(
-            identifier=data.get('identifier', ""),
-            group=data.get('group', ""),
-            ref_type=data.get('type', ""),
-            metadata=data.get('metadata', {}),
-            text=ReferenceText.from_json(data.get('text')),
-            source=ReferenceText.from_json(data.get('source'))
+            identifier=data.get("identifier", ""),
+            group=data.get("group", ""),
+            ref_type=data.get("type", ""),
+            metadata=data.get("metadata", {}),
+            text=ReferenceText.from_json(data.get("text")),
+            source=ReferenceText.from_json(data.get("source")),
         )
 
     @staticmethod
-    def to_json(reference: 'ReferenceText') -> dict:
+    def to_json(reference: "ReferenceText") -> dict:
         return {
-            'identifier': reference.identifier,
-            'group': reference.group,
-            'type': reference.ref_type,
-            'metadata': reference.metadata,
-            'text': ReferenceText.to_json(reference.text), 
-            'source': ReferenceText.to_json(reference.source) 
+            "identifier": reference.identifier,
+            "group": reference.group,
+            "type": reference.ref_type,
+            "metadata": reference.metadata,
+            "text": ReferenceText.to_json(reference.text),
+            "source": ReferenceText.to_json(reference.source),
         }
 
+
 class StructuredTableCell:
-    def __init__(self,
-                 value: Optional[str] = None,
-                 nested_table: Optional['StructuredTable'] = None):
+    def __init__(
+        self,
+        value: Optional[str] = None,
+        nested_table: Optional["StructuredTable"] = None,
+    ):
         self.value = value
         self.nested_table = nested_table
 
     @staticmethod
-    def from_json(data: dict) -> 'StructuredTableCell':
+    def from_json(data: dict) -> "StructuredTableCell":
         nested = None
         if data and data.get("nested_table"):
             nested = StructuredTable.from_json(data["nested_table"])
         return StructuredTableCell(
-            value=data.get("value") if data else None,
-            nested_table=nested
+            value=data.get("value") if data else None, nested_table=nested
         )
 
     @staticmethod
-    def to_json(cell: 'StructuredTableCell') -> dict:
+    def to_json(cell: "StructuredTableCell") -> dict:
         return {
             "value": cell.value,
-            "nested_table": StructuredTable.to_json(cell.nested_table) if cell.nested_table else None
+            "nested_table": (
+                StructuredTable.to_json(cell.nested_table)
+                if cell.nested_table
+                else None
+            ),
         }
 
 
 class StructuredTable:
-    def __init__(self,
-                 identifier: Optional[str] = None,
-                 headers: Optional[List[List['StructuredTableCell']]] = None,
-                 rows: Optional[List[List['StructuredTableCell']]] = None,
-                 footers: Optional[List[List['StructuredTableCell']]] = None,
-                 confidence_score: Optional[float] = None):
+    def __init__(
+        self,
+        identifier: Optional[str] = None,
+        headers: Optional[List[List["StructuredTableCell"]]] = None,
+        rows: Optional[List[List["StructuredTableCell"]]] = None,
+        footers: Optional[List[List["StructuredTableCell"]]] = None,
+        confidence_score: Optional[float] = None,
+    ):
         self.identifier = identifier
         self.headers = headers or []
         self.rows = rows or []
@@ -199,45 +217,74 @@ class StructuredTable:
         self.confidence_score = confidence_score
 
     @staticmethod
-    def from_json(data: dict) -> 'StructuredTable':
+    def from_json(data: dict) -> "StructuredTable":
         return StructuredTable(
             identifier=data.get("identifier") if data else None,
-            headers=[[StructuredTableCell.from_json(c) for c in row] for row in data.get("headers", [])] if data else [],
-            rows=[[StructuredTableCell.from_json(c) for c in row] for row in data.get("rows", [])] if data else [],
-            footers=[[StructuredTableCell.from_json(c) for c in row] for row in data.get("footers", [])] if data else [],
-            confidence_score=data.get("confidence_score") if data else None
+            headers=(
+                [
+                    [StructuredTableCell.from_json(c) for c in row]
+                    for row in data.get("headers", [])
+                ]
+                if data
+                else []
+            ),
+            rows=(
+                [
+                    [StructuredTableCell.from_json(c) for c in row]
+                    for row in data.get("rows", [])
+                ]
+                if data
+                else []
+            ),
+            footers=(
+                [
+                    [StructuredTableCell.from_json(c) for c in row]
+                    for row in data.get("footers", [])
+                ]
+                if data
+                else []
+            ),
+            confidence_score=data.get("confidence_score") if data else None,
         )
 
     @staticmethod
-    def to_json(table: 'StructuredTable') -> dict:
+    def to_json(table: "StructuredTable") -> dict:
         return {
             "identifier": table.identifier,
-            "headers": [[StructuredTableCell.to_json(c) for c in row] for row in table.headers],
-            "rows": [[StructuredTableCell.to_json(c) for c in row] for row in table.rows],
-            "footers": [[StructuredTableCell.to_json(c) for c in row] for row in table.footers],
-            "confidence_score": table.confidence_score
+            "headers": [
+                [StructuredTableCell.to_json(c) for c in row] for row in table.headers
+            ],
+            "rows": [
+                [StructuredTableCell.to_json(c) for c in row] for row in table.rows
+            ],
+            "footers": [
+                [StructuredTableCell.to_json(c) for c in row] for row in table.footers
+            ],
+            "confidence_score": table.confidence_score,
         }
 
 
 class StructuredContent:
-    def __init__(self,
-                 name: Optional[str] = None,
-                 identifier: Optional[int] = None,
-                 abstract: Optional[str] = None,
-                 description: Optional[str] = None,
-                 version: Optional[Version] = None,
-                 url: Optional[str] = None,
-                 date_created: Optional[datetime] = None,
-                 date_modified: Optional[datetime] = None,
-                 main_entity: Optional[Entity] = None,
-                 additional_entities: Optional[List[Entity]] = None,
-                 is_part_of: Optional[Project] = None,
-                 in_language: Optional[Language] = None,
-                 infoboxes: Optional[List[Part]] = None,
-                 article_sections: Optional[List[Part]] = None,
-                 image: Optional[Image] = None,
-                 tables: Optional[List['StructuredTable']] = None,
-                 references: Optional[List[Reference]] = None):
+    def __init__(
+        self,
+        name: Optional[str] = None,
+        identifier: Optional[int] = None,
+        abstract: Optional[str] = None,
+        description: Optional[str] = None,
+        version: Optional[Version] = None,
+        url: Optional[str] = None,
+        date_created: Optional[datetime] = None,
+        date_modified: Optional[datetime] = None,
+        main_entity: Optional[Entity] = None,
+        additional_entities: Optional[List[Entity]] = None,
+        is_part_of: Optional[Project] = None,
+        in_language: Optional[Language] = None,
+        infoboxes: Optional[List[Part]] = None,
+        article_sections: Optional[List[Part]] = None,
+        image: Optional[Image] = None,
+        tables: Optional[List["StructuredTable"]] = None,
+        references: Optional[List[Reference]] = None,
+    ):
         self.name = name
         self.identifier = identifier
         self.abstract = abstract
@@ -257,45 +304,66 @@ class StructuredContent:
         self.tables = tables or []
 
     @staticmethod
-    def from_json(data: dict) -> 'StructuredContent':
+    def from_json(data: dict) -> "StructuredContent":
         return StructuredContent(
-            name=data['name'],
-            identifier=data['identifier'],
-            abstract=data['abstract'],
-            description=data['description'],
-            version=Version.from_json(data['version']),
-            url=data['url'],
-            date_created=datetime.fromisoformat(data['dateCreated']),
-            date_modified=datetime.fromisoformat(data['dateModified']),
-            main_entity=Entity.from_json(data['mainEntity']),
-            additional_entities=[Entity.from_json(entity) for entity in data['additionalEntities']],
-            is_part_of=Project.from_json(data['isPartOf']),
-            in_language=Language.from_json(data['inLanguage']),
-            infoboxes=[Part.from_json(part) for part in data['infoboxes']],
-            article_sections=[Part.from_json(section) for section in data['articleSections']],     
-            tables=[StructuredTable.from_json(tbl) for tbl in (data.get('tables') or [])] if data else [],
-            image=Image.from_json(data['image']),
-            references=[Reference.from_json(reference) for reference in data.get('references', [])]
+            name=data["name"],
+            identifier=data["identifier"],
+            abstract=data["abstract"],
+            description=data["description"],
+            version=Version.from_json(data["version"]),
+            url=data["url"],
+            date_created=datetime.fromisoformat(data["dateCreated"]),
+            date_modified=datetime.fromisoformat(data["dateModified"]),
+            main_entity=Entity.from_json(data["mainEntity"]),
+            additional_entities=[
+                Entity.from_json(entity) for entity in data["additionalEntities"]
+            ],
+            is_part_of=Project.from_json(data["isPartOf"]),
+            in_language=Language.from_json(data["inLanguage"]),
+            infoboxes=[Part.from_json(part) for part in data["infoboxes"]],
+            article_sections=[
+                Part.from_json(section) for section in data["articleSections"]
+            ],
+            tables=(
+                [StructuredTable.from_json(tbl) for tbl in (data.get("tables") or [])]
+                if data
+                else []
+            ),
+            image=Image.from_json(data["image"]),
+            references=[
+                Reference.from_json(reference)
+                for reference in data.get("references", [])
+            ],
         )
 
     @staticmethod
-    def to_json(structured_content: 'StructuredContent') -> dict:
+    def to_json(structured_content: "StructuredContent") -> dict:
         return {
-            'name': structured_content.name,
-            'identifier': structured_content.identifier,
-            'abstract': structured_content.abstract,
-            'description': structured_content.description,
-            'version': Version.to_json(structured_content.version),
-            'url': structured_content.url,
-            'dateCreated': structured_content.date_created.isoformat(),
-            'dateModified': structured_content.date_modified.isoformat(),
-            'mainEntity': Entity.to_json(structured_content.main_entity),
-            'additionalEntities': [Entity.to_json(entity) for entity in structured_content.additional_entities],
-            'isPartOf': Project.to_json(structured_content.is_part_of),
-            'inLanguage': Language.to_json(structured_content.in_language),
-            'infoboxes': [Part.to_json(part) for part in structured_content.infoboxes],
-            'articleSections': [Part.to_json(section) for section in structured_content.article_sections],
-            'tables': [StructuredTable.to_json(tbl) for tbl in structured_content.tables],
-            'image': Image.to_json(structured_content.image),
-            'references': [Reference.to_json(reference) for reference in structured_content.references]
+            "name": structured_content.name,
+            "identifier": structured_content.identifier,
+            "abstract": structured_content.abstract,
+            "description": structured_content.description,
+            "version": Version.to_json(structured_content.version),
+            "url": structured_content.url,
+            "dateCreated": structured_content.date_created.isoformat(),
+            "dateModified": structured_content.date_modified.isoformat(),
+            "mainEntity": Entity.to_json(structured_content.main_entity),
+            "additionalEntities": [
+                Entity.to_json(entity)
+                for entity in structured_content.additional_entities
+            ],
+            "isPartOf": Project.to_json(structured_content.is_part_of),
+            "inLanguage": Language.to_json(structured_content.in_language),
+            "infoboxes": [Part.to_json(part) for part in structured_content.infoboxes],
+            "articleSections": [
+                Part.to_json(section) for section in structured_content.article_sections
+            ],
+            "tables": [
+                StructuredTable.to_json(tbl) for tbl in structured_content.tables
+            ],
+            "image": Image.to_json(structured_content.image),
+            "references": [
+                Reference.to_json(reference)
+                for reference in structured_content.references
+            ],
         }

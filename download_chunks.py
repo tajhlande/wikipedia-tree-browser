@@ -12,12 +12,17 @@ from dotenv import load_dotenv
 
 # from wme_sdk.api.snapshot import Snapshot
 from classes import Chunk, Page
-from database import ensure_tables, get_sql_conn, upsert_new_chunk_data, upsert_new_page_data
+from database import (
+    ensure_tables,
+    get_sql_conn,
+    upsert_new_chunk_data,
+    upsert_new_page_data,
+)
 from wme_sdk.auth.auth_client import AuthClient
 from wme_sdk.api.api_client import Client, Request, Filter
 from progress_utils import ProgressTracker
 
-# Load environment variables from .env file 
+# Load environment variables from .env file
 load_dotenv()
 
 logging.basicConfig(level=logging.DEBUG)
@@ -50,8 +55,6 @@ logger = logging.getLogger(__name__)
 #     raise
 
 
-
-
 def get_enterprise_auth_client() -> tuple[AuthClient, str, str]:
     logger.debug("Creating AuthClient and logging in")
     # Load environment variables from .env file
@@ -63,16 +66,17 @@ def get_enterprise_auth_client() -> tuple[AuthClient, str, str]:
         logger.error(f"Login failed: {e}")
         raise
 
-    refresh_token = login_response['refresh_token']
-    access_token = login_response['access_token']
+    refresh_token = login_response["refresh_token"]
+    access_token = login_response["access_token"]
     return auth_client, refresh_token, access_token
+
 
 def get_enterprise_api_client(access_token) -> Client:
     logger.debug("Creating API Client with access token")
-    api_client = Client(download_chunk_size = 1024*1024, download_concurrency=4)
+    api_client = Client(download_chunk_size=1024 * 1024, download_concurrency=4)
     api_client.set_access_token(access_token)
     return api_client
-  
+
 
 @contextlib.contextmanager
 def revoke_token_on_exit(auth_client: AuthClient, refresh_token: str):
@@ -84,7 +88,10 @@ def revoke_token_on_exit(auth_client: AuthClient, refresh_token: str):
         except Exception as e:
             logger.error(f"Failed to revoke token: {e}")
 
-def find_chunks(api_client: Client, sqlconn: sqlite3.Connection, request: Request, namespace: str): 
+
+def find_chunks(
+    api_client: Client, sqlconn: sqlite3.Connection, request: Request, namespace: str
+):
     try:
         # "enwiki_namespace_0"
         snapshot_json = api_client.get_snapshot(namespace, request)
@@ -93,91 +100,94 @@ def find_chunks(api_client: Client, sqlconn: sqlite3.Connection, request: Reques
         return
 
     try:
-        for chunk_name in snapshot_json['chunks']:
+        for chunk_name in snapshot_json["chunks"]:
             logger.info(f"Chunk: {chunk_name}")
             chunk = Chunk(chunk_name=chunk_name, namespace=namespace)
             upsert_new_chunk_data(chunk, sqlconn)
             # logger.info(f"Name: {chunk_json['date_modified']}")
             # logger.info(f"Abstract: {chunk_json['identifier']}")
-            # logger.info(f"Description: {chunk_json['size']}")  
+            # logger.info(f"Description: {chunk_json['size']}")
     except Exception as e:
         logger.exception(f"Failed to process snapshot data: {e}")
         logger.info(f"Snapshot JSON:\n{json.dumps(snapshot_json, indent=2)}")
         return
 
-def download_chunk(api_client: Client, 
-                   namespace: str, # "enwiki_namespace_0"
-                   chunk_name: str, # "enwiki_namespace_0_chunk_0"
-                   chunk_file_path: str, # "enwiki_namespace_0_chunk_0.tar.gz"
-                   tracker: Optional[ProgressTracker] = None
-                   ):
+
+def download_chunk(
+    api_client: Client,
+    namespace: str,  # "enwiki_namespace_0"
+    chunk_name: str,  # "enwiki_namespace_0_chunk_0"
+    chunk_file_path: str,  # "enwiki_namespace_0_chunk_0.tar.gz"
+    tracker: Optional[ProgressTracker] = None,
+):
     try:
         # Create a BytesIO object to hold the downloaded content
         chunk_writer = io.BytesIO()
         api_client.download_chunk(namespace, chunk_name, chunk_writer, tracker)
         # Save the content to a file
         chunk_data = chunk_writer.getvalue()
-        #logger.info(f"Downloaded {len(chunk_data)} bytes")
+        # logger.info(f"Downloaded {len(chunk_data)} bytes")
         with open(chunk_file_path, "wb") as f:
             f.write(chunk_data)
-        
+
     except Exception as e:
         logger.exception(f"Failed to download chunk data: {e}")
         return
 
 
-
-def extract_single_file_from_tar_gz(tar_gz_path: str, extract_to: str='.'):
+def extract_single_file_from_tar_gz(tar_gz_path: str, extract_to: str = "."):
     """
     Extract a single file from a tar.gz archive
-    
+
     Args:
         tar_gz_path (str): Path to the tar.gz file
         extract_to (str): Directory to extract to
-    
+
     Returns:
         str: Name of the extracted file
     """
     try:
         logger.debug(f"Extracting from {tar_gz_path} to {extract_to}")
-        with tarfile.open(tar_gz_path, 'r:gz') as tar:
+        with tarfile.open(tar_gz_path, "r:gz") as tar:
             members = tar.getmembers()
-            
+
             if not members:
                 raise ValueError("tar.gz archive is empty")
-            
+
             # Get first member (assuming it's the only file)
             first_member = members[0]
-            
+
             if first_member.isfile():
                 # Extract the file
                 tar.extract(first_member, path=extract_to)
                 return first_member.name
             else:
                 raise ValueError("First member is not a regular file")
-                
+
     except Exception as e:
         print(f"Error extracting archive: {e}")
         raise
+
 
 # Usage
 # extracted_file = extract_single_file_from_tar_gz('archive.tar.gz', './output/')
 # if extracted_file:
 #     print(f"Successfully extracted: {extracted_file}")
 
+
 def count_lines_in_file(file_path: str) -> int:
     """
     Count the number of lines in a given file.
-    
+
     Args:
         file_path (str): Path to the file to count lines in.
-        
+
     Returns:
         int: Number of lines in the file.
     """
     try:
         line_count = 0
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             for _ in f:
                 line_count += 1
         return line_count
@@ -185,51 +195,57 @@ def count_lines_in_file(file_path: str) -> int:
         logger.exception(f"Error counting lines in file {file_path}: {e}")
         raise
 
-def parse_chunk_file(sqlconn: sqlite3.Connection, chunk_name: str, chunk_file_path: str, tracker: Optional[ProgressTracker] = None) -> int:
+
+def parse_chunk_file(
+    sqlconn: sqlite3.Connection,
+    chunk_name: str,
+    chunk_file_path: str,
+    tracker: Optional[ProgressTracker] = None,
+) -> int:
     """
     Parse the extracted chunk file to read its contents.
-    
+
     Args:
         chunk_file_path (str): Path to the extracted chunk file.
-    
+
     """
     try:
-        #logger.info(f"Parsing chunk file: {chunk_file_path}")
-        
+        # logger.info(f"Parsing chunk file: {chunk_file_path}")
+
         # First, count total lines for progress tracking
         total_lines = count_lines_in_file(chunk_file_path)
-        #logger.info(f"Found {total_lines} lines to process")
-        
+        # logger.info(f"Found {total_lines} lines to process")
+
         # Parse with progress bar - reduce logging frequency to avoid interference
-        with open(chunk_file_path, 'r', encoding='utf-8') as f:
+        with open(chunk_file_path, "r", encoding="utf-8") as f:
             line_number = 0
             for line in f:
                 line_number += 1
                 # Assuming each line is a JSON object representing a page
                 raw_page_data = json.loads(line)
-                page = Page(page_id=raw_page_data.get('id'), 
-                            title=raw_page_data.get('name'),
-                            chunk_name=chunk_name,
-                            url=raw_page_data.get('url'),
-                            abstract=raw_page_data.get('abstract'))
-                
+                page = Page(
+                    page_id=raw_page_data.get("id"),
+                    title=raw_page_data.get("name"),
+                    chunk_name=chunk_name,
+                    url=raw_page_data.get("url"),
+                    abstract=raw_page_data.get("abstract"),
+                )
+
                 # Log progress if no tracker
                 if not tracker and line_number % 10000 == 0:
                     logger.info(f"Processed {line_number} lines so far...")
-                
+
                 # Upsert page data into the database
                 upsert_new_page_data(page, sqlconn)
                 tracker.update(1) if tracker else None
-    
-        #logger.info(f"Completed parsing {chunk_name}: {line_number} lines processed")
+
+        # logger.info(f"Completed parsing {chunk_name}: {line_number} lines processed")
         return line_number
-                  
-                
+
     except Exception as e:
         logger.exception(f"Error parsing chunk file: {e}")
         raise
-       
- 
+
 
 def fetch_and_extract():
 
@@ -238,7 +254,7 @@ def fetch_and_extract():
     with revoke_token_on_exit(auth_client, refresh_token):
         api_client = get_enterprise_api_client(access_token)
 
-       #to get metadata of all available snapshots
+        # to get metadata of all available snapshots
 
         # try:
         #     snapshots = api_client.get_snapshots(Request())
@@ -250,18 +266,15 @@ def fetch_and_extract():
         #     logger.info(f"Name: {content['date_modified']}")
         #     logger.info(f"Abstract: {content['identifier']}")
         #     logger.info(f"Description: {content['size']}")
-        
-        # To get metadata on an single SC snapshot using request parameters   
-        request = Request(
-            filters=[Filter(field="in_language.identifier", value="en")]
-        )
+
+        # To get metadata on an single SC snapshot using request parameters
+        request = Request(filters=[Filter(field="in_language.identifier", value="en")])
 
         # try:
         #     ss_json = api_client.get_structured_snapshot("enwiki_namespace_0", request)
         # except Exception as e:
         #     logger.exception(f"Failed to get structured content")
         #     return
-
 
         # try:
         #     head = api_client.head_structured_snapshot("enwiki_namespace_0")
@@ -270,9 +283,10 @@ def fetch_and_extract():
         #     return
         # logger.info(f"Head of structured snapshot:\n{json.dumps(head, indent=2)}")
 
-
         try:
-            chunk_info_json = api_client.get_chunk("enwiki_namespace_0", "enwiki_namespace_0_chunk_0", request)
+            chunk_info_json = api_client.get_chunk(
+                "enwiki_namespace_0", "enwiki_namespace_0_chunk_0", request
+            )
         except Exception as e:
             logger.exception(f"Failed to get chunk info")
             return
@@ -285,40 +299,46 @@ def process_one_chunk():
     # with revoke_token_on_exit(auth_client, refresh_token):
     #     api_client = get_enterprise_api_client(access_token)
 
-        namespace = "enwiki_namespace_0"
-        chunk_name = "enwiki_namespace_0_chunk_0"
-        chunk_file_path = f"downloaded/{namespace}/{chunk_name}.tar.gz"
+    namespace = "enwiki_namespace_0"
+    chunk_name = "enwiki_namespace_0_chunk_0"
+    chunk_file_path = f"downloaded/{namespace}/{chunk_name}.tar.gz"
 
-        #download_chunk(api_client, namespace, chunk_name, chunk_file_path)
+    # download_chunk(api_client, namespace, chunk_name, chunk_file_path)
 
-        logger.info(f"Path for extracted chunk archive: {chunk_file_path}")
-        extracted_chunk_path = f"extracted/{namespace}"
+    logger.info(f"Path for extracted chunk archive: {chunk_file_path}")
+    extracted_chunk_path = f"extracted/{namespace}"
 
-        extracted_file_name = extract_single_file_from_tar_gz(chunk_file_path, extract_to=extracted_chunk_path)
-        if extracted_file_name:
-            logger.info(f"Extracted chunk file: {extracted_file_name}")
-        else:
-            logger.error("Failed to extract file from chunk")
-
-        sqlconn = get_sql_conn()
-        parse_chunk_file(sqlconn, chunk_name, os.path.join(extracted_chunk_path, extracted_file_name))
-
-def get_chunk_info_for_namespace(namespace: str, api_client: Client, sqlconn: sqlite3.Connection):
-    logger.info(f"Fetching chunk metadata for namespace: {namespace}")
-    request = Request(
-        filters=[Filter(field="in_language.identifier", value="en")]
+    extracted_file_name = extract_single_file_from_tar_gz(
+        chunk_file_path, extract_to=extracted_chunk_path
     )
+    if extracted_file_name:
+        logger.info(f"Extracted chunk file: {extracted_file_name}")
+    else:
+        logger.error("Failed to extract file from chunk")
+
+    sqlconn = get_sql_conn()
+    parse_chunk_file(
+        sqlconn, chunk_name, os.path.join(extracted_chunk_path, extracted_file_name)
+    )
+
+
+def get_chunk_info_for_namespace(
+    namespace: str, api_client: Client, sqlconn: sqlite3.Connection
+):
+    logger.info(f"Fetching chunk metadata for namespace: {namespace}")
+    request = Request(filters=[Filter(field="in_language.identifier", value="en")])
     chunk_data_list: list[dict] = api_client.get_chunks(namespace, request)
-    chunk_list = [Chunk(chunk_name=chunk_data.get('identifier'), namespace=namespace) for chunk_data in chunk_data_list if chunk_data.get('identifier')] # type: ignore
+    chunk_list = [Chunk(chunk_name=chunk_data.get("identifier"), namespace=namespace) for chunk_data in chunk_data_list if chunk_data.get("identifier")]  # type: ignore
     for chunk in chunk_list:
-        #logger.info(f"Found chunk: {json.dumps(chunk_data)}")
+        # logger.info(f"Found chunk: {json.dumps(chunk_data)}")
         upsert_new_chunk_data(chunk, sqlconn)
     logger.info(f"Total chunks found: {len(chunk_data_list)}")
+
 
 if __name__ == "__main__":
     sqlconn = get_sql_conn()
     ensure_tables(sqlconn)
-    #process_one_chunk()
+    # process_one_chunk()
     auth_client, refresh_token, access_token = get_enterprise_auth_client()
 
     with revoke_token_on_exit(auth_client, refresh_token):

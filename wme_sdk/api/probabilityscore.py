@@ -3,22 +3,24 @@ from scores import Probability
 
 
 class ProbabilityScore:
-    def __init__(self,
-                 prediction: Optional[bool] = None,
-                 probability: Optional[Probability] = None):
+    def __init__(
+        self,
+        prediction: Optional[bool] = None,
+        probability: Optional[Probability] = None,
+    ):
         self.prediction = prediction
         self.probability = probability
 
     @staticmethod
-    def from_json(data: dict) -> 'ProbabilityScore':
+    def from_json(data: dict) -> "ProbabilityScore":
         return ProbabilityScore(
-            prediction=data['prediction'],
-            probability=Probability.from_json(data['probability'])
+            prediction=data["prediction"],
+            probability=Probability.from_json(data["probability"]),
         )
 
     @staticmethod
     def to_json(self) -> dict:
         return {
-            'prediction': self.prediction,
-            'probability': self.probability.to_json()
+            "prediction": self.prediction,
+            "probability": self.probability.to_json(),
         }
