@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 logger = logging.getLogger(__name__)
+import sqlite3
 from typing import Iterable, List, Optional
 
 import numpy as np
@@ -40,7 +41,10 @@ logger = logging.getLogger(__name__)
 
 
 def _batch_iterator(
-    sqlconn, columns: List[str], batch_size: int = 10_000
+    sqlconn: sqlite3.Connection, 
+    namespace: str, 
+    columns: List[str], 
+    batch_size: int = 10_000
 ) -> Iterable[List[dict]]:
     """Yield batches of rows to avoid loading the entire table into memory.
 
@@ -53,10 +57,17 @@ def _batch_iterator(
         # ordering, but for our use-case ordering is not required - we simply
         # fetch a limited number of rows each iteration.
         sql = (
-            f"SELECT page_id, {', '.join(columns)} FROM page_vector "
-            f"LIMIT {batch_size} OFFSET {offset}"
+            f"""
+            SELECT page_vector.page_id, {', '.join(columns)} 
+            FROM page_vector 
+            INNER JOIN page_log ON page_vector.page_id = page_log.page_id
+            INNER JOIN chunk_log ON page_log.chunk_name = chunk_log.chunk_name
+            WHERE chunk_log.namespace = :namespace
+            ORDER BY chunk_log.chunk_name ASC, page_log.page_id ASC
+            LIMIT {batch_size} OFFSET {offset};
+            """
         )
-        cursor = sqlconn.execute(sql)
+        cursor = sqlconn.execute(sql, {'namespace': namespace})
         rows = cursor.fetchall()
         if not rows:
             break
@@ -72,7 +83,7 @@ def _batch_iterator(
         offset += batch_size
 
 
-def run_pca(sqlconn, target_dim: int = 100, batch_size: int = 10_000, tracker: Optional[ProgressTracker] = None) -> tuple[int, int]:
+def run_pca(sqlconn: sqlite3.Connection, namespace: str, target_dim: int = 100, batch_size: int = 10_000, tracker: Optional[ProgressTracker] = None) -> tuple[int, int]:
     """
     Fit Incremental PCA on all ``embedding_vector`` blobs and store the result.
 
@@ -94,7 +105,7 @@ def run_pca(sqlconn, target_dim: int = 100, batch_size: int = 10_000, tracker: O
     batch_counter = 0
     total_vectors = 0
 
-    for batch in _batch_iterator(sqlconn, ["embedding_vector"], effective_batch_size):
+    for batch in _batch_iterator(sqlconn, namespace, ["embedding_vector"], effective_batch_size):
         # Stack all vectors in this batch into a single matrix
         batch_vectors = []
         for row in batch:
@@ -111,7 +122,7 @@ def run_pca(sqlconn, target_dim: int = 100, batch_size: int = 10_000, tracker: O
             total_vectors += len(batch)
 
     # Second pass - transform and store
-    for batch in _batch_iterator(sqlconn, ["embedding_vector"], batch_size):
+    for batch in _batch_iterator(sqlconn, namespace, ["embedding_vector"], batch_size):
         # Process each vector in the batch
         for row in batch:
             vec = np.frombuffer(row["embedding_vector"], dtype=np.float32).reshape(1, -1)
@@ -123,7 +134,10 @@ def run_pca(sqlconn, target_dim: int = 100, batch_size: int = 10_000, tracker: O
     return batch_counter, total_vectors
 
 
-def run_kmeans(sqlconn, n_clusters: int = 100, batch_size: int = 10_000) -> None:
+def run_kmeans(sqlconn: sqlite3.Connection, 
+               namespace: str,
+               n_clusters: int = 100,
+               batch_size: int = 10_000) -> None:
     """Cluster the PCA-reduced vectors and persist cluster assignments.
 
     A standard ``KMeans`` model (fullbatch) is used because the reduced data
@@ -134,7 +148,7 @@ def run_kmeans(sqlconn, n_clusters: int = 100, batch_size: int = 10_000) -> None
     # Load all reduced vectors into memory - they are small enough.
     rows = []
     ids = []
-    for batch in _batch_iterator(sqlconn, ["reduced_vector"], batch_size):
+    for batch in _batch_iterator(sqlconn, namespace, ["reduced_vector"], batch_size):
         for row in batch:
             ids.append(row["page_id"])
             rows.append(np.frombuffer(row["reduced_vector"], dtype=np.float32))

@@ -222,14 +222,18 @@ def get_chunk_data(chunk_name: str, sqlconn: sqlite3.Connection) -> Optional[Chu
 # Vector storage helper utilities (new for dimensionality processing)
 # ---------------------------------------------------------------------------
 
-def get_embedding_count(sqlconn: sqlite3.Connection) -> int:
+def get_embedding_count(namespace: str, sqlconn: sqlite3.Connection) -> int:
+    
     select_sql = """
         SELECT COUNT(embedding_vector)
         FROM page_vector
-        WHERE embedding_vector IS NOT NULL
+        INNER JOIN page_log ON page_vector.page_id = page_log.page_id
+        INNER JOIN chunk_log ON chunk_log.chunk_name = page_log.chunk_name
+        WHERE embedding_vector IS NOT NULL 
+        AND chunk_log.namespace = :namespace
     """
 
-    cursor = sqlconn.execute(select_sql)
+    cursor = sqlconn.execute(select_sql, {'namespace': namespace})
     row = cursor.fetchone()
     return row[0]
 

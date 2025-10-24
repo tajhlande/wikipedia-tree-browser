@@ -204,12 +204,12 @@ class RefreshChunkDataCommand(Command):
         super().__init__(
             name="refresh",
             description="Refresh chunk data for a namespace",
-            required_args=["namespace"],
+            required_args=['namespace'],
             optional_args={}
         )
     
     def execute(self, args: Dict[str, Any]) -> str:
-        namespace = args["namespace"]
+        namespace = args['namespace']
         logger.info("Refreshing chunk data for namespace: %s", namespace)
         
         try:
@@ -603,12 +603,15 @@ class ReduceCommand(Command):
         super().__init__(
             name="reduce", 
             description="Reduce dimension of embeddings", 
-            required_args=[], 
+            required_args=['namespace'], 
             optional_args={'target-dim': 100, 'batch-size': 10_000}
         )
 
     def execute(self, args: Dict[str, Any]) -> str:
         try:
+            namespace = args['namespace']
+
+
             sqlconn = get_sql_conn()
             ensure_tables(sqlconn)
 
@@ -622,7 +625,7 @@ class ReduceCommand(Command):
             logger.info(f"Target dimension: {target_dim}")
             logger.info(f"Batch size: {batch_size}")
 
-            estimated_vector_count = get_embedding_count(sqlconn)
+            estimated_vector_count = get_embedding_count(namespace, sqlconn)
             estimated_batch_count = estimated_vector_count // batch_size + 1
 
             if estimated_vector_count < target_dim:
@@ -633,7 +636,7 @@ class ReduceCommand(Command):
                 batch_size = estimated_vector_count
 
             with ProgressTracker("PCA Reduction (two pass)", unit="batches", total=estimated_batch_count * 2) as tracker:
-                batch_count, total_vector_count = run_pca(sqlconn, target_dim=target_dim, batch_size=batch_size, tracker=tracker)
+                batch_count, total_vector_count = run_pca(sqlconn, namespace=namespace, target_dim=target_dim, batch_size=batch_size, tracker=tracker)
             return f"✓ Reduced {total_vector_count} page embeddings in {batch_count} batch{'' if batch_count == 1 else 'es'}"
         except Exception as e:
             logger.exception(f"Failed to reduce embeddings: {e}")
