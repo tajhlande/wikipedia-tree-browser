@@ -139,7 +139,7 @@ def numpy_to_bytes(data: Optional[NDArray]) -> Optional[bytes]:
     return np.array(data).astype(np.float32).tobytes() if data is not None else None
 
 
-def text_to_three_d_vector(data: Optional[str]) -> Optional[Vector3D]:
+def text_to_three_d_vector(data: Optional[str]) -> Optional[NDArray]:
     """Convert JSON string to 3D vector tuple."""
     if data:
         list_data = json.loads(data)
@@ -149,14 +149,14 @@ def text_to_three_d_vector(data: Optional[str]) -> Optional[Vector3D]:
             and all(isinstance(x, (int, float)) for x in list_data)
         ):
             raise ValueError(f"Invalid three_d_vector data: {data}")
-        return tuple(list_data)
+        return np.fromiter(list_data, dtype=np.float32)
     else:
         return None
 
 
-def three_d_vector_to_text(vector: Optional[Vector3D]) -> Optional[str]:
+def three_d_vector_to_text(vector: Optional[NDArray]) -> Optional[str]:
     """Convert 3D vector tuple to JSON string."""
-    return json.dumps(vector) if vector else None
+    return json.dumps(vector.astype(np.float32).tolist()) if vector else None
 
 
 def upsert_new_page_data(page: Page, sqlconn: sqlite3.Connection) -> None:
@@ -423,7 +423,7 @@ def update_reduced_vector_for_page(
 
 
 def update_three_d_vector_for_page(
-    page_id: int, vector: Vector3D, sqlconn: sqlite3.Connection
+    page_id: int, vector: NDArray, sqlconn: sqlite3.Connection
 ) -> None:
     # convert vector to text for storage
     vector_text = three_d_vector_to_text(vector)
@@ -490,3 +490,41 @@ def get_page_ids_needing_embedding_for_chunk(
     rows = cursor.fetchall()
     page_id_list = [row["page_id"] for row in rows]
     return page_id_list
+
+
+def get_clusters_needing_projection(sqlconn: sqlite3.Connection,
+                                    namespace: str,
+                                    limit: Optional[int],
+                                    ) -> list[tuple[int, int]]:
+    select_sql = f"""
+        SELECT cluster_info.cluster_id, COUNT()
+        FROM cluster_info
+        INNER JOIN chunk_log ON cluster_info.namespace = chunk_log.namespace
+        INNER JOIN page_log ON chunk_log.chunk_name = page_log.chunk_name
+        INNER JOIN page_vector ON page_log.page_id = page_vector.page_id
+        WHERE page_vector.three_d_vector IS NULL
+        AND chunk_log.namespace = :namespace
+        GROUP BY cluster_info.cluster_id
+        ORDER BY cluster_info.cluster_id ASC
+        {f'LIMIT {limit}' if limit else ''}
+        """
+    cursor = sqlconn.execute(select_sql, {'namespace': namespace})
+    rows = cursor.fetchall()
+    return [(row[0], row[1]) for row in rows]
+
+
+def get_reduced_vectors_for_cluster(sqlconn: sqlite3.Connection, namespace: str, cluster_id: int
+                                    ) -> list[tuple[int, bytes]]:
+    select_sql = """
+        SELECT page_vector.page_id, page_vector.reduced_vector
+        FROM page_vector
+        INNER JOIN page_log ON page_vector.page_id = page_log.page_id
+        INNER JOIN chunk_log ON page_log.chunk_name = chunk_log.chunk_name
+        WHERE page_vector.cluster_id = 1
+        AND chunk_log.namespace = 'enwiki_namespace_0'
+        ORDER BY page_vector.page_id ASC
+        """
+    " :cluster_id :namespace"
+    cursor = sqlconn.execute(select_sql, {'namespace': namespace, 'cluster_id': cluster_id})
+    rows = cursor.fetchall()
+    return rows

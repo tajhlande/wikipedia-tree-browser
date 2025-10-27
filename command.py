@@ -30,7 +30,7 @@ from index_pages import (
     get_embedding_model_config,
 )
 from progress_utils import ProgressTracker
-from transform import run_kmeans, run_pca
+from transform import run_kmeans, run_pca, run_umap_per_cluster
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -852,8 +852,46 @@ class ClusterCommand(Command):
 
             return f"✓ Clustered reduced page embeddings in namespace {namespace} using incremental K-means"
         except Exception as e:
-            logger.exception(f"Failed to cluster embeddings: {e}")
+            logger.error(f"Failed to cluster embeddings: {e}")
             return f"✗ Failed to cluster embeddings: {e}"
+
+
+class ProjectCommand(Command):
+    """Project reduced vector clusters into 3-space."""
+
+    def __init__(self):
+        super().__init__(
+            name="project",
+            description="Project reduced vector clusters into 3-space.",
+            required_args=["namespace"],
+            optional_args={"limit": None},
+        )
+
+    def execute(self, args: Dict[str, Any]) -> str:
+        try:
+            namespace = args["namespace"]
+            limit_arg = args.get("limit")
+
+            # Validate and convert limit parameter
+            limit = None
+            if limit_arg is not None:
+                try:
+                    limit = int(limit_arg)
+                    if limit <= 0:
+                        return "✗ Limit must be a positive integer"
+                except ValueError:
+                    return "✗ Invalid limit value. Please provide a positive integer."
+
+            sqlconn = get_sql_conn()
+            ensure_tables(sqlconn)
+
+            with ProgressTracker(description="Projecting into 3-space", unit="vectors") as tracker:
+                processed_count = run_umap_per_cluster(sqlconn, namespace, 3, limit, tracker)
+
+            return f"✓ Projected {processed_count} reduced page embeddings in {namespace} into 3-space using UMAP."
+        except Exception as e:
+            logger.exception(f"Failed to cluster embeddings: {e}")
+            return f"✗ Failed to project reduced page embeddings into 3-space: {e}"
 
 
 class StatusCommand(Command):
@@ -1021,6 +1059,7 @@ class CommandInterpreter:
         self.parser.register_command(EmbedPagesCommand())
         self.parser.register_command(ReduceCommand())
         self.parser.register_command(ClusterCommand())
+        self.parser.register_command(ProjectCommand())
         self.parser.register_command(StatusCommand())
         self.parser.register_command(HelpCommand(self.parser))
 

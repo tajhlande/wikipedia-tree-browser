@@ -23,6 +23,9 @@ import numpy as np
 from typing import Iterable, List, Optional
 
 from database import (
+    get_clusters_needing_projection,
+    get_reduced_vectors_for_cluster,
+    three_d_vector_to_text,
     update_cluster_centroid,
     update_reduced_vector_for_page,
     update_three_d_vector_for_page,
@@ -250,38 +253,34 @@ def run_kmeans(
 
 
 def run_umap_per_cluster(
-    sqlconn,
+    sqlconn: sqlite3.Connection,
+    namespace: str,
     n_components: int = 3,
-    limit: int = 1,
-    batch_size: int = 10_000,
+    limit: Optional[int] = None,
+    tracker: Optional[ProgressTracker] = None,
 ) -> int:
     """Apply UMAP within each cluster and store 3-D vectors.
 
     ``limit`` caps the number of clusters processed (useful for quick tests).
     Returns the number of clusters actually processed.
     """
-    logger.info(
-        "Running UMAP per cluster (n_components=%s, limit=%s)", n_components, limit
-    )
-    # Determine distinct cluster ids.
-    cur = sqlconn.execute(
-        "SELECT DISTINCT cluster_id FROM page_vector WHERE cluster_id IS NOT NULL"
-    )
-    cluster_ids = [row["cluster_id"] for row in cur.fetchall()][:limit]
+    # logger.info(
+    #     "Running UMAP per cluster (n_components=%s, limit=%s)", n_components, limit
+    # )
+    # Determine distinct cluster ids that need projection
+    cluster_ids_and_sizes = get_clusters_needing_projection(sqlconn, namespace, limit)
+
+    total_vectors = sum([cluster[1] for cluster in cluster_ids_and_sizes])
+    tracker.set_total(total_vectors) if tracker else None
 
     processed = 0
-    for cl_id in cluster_ids:
+    for cluster_id, cluster_size in cluster_ids_and_sizes:
         # Gather all reduced vectors for this cluster.
-        cur = sqlconn.execute(
-            "SELECT page_id, reduced_vector FROM page_vector WHERE cluster_id = ?",
-            (cl_id,),
-        )
-        rows = cur.fetchall()
-        if not rows:
-            continue
-        page_ids = [r["page_id"] for r in rows]
+        page_id_and_reduced_vectors = get_reduced_vectors_for_cluster(sqlconn, namespace, cluster_id)
+
+        page_ids = [r[0] for r in page_id_and_reduced_vectors]
         vectors = np.vstack(
-            [np.frombuffer(r["reduced_vector"], dtype=np.float32) for r in rows]
+            [np.frombuffer(r[1], dtype=np.float32) for r in page_id_and_reduced_vectors]
         )
         reducer = umap.UMAP(n_components=n_components, random_state=42)
         three_space_vectors = reducer.fit_transform(vectors).astype(np.float32)  # type: ignore
@@ -289,12 +288,13 @@ def run_umap_per_cluster(
         for pid, vec in zip(page_ids, three_space_vectors):
             update_three_d_vector_for_page(pid, vec.tolist(), sqlconn)
         # Update centroid in cluster_info.
-        # centroid = three_space_vectors.mean(axis=0).tolist()
-        # sqlconn.execute(
-        #     "UPDATE cluster_info SET centroid_3d = ? WHERE cluster_id = ?",
-        #     (json.dumps(centroid), cl_id),
-        # )
+        centroid = three_space_vectors.mean(axis=0).tolist()
+        sqlconn.execute(
+            "UPDATE cluster_info SET centroid_3d = ? WHERE cluster_id = ?",
+            (three_d_vector_to_text(np.array(centroid).astype(np.float32)), cluster_id),
+        )
+        tracker.update(cluster_size) if tracker else None
         processed += 1
     sqlconn.commit()
-    logger.info("UMAP mapping completed for %s clusters.", processed)
+    # logger.info("UMAP mapping completed for %s clusters.", processed)
     return processed
