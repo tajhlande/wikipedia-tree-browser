@@ -156,7 +156,37 @@ def text_to_three_d_vector(data: Optional[str]) -> Optional[NDArray]:
 
 def three_d_vector_to_text(vector: Optional[NDArray]) -> Optional[str]:
     """Convert 3D vector tuple to JSON string."""
-    return json.dumps(vector.astype(np.float32).tolist()) if vector else None
+    if vector is None:
+        return None
+    if isinstance(vector, list):
+        # Handle list input
+        try:
+            # Check for NaN or infinite values
+            processed_vector = []
+            for x in vector:
+                if isinstance(x, (int, float)):
+                    if np.isfinite(x):
+                        processed_vector.append(float(x))
+                    else:
+                        # Replace NaN/infinite with 0
+                        processed_vector.append(0.0)
+                else:
+                    processed_vector.append(0.0)
+            return json.dumps(processed_vector)
+        except (ValueError, TypeError):
+            return json.dumps([0.0, 0.0, 0.0])  # Fallback to zero vector
+    else:
+        # Handle numpy array input
+        try:
+            # Check for NaN or infinite values
+            if not np.all(np.isfinite(vector)):
+                logger.warning(f"Vector contains NaN or infinite values: {vector}")
+                # Replace NaN/infinite with 0
+                vector = np.where(np.isfinite(vector), vector, 0.0)
+            return json.dumps(vector.astype(np.float32).tolist())
+        except (ValueError, TypeError):
+            logger.warning(f"Failed to convert vector to text: {vector}")
+            return json.dumps([0.0, 0.0, 0.0])  # Fallback to zero vector
 
 
 def upsert_new_page_data(page: Page, sqlconn: sqlite3.Connection) -> None:
@@ -426,10 +456,29 @@ def update_three_d_vector_for_page(
     page_id: int, vector: NDArray, sqlconn: sqlite3.Connection
 ) -> None:
     # convert vector to text for storage
-    vector_text = three_d_vector_to_text(vector)
-    prepared_data = {"page_id": page_id, "three_d_vector": vector_text}
+    # Handle both numpy arrays and lists
+    if isinstance(vector, list):
+        # Convert list to numpy array for consistent processing
+        vector_array = np.array(vector, dtype=np.float32)
+    else:
+        # Already a numpy array
+        vector_array = vector
+
+    vector_text = three_d_vector_to_text(vector_array)
+
+    # Debug logging
+    logger.debug(
+        f"Page {page_id}: vector type={type(vector)}, "
+        f"vector_text type={type(vector_text)}, vector_text={repr(vector_text)}"
+    )
+
+    if vector_text is None:
+        logger.warning(f"Vector text is None for page {page_id}, vector={vector}")
+        vector_text = json.dumps([0.0, 0.0, 0.0])  # Fallback to zero vector
+
+    prepared_data = {"page_id": page_id, "vector_text": vector_text}
     update_page_vector_sql = (
-        "UPDATE page_log SET three_d_vector = :vector_text WHERE page_id = :page_id;"
+        "UPDATE page_vector SET three_d_vector = :vector_text WHERE page_id = :page_id;"
     )
 
     try:
@@ -444,7 +493,7 @@ def update_three_d_vector_for_page(
                 f"Failed to roll back sql transaction while handling another error: {e1}"
             )
             pass
-        logger.exception(f"Failed to update reduced vector for page {page_id}: {e}")
+        logger.exception(f"Failed to update three_d_vector for page {page_id}: {e}")
         raise
 
 

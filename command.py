@@ -886,9 +886,10 @@ class ProjectCommand(Command):
             ensure_tables(sqlconn)
 
             with ProgressTracker(description="Projecting into 3-space", unit="vectors") as tracker:
-                processed_count = run_umap_per_cluster(sqlconn, namespace, 3, limit, tracker)
+                processed_count = run_umap_per_cluster(sqlconn, namespace, n_components=3, limit=limit, tracker=tracker)
 
-            return f"✓ Projected {processed_count} reduced page embeddings in {namespace} into 3-space using UMAP."
+            return f"✓ Projected reduced page embeddings in {namespace} in {processed_count} " \
+                   f"cluster{'' if processed_count == 1 else 's'} into 3-space using UMAP."
         except Exception as e:
             logger.exception(f"Failed to cluster embeddings: {e}")
             return f"✗ Failed to project reduced page embeddings into 3-space: {e}"

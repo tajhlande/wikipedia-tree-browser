@@ -282,7 +282,9 @@ def run_umap_per_cluster(
         vectors = np.vstack(
             [np.frombuffer(r[1], dtype=np.float32) for r in page_id_and_reduced_vectors]
         )
-        reducer = umap.UMAP(n_components=n_components, random_state=42)
+        reducer = umap.UMAP(n_components=n_components, n_neighbors=30, random_state=42,
+                            min_dist=0.0, metric='cosine', init='random', verbose=False, n_jobs=1)
+
         three_space_vectors = reducer.fit_transform(vectors).astype(np.float32)  # type: ignore
         # Store each 3-D vector as JSON.
         for pid, vec in zip(page_ids, three_space_vectors):
