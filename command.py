@@ -107,7 +107,7 @@ class Command(ABC):
         logger.info("Arguments: %s", json.dumps(args, indent=2))
         # Check required arguments
         for arg in self.expected_args:
-            if arg.required and (arg not in args or args[arg.name] is None):
+            if arg.required and (arg.name not in args or args[arg.name] is None):
                 raise ValueError(f"Missing required argument: {arg.name}")
 
         # Check argument types and values
