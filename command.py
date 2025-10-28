@@ -626,20 +626,20 @@ class EmbedPagesCommand(Command):
                 if limit:
                     pages_to_process = min(len(page_ids), limit)
                     if limit < len(page_ids):
-                        logger.info(
+                        logger.debug(
                             "Pages to process: %d for chunk %s (limit applied)",
                             pages_to_process,
                             chunk_name,
                         )
                     else:
-                        logger.info(
+                        logger.debug(
                             "Pages to process: %d for chunk %s (limit not restricting)",
                             pages_to_process,
                             chunk_name,
                         )
                 else:
                     pages_to_process = len(page_ids)
-                    logger.info(
+                    logger.debug(
                         "Pages to process: %d for chunk %s (not limited)",
                         pages_to_process,
                         chunk_name,
@@ -668,7 +668,7 @@ class EmbedPagesCommand(Command):
 
             else:
                 # Process all chunks
-                logger.info(
+                logger.debug(
                     "Processing %sembeddings for next available chunk...",
                     f"up to {limit} " if limit else "",
                 )
@@ -707,20 +707,20 @@ class EmbedPagesCommand(Command):
                             remaining = limit - total_processed
                             pages_to_process = min(len(page_ids), remaining)
                             if pages_to_process < len(page_ids):
-                                logger.info(
+                                logger.debug(
                                     "Pages to process: %d for chunk %s (limit applied)",
                                     pages_to_process,
                                     chunk_name,
                                 )
                             else:
-                                logger.info(
+                                logger.debug(
                                     "Pages to process: %d for chunk %s (limit not restricting)",
                                     pages_to_process,
                                     chunk_name,
                                 )
                         else:
                             pages_to_process = len(page_ids)
-                            logger.info(
+                            logger.debug(
                                 "Pages to process: %d for chunk %s (not limited)",
                                 pages_to_process,
                                 chunk_name,
@@ -741,7 +741,7 @@ class EmbedPagesCommand(Command):
                                     tracker=tracker,
                                 )
                             total_processed += pages_to_process
-                            logger.info(
+                            logger.debug(
                                 f"Processed {pages_to_process} pages for chunk {chunk_name}"
                             )
 
