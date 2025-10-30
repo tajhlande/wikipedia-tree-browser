@@ -468,6 +468,34 @@ def update_embeddings_for_page(
         raise
 
 
+def upsert_embeddings_in_batch(pages: list[tuple[int, NDArray]], sqlconn: sqlite3.Connection, batch_size: int = 1000):
+
+    page_dict_list = [
+        {
+            "page_id": page[0],
+            "embedding_vector": numpy_to_bytes(page[1])
+         }
+        for page in pages
+    ]
+
+    update_page_vector_sql = """
+        INSERT INTO page_vector (page_id, embedding_vector) VALUES (:page_id, :embedding_vector)
+        ON CONFLICT(page_id) DO
+        UPDATE SET embedding_vector = :embedding_vector WHERE page_id = :page_id;
+        """
+
+    cursor = sqlconn.cursor()
+    try:
+        for i in range(0, len(page_dict_list), batch_size):
+            batch = page_dict_list[i: i + batch_size]
+            params = batch
+            cursor.executemany(update_page_vector_sql, params)
+            sqlconn.commit()
+    except sqlite3.Error:
+        sqlconn.rollback()
+        raise
+
+
 def update_reduced_vector_for_page(
     page_id: int, reduced_vector: NDArray, sqlconn: sqlite3.Connection
 ) -> None:

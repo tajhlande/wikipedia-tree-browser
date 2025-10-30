@@ -21,6 +21,7 @@ from database import (
     get_page_vectors,
     get_sql_conn,
     update_embeddings_for_page,
+    upsert_embeddings_in_batch,
 )
 from progress_utils import ProgressTracker
 
@@ -155,18 +156,44 @@ def compute_embeddings_for_chunk(
 
     tracker.set_total(len(page_id_list)) if tracker else None
     # Use progress bar for embedding computation
+    # counter = 0
+    # for page_id in page_id_list:
+    #     page = get_page_by_id(page_id, sqlconn)
+    #     if not page:
+    #         logger.warning("Page with page_id %d not found, skipping.", page_id)
+    #         continue
+    #     embeddings = compute_page_embeddings(page, embedding_function)
+    #     embedding = embeddings[0]
+    #     update_embeddings_for_page(page_id, embedding, sqlconn)
+    #     # logger.debug("Stored embedding for page_id %d", page_id)
+    #     counter += 1
+    #     tracker.update(1) if tracker else None
+
+    BUFFER_SIZE = 100
+    buffer = []
     counter = 0
     for page_id in page_id_list:
         page = get_page_by_id(page_id, sqlconn)
         if not page:
             logger.warning("Page with page_id %d not found, skipping.", page_id)
             continue
+
+        # Assuming each line is a JSON object representing a page
         embeddings = compute_page_embeddings(page, embedding_function)
         embedding = embeddings[0]
-        update_embeddings_for_page(page_id, embedding, sqlconn)
-        # logger.debug("Stored embedding for page_id %d", page_id)
-        counter += 1
-        tracker.update(1) if tracker else None
+        buffer.append((page.page_id, embedding))
+        embedding = embeddings[0]
+        if len(buffer) >= BUFFER_SIZE:
+            upsert_embeddings_in_batch(buffer, sqlconn, BUFFER_SIZE)
+            tracker.update(len(buffer)) if tracker else None
+            counter += len(buffer)
+            buffer = []
+
+    # flush remainder
+    if buffer:
+        upsert_embeddings_in_batch(buffer, sqlconn, BUFFER_SIZE)
+        tracker.update(len(buffer)) if tracker else None
+        counter += len(buffer)
 
     # logger.info("Computed and stored embeddings for %d pages
     # in chunk %s in %.2f seconds", counter, chunk_name, elapsed())
