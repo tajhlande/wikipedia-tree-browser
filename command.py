@@ -1223,14 +1223,24 @@ class CommandInterpreter:
         command = self.parser.commands.get(command_name)
         if command:
             for arg in command.get_required_args():
-                parser.add_argument(
-                    f"--{arg.name}", required=True, help=f"Required argument: {arg.name}"
-                )
+                if arg.type == "integer":
+                    parser.add_argument(
+                        f"--{arg.name}", type=int, required=True, help=f"Required argument: {arg.name}"
+                    )
+                else:
+                    parser.add_argument(
+                        f"--{arg.name}", required=True, help=f"Required argument: {arg.name}"
+                    )
 
             for arg in command.get_optional_args():
-                parser.add_argument(
-                    f"--{arg.name}", default=arg.default, help=f"Optional argument: {arg.name}"
-                )
+                if arg.type == "integer":
+                    parser.add_argument(
+                        f"--{arg.name}", type=int, default=arg.default, help=f"Optional argument: {arg.name}"
+                    )
+                else:
+                    parser.add_argument(
+                        f"--{arg.name}", default=arg.default, help=f"Optional argument: {arg.name}"
+                    )
 
         try:
             parsed_args = parser.parse_args(command_args[1:])
