@@ -90,6 +90,8 @@ OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT = Argument(name="limit", type="integer",
                                                    description="Number of pages to process")
 
 
+CHECK = "✓"
+X = "✗"
 
 class Command(ABC):
     """Abstract base class for all commands."""
@@ -322,11 +324,11 @@ class RefreshChunkDataCommand(Command):
             )
             count = cursor.fetchone()["count"]
 
-            return Result.SUCCESS, f"✓ Refreshed chunk data for namespace: {namespace}\nFound {count} chunks in namespace {namespace}"
+            return Result.SUCCESS, f"{CHECK} Refreshed chunk data for namespace: {namespace}\nFound {count} chunks in namespace {namespace}"
 
         except Exception as e:
             logger.error(f"Failed to refresh chunk data: {e}")
-            return Result.FAILURE, f"✗ Failed to refresh chunk data: {e}"
+            return Result.FAILURE, f"{X} Failed to refresh chunk data: {e}"
 
     def _get_api_client(self):
         """Get or create API client with authentication."""
@@ -385,7 +387,7 @@ class DownloadChunksCommand(Command):
             chunks_to_download = cursor.fetchall()
 
             if not chunks_to_download:
-                return Result.FAILURE, "✗ No chunks available for download"
+                return Result.FAILURE, f"{X} No chunks available for download"
 
             api_client = self._get_api_client()
             downloaded_count = 0
@@ -442,11 +444,11 @@ class DownloadChunksCommand(Command):
                     logger.error(f"Failed to download {chunk_name}: {e}")
                     continue
 
-            return Result.SUCCESS, f"✓ Downloaded {downloaded_count} chunk(s) in namespace {namespace or 'all'}"
+            return Result.SUCCESS, f"{CHECK} Downloaded {downloaded_count} chunk(s) in namespace {namespace or 'all'}"
 
         except Exception as e:
             logger.error(f"Failed to download chunks: {e}")
-            return Result.FAILURE, f"✗ Failed to download chunks: {e}"
+            return Result.FAILURE, f"{X} Failed to download chunks: {e}"
 
     def _get_api_client(self):
         """Get or create API client with authentication."""
@@ -505,7 +507,7 @@ class UnpackProcessChunksCommand(Command):
             chunks_to_unpack = cursor.fetchall()
 
             if not chunks_to_unpack:
-                return Result.FAILURE, "✗ No chunks available for unpacking"
+                return Result.FAILURE, f"{X} No chunks available for unpacking"
 
             processed_count = 0
             total_pages = 0
@@ -597,13 +599,13 @@ class UnpackProcessChunksCommand(Command):
                     logger.error(f"Failed to unpack {chunk_name}: {e}")
                     continue
 
-            return (Result.SUCCESS,  f"✓ Unpacked and processed {processed_count} chunk(s). "
+            return (Result.SUCCESS,  f"{CHECK} Unpacked and processed {processed_count} chunk(s). "
                 f"Processed {total_pages} pages from {processed_count} chunks")
 
 
         except Exception as e:
             logger.error(f"Failed to unpack chunks: {e}")
-            return Result.FAILURE, f"✗ Failed to unpack chunks: {e}"
+            return Result.FAILURE, f"{X} Failed to unpack chunks: {e}"
 
 
 class EmbedPagesCommand(Command):
@@ -670,7 +672,7 @@ class EmbedPagesCommand(Command):
                     )
 
                 if not page_ids:
-                    return Result.FAILURE, f"✗ No pages needing embeddings in chunk {chunk_name}"
+                    return Result.FAILURE, f"{X} No pages needing embeddings in chunk {chunk_name}"
 
                 # logger.info("Processing %d embeddings for named chunk %s...", len(page_ids), chunk_name)
 
@@ -688,7 +690,7 @@ class EmbedPagesCommand(Command):
                         tracker=tracker,
                     )
 
-                return Result.SUCCESS, f"✓ Processed {len(page_ids)} pages for chunk {chunk_name}"
+                return Result.SUCCESS, f"{CHECK} Processed {len(page_ids)} pages for chunk {chunk_name}"
 
             else:
                 # Process all chunks
@@ -708,7 +710,7 @@ class EmbedPagesCommand(Command):
                 chunk_name_list = [row["chunk_name"] for row in cursor.fetchall()]
 
                 if not chunk_name_list:
-                    return Result.FAILURE, "✗ No pages needing embeddings"
+                    return Result.FAILURE, f"{X} No pages needing embeddings"
 
                 total_processed = 0
 
@@ -773,11 +775,11 @@ class EmbedPagesCommand(Command):
                         logger.exception(f"Failed to process chunk {chunk_name}: {e}")
                         continue
 
-                return Result.SUCCESS, f"✓ Embedded {total_processed} pages across {len(chunk_name_list)} chunk(s)"
+                return Result.SUCCESS, f"{CHECK} Embedded {total_processed} pages across {len(chunk_name_list)} chunk(s)"
 
         except Exception as e:
             logger.exception(f"Failed to process pages: {e}")
-            return Result.FAILURE, f"✗ Failed to process pages: {e}"
+            return Result.FAILURE, f"{X} Failed to process pages: {e}"
 
 
 TARGET_DIMENSIONS_ARGUMENT = Argument(name="target-dim", type="integer", required=False, default=100,
@@ -808,7 +810,7 @@ class ReduceCommand(Command):
             print(f"Target dimension: {target_dim}, batch size: {batch_size}")
 
             if target_dim > batch_size:
-                return Result.FAILURE, "✗ Batch size must be equal to or greater than target dimension."
+                return Result.FAILURE, f"{X} Batch size must be equal to or greater than target dimension."
 
             estimated_vector_count = get_embedding_count(namespace, sqlconn)
             estimated_batch_count = estimated_vector_count // batch_size + 1
@@ -841,7 +843,7 @@ class ReduceCommand(Command):
                 )
             return (
                 Result.SUCCESS,
-                f"✓ Reduced {total_vector_count} page embeddings in {batch_count} "
+                f"{CHECK} Reduced {total_vector_count} page embeddings in {batch_count} "
                 f"batch{'' if batch_count == 1 else 'es'}"
             )
         except Exception as e:
@@ -905,7 +907,7 @@ class ClusterCommand(Command):
                     tracker=tracker,
                 )
 
-            return Result.SUCCESS, f"✓ Clustered reduced page embeddings in namespace {namespace} using incremental K-means"
+            return Result.SUCCESS, f"{CHECK} Clustered reduced page embeddings in namespace {namespace} using incremental K-means"
         except Exception as e:
             logger.error(f"Failed to cluster embeddings: {e}")
             return Result.FAILURE, f"✗ Failed to cluster embeddings: {e}"
@@ -961,7 +963,7 @@ class RecursiveClusterCommand(Command):
 
             return (
                 Result.SUCCESS,
-                f"✓ Recursive clustering completed. Processed {nodes_processed} nodes "
+                f"{CHECK} Recursive clustering completed. Processed {nodes_processed} nodes "
                 f"in cluster tree for namespace {namespace}"
             )
         except Exception as e:
@@ -992,7 +994,7 @@ class ProjectCommand(Command):
 
             return (
                 Result.SUCCESS,
-                f"✓ Projected reduced page embeddings in {namespace} in {processed_count} "
+                f"{CHECK} Projected reduced page embeddings in {namespace} in {processed_count} "
                 f"cluster{'' if processed_count == 1 else 's'} into 3-space using UMAP."
             )
         except Exception as e:
