@@ -6,6 +6,7 @@ import os
 import readline
 import sys
 from abc import ABC, abstractmethod
+from enum import IntEnum
 from typing import Dict, List, Any
 
 # Import existing modules
@@ -70,6 +71,11 @@ class Argument():
         self.default = default
 
 
+class Result(IntEnum):
+    SUCCESS = 0
+    FAILURE = -1
+
+
 REQUIRED_NAMESPACE_ARGUMENT = Argument(name="namespace", type="string", required=True,
                                        description="The wiki namespace, e.g. enwiki_namespace_0")
 OPTIONAL_NAMESPACE_ARGUMENT = Argument(name="namespace", type="string", required=False,
@@ -82,6 +88,7 @@ OPTIONAL_CHUNK_NAME_ARGUMENT = Argument(name="chunk", type="string", required=Fa
                                         description="The name of the chunk to process")
 OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT = Argument(name="limit", type="integer", required=False,
                                                    description="Number of pages to process")
+
 
 
 class Command(ABC):
@@ -104,7 +111,7 @@ class Command(ABC):
         return [arg for arg in self.expected_args if arg.required is False]
 
     @abstractmethod
-    def execute(self, args: Dict[str, Any]) -> str:
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
         """Execute the command with given arguments."""
         pass
 
@@ -237,11 +244,11 @@ class CommandParser:
         """Check if command exists."""
         return command_name in self.commands
 
-    def get_command_help(self, command_name: str) -> str:
+    def get_command_help(self, command_name: str) -> tuple[Result, str]:
         """Get help for a specific command."""
         if command_name in self.commands:
-            return self.commands[command_name].get_help()
-        return f"Unknown command: {command_name}"
+            return Result.SUCCESS, self.commands[command_name].get_help()
+        return Result.FAILURE, f"Unknown command: {command_name}"
 
     def get_available_commands(self) -> List[str]:
         """Get list of available commands."""
@@ -271,20 +278,20 @@ class CommandDispatcher:
                 raise
         return self.api_client
 
-    def dispatch(self, command_name: str, args: Dict[str, Any]) -> str:
+    def dispatch(self, command_name: str, args: Dict[str, Any]) -> tuple[Result, str]:
         """Dispatch command to appropriate handler."""
         if not self.parser.validate_command(command_name):
-            return f"Unknown command: {command_name}"
+            return Result.FAILURE, f"Unknown command: {command_name}"
 
         try:
             command = self.parser.commands[command_name]
             command.validate(args)
             return command.execute(args)
         except ValueError as e:
-            return f"Validation error: {e}"
+            return Result.FAILURE, f"Validation error: {e}"
         except Exception as e:
             logger.exception(f"Error executing command '{command_name}': {e}")
-            return f"Error: {e}"
+            return Result.FAILURE, f"Error: {e}"
 
 
 class RefreshChunkDataCommand(Command):
@@ -297,7 +304,7 @@ class RefreshChunkDataCommand(Command):
             expected_args=[REQUIRED_NAMESPACE_ARGUMENT]
         )
 
-    def execute(self, args: Dict[str, Any]) -> str:
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
         namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
         logger.info("Refreshing chunk data for namespace: %s", namespace)
 
@@ -315,11 +322,11 @@ class RefreshChunkDataCommand(Command):
             )
             count = cursor.fetchone()["count"]
 
-            return f"✓ Refreshed chunk data for namespace: {namespace}\nFound {count} chunks in namespace {namespace}"
+            return Result.SUCCESS, f"✓ Refreshed chunk data for namespace: {namespace}\nFound {count} chunks in namespace {namespace}"
 
         except Exception as e:
             logger.error(f"Failed to refresh chunk data: {e}")
-            return f"✗ Failed to refresh chunk data: {e}"
+            return Result.FAILURE, f"✗ Failed to refresh chunk data: {e}"
 
     def _get_api_client(self):
         """Get or create API client with authentication."""
@@ -343,7 +350,7 @@ class DownloadChunksCommand(Command):
             expected_args=[OPTIONAL_CHUNK_LIMIT_ARGUMENT, OPTIONAL_NAMESPACE_ARGUMENT]
         )
 
-    def execute(self, args: Dict[str, Any]) -> str:
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
         limit = args.get(OPTIONAL_CHUNK_LIMIT_ARGUMENT.name, OPTIONAL_CHUNK_LIMIT_ARGUMENT.default)
         namespace = args.get(OPTIONAL_NAMESPACE_ARGUMENT.name)
 
@@ -378,7 +385,7 @@ class DownloadChunksCommand(Command):
             chunks_to_download = cursor.fetchall()
 
             if not chunks_to_download:
-                return "✓ No chunks available for download"
+                return Result.FAILURE, "✗ No chunks available for download"
 
             api_client = self._get_api_client()
             downloaded_count = 0
@@ -435,11 +442,11 @@ class DownloadChunksCommand(Command):
                     logger.error(f"Failed to download {chunk_name}: {e}")
                     continue
 
-            return f"✓ Downloaded {downloaded_count} chunk(s) in namespace {namespace or 'all'}"
+            return Result.SUCCESS, f"✓ Downloaded {downloaded_count} chunk(s) in namespace {namespace or 'all'}"
 
         except Exception as e:
             logger.error(f"Failed to download chunks: {e}")
-            return f"✗ Failed to download chunks: {e}"
+            return Result.FAILURE, f"✗ Failed to download chunks: {e}"
 
     def _get_api_client(self):
         """Get or create API client with authentication."""
@@ -463,7 +470,7 @@ class UnpackProcessChunksCommand(Command):
             expected_args=[OPTIONAL_NAMESPACE_ARGUMENT, OPTIONAL_CHUNK_LIMIT_NO_DEFAULT_ARGUMENT]
         )
 
-    def execute(self, args: Dict[str, Any]) -> str:
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
         namespace = args.get(OPTIONAL_NAMESPACE_ARGUMENT.name)
         limit = args.get(OPTIONAL_CHUNK_LIMIT_NO_DEFAULT_ARGUMENT.name)
 
@@ -498,7 +505,7 @@ class UnpackProcessChunksCommand(Command):
             chunks_to_unpack = cursor.fetchall()
 
             if not chunks_to_unpack:
-                return "✓ No chunks available for unpacking"
+                return Result.FAILURE, "✗ No chunks available for unpacking"
 
             processed_count = 0
             total_pages = 0
@@ -590,14 +597,13 @@ class UnpackProcessChunksCommand(Command):
                     logger.error(f"Failed to unpack {chunk_name}: {e}")
                     continue
 
-            return (
-                f"✓ Unpacked and processed {processed_count} chunk(s). "
-                f"Processed {total_pages} pages from {processed_count} chunks"
-            )
+            return (Result.SUCCESS,  f"✓ Unpacked and processed {processed_count} chunk(s). "
+                f"Processed {total_pages} pages from {processed_count} chunks")
+
 
         except Exception as e:
             logger.error(f"Failed to unpack chunks: {e}")
-            return f"✗ Failed to unpack chunks: {e}"
+            return Result.FAILURE, f"✗ Failed to unpack chunks: {e}"
 
 
 class EmbedPagesCommand(Command):
@@ -616,7 +622,7 @@ class EmbedPagesCommand(Command):
         self.embedding_model_api_url = embedding_model_api_url
         self.embedding_model_api_key = embedding_model_api_key
 
-    def execute(self, args: Dict[str, Any]) -> str:
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
         chunk_name = args.get(OPTIONAL_CHUNK_NAME_ARGUMENT.name)
         limit = args.get(OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT.name, OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT.default)
 
@@ -664,7 +670,7 @@ class EmbedPagesCommand(Command):
                     )
 
                 if not page_ids:
-                    return f"✓ No pages needing embeddings in chunk {chunk_name}"
+                    return Result.FAILURE, f"✗ No pages needing embeddings in chunk {chunk_name}"
 
                 # logger.info("Processing %d embeddings for named chunk %s...", len(page_ids), chunk_name)
 
@@ -682,7 +688,7 @@ class EmbedPagesCommand(Command):
                         tracker=tracker,
                     )
 
-                return f"✓ Processed {len(page_ids)} pages for chunk {chunk_name}"
+                return Result.SUCCESS, f"✓ Processed {len(page_ids)} pages for chunk {chunk_name}"
 
             else:
                 # Process all chunks
@@ -702,7 +708,7 @@ class EmbedPagesCommand(Command):
                 chunk_name_list = [row["chunk_name"] for row in cursor.fetchall()]
 
                 if not chunk_name_list:
-                    return "✓ No pages needing embeddings"
+                    return Result.FAILURE, "✗ No pages needing embeddings"
 
                 total_processed = 0
 
@@ -767,11 +773,11 @@ class EmbedPagesCommand(Command):
                         logger.exception(f"Failed to process chunk {chunk_name}: {e}")
                         continue
 
-                return f"✓ Embedded {total_processed} pages across {len(chunk_name_list)} chunk(s)"
+                return Result.SUCCESS, f"✓ Embedded {total_processed} pages across {len(chunk_name_list)} chunk(s)"
 
         except Exception as e:
             logger.exception(f"Failed to process pages: {e}")
-            return f"✗ Failed to process pages: {e}"
+            return Result.FAILURE, f"✗ Failed to process pages: {e}"
 
 
 TARGET_DIMENSIONS_ARGUMENT = Argument(name="target-dim", type="integer", required=False, default=100,
@@ -790,7 +796,7 @@ class ReduceCommand(Command):
             expected_args=[REQUIRED_NAMESPACE_ARGUMENT, TARGET_DIMENSIONS_ARGUMENT, BATCH_SIZE_ARGUMENT]
         )
 
-    def execute(self, args: Dict[str, Any]) -> str:
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
 
@@ -802,13 +808,14 @@ class ReduceCommand(Command):
             print(f"Target dimension: {target_dim}, batch size: {batch_size}")
 
             if target_dim > batch_size:
-                return "✗ Batch size must be equal to or greater than target dimension."
+                return Result.FAILURE, "✗ Batch size must be equal to or greater than target dimension."
 
             estimated_vector_count = get_embedding_count(namespace, sqlconn)
             estimated_batch_count = estimated_vector_count // batch_size + 1
 
             if estimated_vector_count < target_dim:
                 return (
+                    Result.FAILURE,
                     f"✗ Only found {estimated_vector_count} records, "
                     f"need at least {target_dim} to do PCA at that dimension"
                 )
@@ -833,12 +840,13 @@ class ReduceCommand(Command):
                     tracker=tracker,
                 )
             return (
+                Result.SUCCESS,
                 f"✓ Reduced {total_vector_count} page embeddings in {batch_count} "
                 f"batch{'' if batch_count == 1 else 'es'}"
             )
         except Exception as e:
             logger.exception(f"Failed to reduce embeddings: {e}")
-            return f"✗ Failed to reduce embeddings: {e}"
+            return Result.FAILURE, f"✗ Failed to reduce embeddings: {e}"
 
 
 LEAF_TARGET_ARGUMENT = Argument(name="leaf-target", type="integer", required=False, default=50,
@@ -863,7 +871,7 @@ class ClusterCommand(Command):
             expected_args=[REQUIRED_NAMESPACE_ARGUMENT, CLUSTER_COUNT_ARGUMENT, BATCH_SIZE_ARGUMENT]
         )
 
-    def execute(self, args: Dict[str, Any]) -> str:
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
 
@@ -897,10 +905,10 @@ class ClusterCommand(Command):
                     tracker=tracker,
                 )
 
-            return f"✓ Clustered reduced page embeddings in namespace {namespace} using incremental K-means"
+            return Result.SUCCESS, f"✓ Clustered reduced page embeddings in namespace {namespace} using incremental K-means"
         except Exception as e:
             logger.error(f"Failed to cluster embeddings: {e}")
-            return f"✗ Failed to cluster embeddings: {e}"
+            return Result.FAILURE, f"✗ Failed to cluster embeddings: {e}"
 
 
 OPTIONAL_CLUSTER_LIMIT_ARGUMENT = Argument(name="limit", type="integer", required=False,
@@ -924,7 +932,7 @@ class RecursiveClusterCommand(Command):
             ]
         )
 
-    def execute(self, args: Dict[str, Any]) -> str:
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
             leaf_target = args.get(LEAF_TARGET_ARGUMENT.name, LEAF_TARGET_ARGUMENT.default)
@@ -951,10 +959,14 @@ class RecursiveClusterCommand(Command):
                     tracker=tracker
                 )
 
-            return f"✓ Recursive clustering completed. Processed {nodes_processed} nodes in cluster tree for namespace {namespace}"
+            return (
+                Result.SUCCESS,
+                f"✓ Recursive clustering completed. Processed {nodes_processed} nodes "
+                f"in cluster tree for namespace {namespace}"
+            )
         except Exception as e:
             logger.exception(f"Failed to run recursive clustering: {e}")
-            return f"✗ Failed to run recursive clustering: {e}"
+            return Result.FAILURE, f"✗ Failed to run recursive clustering: {e}"
 
 
 class ProjectCommand(Command):
@@ -967,7 +979,7 @@ class ProjectCommand(Command):
             expected_args=[REQUIRED_NAMESPACE_ARGUMENT, OPTIONAL_CLUSTER_LIMIT_ARGUMENT]
         )
 
-    def execute(self, args: Dict[str, Any]) -> str:
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
             limit = args.get(OPTIONAL_CLUSTER_LIMIT_ARGUMENT.name)
@@ -978,11 +990,14 @@ class ProjectCommand(Command):
             with ProgressTracker(description="Projecting into 3-space", unit="vectors") as tracker:
                 processed_count = run_umap_per_cluster(sqlconn, namespace, n_components=3, limit=limit, tracker=tracker)
 
-            return f"✓ Projected reduced page embeddings in {namespace} in {processed_count} " \
-                   f"cluster{'' if processed_count == 1 else 's'} into 3-space using UMAP."
+            return (
+                Result.SUCCESS,
+                f"✓ Projected reduced page embeddings in {namespace} in {processed_count} "
+                f"cluster{'' if processed_count == 1 else 's'} into 3-space using UMAP."
+            )
         except Exception as e:
             logger.exception(f"Failed to cluster embeddings: {e}")
-            return f"✗ Failed to project reduced page embeddings into 3-space: {e}"
+            return Result.FAILURE, f"✗ Failed to project reduced page embeddings into 3-space: {e}"
 
 
 class StatusCommand(Command):
@@ -995,7 +1010,7 @@ class StatusCommand(Command):
             expected_args=[]
         )
 
-    def execute(self, args: Dict[str, Any]) -> str:
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
         try:
             sqlconn = get_sql_conn()
             ensure_tables(sqlconn)
@@ -1167,11 +1182,11 @@ class StatusCommand(Command):
             status_text += f"{page_stats['clustered']} clustered pages, "
             status_text += f"{page_stats['clustered']} projected vectors\n"
 
-            return status_text
+            return Result.SUCCESS, status_text
 
         except Exception as e:
             logger.error(f"Failed to get status: {e}")
-            return f"✗ Failed to get status: {e}"
+            return Result.FAILURE, f"✗ Failed to get status: {e}"
 
 
 COMMAND_NAME_ARGUMENT = Argument(name="command", type="string", required=False,
@@ -1189,7 +1204,7 @@ class HelpCommand(Command):
         )
         self.parser = parser
 
-    def execute(self, args: Dict[str, Any]) -> str:
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
         command_name = args.get(COMMAND_NAME_ARGUMENT.name)
 
         if command_name:
@@ -1203,7 +1218,10 @@ class HelpCommand(Command):
             help_text += (
                 "\nUse 'help <command>' for more information about a specific command."
             )
-            return help_text
+            return Result.SUCCESS, help_text
+
+
+HAPPY_PROMPT = "> "
 
 
 class CommandInterpreter:
@@ -1235,7 +1253,7 @@ class CommandInterpreter:
 
         while True:
             try:
-                user_input = input("> ").strip()
+                user_input = input(HAPPY_PROMPT).strip()
 
                 if not user_input:
                     continue
@@ -1250,7 +1268,7 @@ class CommandInterpreter:
                     continue
 
                 result = self.dispatcher.dispatch(command_name, args)
-                print(result)
+                print(result[1])
                 print()
 
             except KeyboardInterrupt:
@@ -1263,11 +1281,11 @@ class CommandInterpreter:
                 print(f"Error: {e}")
                 logger.error(f"Interactive mode error: {e}")
 
-    def run_command(self, command_args: List[str]):
+    def run_command(self, command_args: List[str]) -> Result:
         """Run a single command."""
         if not command_args:
             print("Usage: python command.py <command> [options]")
-            return
+            return Result.SUCCESS
 
         command_name = command_args[0]
 
@@ -1281,8 +1299,10 @@ class CommandInterpreter:
             help_command = self.parser.commands.get("help")
             if help_command:
                 result = help_command.execute(help_args)
-                print(result)
-            return
+                print(result[1])
+                return result[0]
+            else:
+                return Result.FAILURE
 
         args = {}
 
@@ -1324,23 +1344,26 @@ class CommandInterpreter:
             parsed_args = parser.parse_args(command_args[1:])
             args = vars(parsed_args)
         except SystemExit:
-            return
+            return Result.FAILURE
 
         result = self.dispatcher.dispatch(command_name, args)
-        print(result)
+        print(result[1])
+        return result[0]
 
 
-def main():
+def main() -> int:
     """Main entry point."""
     interpreter = CommandInterpreter()
 
     if len(sys.argv) > 1:
         # Run single command
-        interpreter.run_command(sys.argv[1:])
+        result = interpreter.run_command(sys.argv[1:])
+        return result
     else:
         # Run interactive mode
         interpreter.run_interactive()
+        return Result.SUCCESS.value
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
