@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import json
 from typing import Optional
 
+from numpy.typing import NDArray
 
 @dataclass
 class Chunk:
@@ -45,3 +46,18 @@ class ClusterInfo:
 
 
 Vector3D = tuple[float, float, float]
+
+
+@dataclass
+class ClusterTreeNode:
+    namespace: str
+    node_id: int
+    depth: int
+    parent_id: Optional[int] = None
+    child_count: Optional[int] = 0
+    doc_count: Optional[int] = None
+    centroid: Optional[NDArray] = None
+    top_terms: Optional[list[str]] = None
+    sample_doc_ids: Optional[list[int]] = None
+    first_label: Optional[str] = None
+    final_label: Optional[str] = None

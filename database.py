@@ -9,7 +9,7 @@ import numpy as np
 
 from numpy.typing import NDArray
 
-from classes import Chunk, Page, PageVectors, Vector3D
+from classes import Chunk, ClusterTreeNode, Page, PageVectors, Vector3D
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -68,6 +68,8 @@ def ensure_tables(sqlconn: sqlite3.Connection):
             top_terms TEXT,
             sample_doc_ids TEXT,
             child_count INT DEFAULT 0,
+            first_label TEXT,
+            final_label TEXT,
             PRIMARY KEY (namespace, node_id),
             FOREIGN KEY (parent_id) REFERENCES cluster_tree(node_id) ON DELETE CASCADE
         );
@@ -685,27 +687,30 @@ def get_reduced_vectors_for_cluster(sqlconn: sqlite3.Connection, namespace: str,
 
 def insert_cluster_tree_node(
     sqlconn: sqlite3.Connection,
-    namespace: str,
-    node_id: int,
-    parent_id: Optional[int],
-    depth: int,
-    centroid: Optional[NDArray],
-    doc_count: int,
-    top_terms: Optional[List[str]] = None,
-    sample_doc_ids: Optional[List[int]] = None
+    node: ClusterTreeNode
 ) -> int:
     """Insert a new node into the cluster_tree table."""
-    centroid_blob = numpy_to_bytes(centroid) if centroid is not None else None
-    top_terms_json = json.dumps(top_terms) if top_terms else None
-    sample_doc_ids_json = json.dumps(sample_doc_ids) if sample_doc_ids else None
+    centroid_blob = numpy_to_bytes(node.centroid) if node.centroid is not None else None
+    top_terms_json = json.dumps(node.top_terms) if node.top_terms else None
+    sample_doc_ids_json = json.dumps(node.sample_doc_ids) if node.sample_doc_ids else None
 
     sql = """
-        INSERT INTO cluster_tree (node_id, namespace, parent_id, depth, centroid, doc_count, top_terms, sample_doc_ids)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO cluster_tree (
+            node_id, namespace, parent_id, child_count, depth, centroid, doc_count, top_terms, sample_doc_ids,
+            first_label, final_label
+        )
+        VALUES (
+            :node_id, :namespace, :parent_id, :child_count, :depth, :centroid, :doc_count, :top_terms, :sample_doc_ids,
+            :first_label, :final_label
+        )
         """
     try:
+        node_dict = asdict(node)
+        node_dict['centroid'] = centroid_blob
+        node_dict['top_terms'] = top_terms_json
+        node_dict['sample_doc_ids'] = sample_doc_ids_json
         cursor = sqlconn.cursor()
-        cursor.execute(sql, (node_id,namespace, parent_id, depth, centroid_blob, doc_count, top_terms_json, sample_doc_ids_json))
+        cursor.execute(sql, node_dict)
         sqlconn.commit()
     except sqlite3.Error as e:
         try:
@@ -713,7 +718,7 @@ def insert_cluster_tree_node(
         except Exception as e1:
             logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
             pass
-        logger.exception(f"Failed to insert cluster_tree node {node_id}: {e}")
+        logger.exception(f"Failed to insert cluster_tree node {node.node_id} in namespace {node.namespace}: {e}")
         raise
 
     try:
@@ -725,15 +730,16 @@ def insert_cluster_tree_node(
         raise
 
 def update_cluster_tree_child_count(
+    namespace: str,
     node_id: int,
     child_count: int,
     sqlconn: sqlite3.Connection
 ) -> None:
     """Update the child_count for a cluster_tree node."""
-    sql = "UPDATE cluster_tree SET child_count = ? WHERE node_id = ?"
+    sql = "UPDATE cluster_tree SET child_count = ? WHERE namespace = ? AND node_id = ?"
     try:
         cursor = sqlconn.cursor()
-        cursor.execute(sql, (child_count, node_id))
+        cursor.execute(sql, (child_count, namespace, node_id))
         sqlconn.commit()
     except sqlite3.Error as e:
         try:
@@ -745,49 +751,66 @@ def update_cluster_tree_child_count(
         raise
 
 
+def _row_to_ctn_dict(row) -> dict:
+    result = dict()
+    for key in ["node_id", "namespace", "parent_id", "child_count", "depth", "doc_count",
+            "first_label", "final_label"]:
+        result[key] = row[key]
+    result['centroid'] = bytes_to_numpy(row['centroid']) if row['centroid'] else None
+    result['top_terms'] = json.loads(row['top_terms']) if row['top_terms'] else None
+    result['sample_doc_ids'] = json.loads(row['sample_doc_ids']) if row['sample_doc_ids'] else None
+    return result
+
+
 def get_cluster_tree_nodes_by_parent(
+    namespace: str,
     parent_id: Optional[int],
     sqlconn: sqlite3.Connection
-) -> List[dict]:
+) -> List[ClusterTreeNode]:
     """Get all cluster_tree nodes with the specified parent_id."""
     sql = """
-        SELECT node_id, parent_id, depth, centroid, doc_count, top_terms, sample_doc_ids, child_count
+        SELECT
+            node_id, namespace, parent_id, child_count, depth, centroid, doc_count, top_terms, sample_doc_ids,
+            first_label, final_label
         FROM cluster_tree
-        WHERE parent_id = ?
+        WHERE namespace = ? AND parent_id = ?
         ORDER BY node_id ASC
         """
-    cursor = sqlconn.execute(sql, (parent_id,))
+    cursor = sqlconn.execute(sql, (namespace, parent_id,))
     rows = cursor.fetchall()
-    return [dict(row) for row in rows]
+    return [ClusterTreeNode(**_row_to_ctn_dict(row)) for row in rows]
 
 
 def get_cluster_tree_node_by_id(
+    namespace: str,
     node_id: int,
     sqlconn: sqlite3.Connection
-) -> Optional[dict]:
+) -> Optional[ClusterTreeNode]:
     """Get a cluster_tree node by its node_id."""
     sql = """
-        SELECT node_id, parent_id, depth, centroid, doc_count, top_terms, sample_doc_ids, child_count
+        SELECT
+            node_id, namespace, parent_id, child_count, depth, centroid, doc_count, top_terms, sample_doc_ids,
+            first_label, final_label
         FROM cluster_tree
-        WHERE node_id = ?
+        WHERE namespace = ? AND node_id = ?
         LIMIT 1
         """
-    cursor = sqlconn.execute(sql, (node_id,))
+    cursor = sqlconn.execute(sql, (namespace, node_id,))
     row = cursor.fetchone()
-    return dict(row) if row else None
+    return ClusterTreeNode(**_row_to_ctn_dict(row)) if row else None
 
 
-def get_cluster_tree_root_nodes(sqlconn: sqlite3.Connection) -> List[dict]:
+def get_cluster_tree_root_nodes(sqlconn: sqlite3.Connection) -> List[ClusterTreeNode]:
     """Get all root nodes (nodes with no parent) from cluster_tree."""
     sql = """
-        SELECT node_id, parent_id, depth, centroid, doc_count, top_terms, sample_doc_ids, child_count
+        SELECT namespace, node_id, parent_id, depth, centroid, doc_count, top_terms, sample_doc_ids, child_count, first_label, final_label
         FROM cluster_tree
         WHERE parent_id IS NULL
-        ORDER BY node_id ASC
+        ORDER BY namespace ASC, node_id ASC
         """
     cursor = sqlconn.execute(sql)
     rows = cursor.fetchall()
-    return [dict(row) for row in rows]
+    return [ClusterTreeNode(**_row_to_ctn_dict(row)) for row in rows]
 
 
 def get_cluster_tree_max_node_id(sqlconn: sqlite3.Connection) -> int:
@@ -796,3 +819,29 @@ def get_cluster_tree_max_node_id(sqlconn: sqlite3.Connection) -> int:
     cursor = sqlconn.execute(sql)
     row = cursor.fetchone()
     return row[0] if row[0] else 0
+
+
+def update_cluster_tree_node_first_label(
+        sqlconn: sqlite3.Connection,
+        namespace: str,
+        node_id: int,
+        first_label: str
+        ) -> None:
+    """Update the first_label for the given cluster tree node."""
+    sql = """
+        UPDATE cluster_tree
+        SET first_label = ?
+        WHERE namespace = ? AND node_id = ?
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (first_label, namespace, node_id))
+        sqlconn.commit()
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to update first_label for cluster_tree node {node_id}: {e}")
+        raise

@@ -25,6 +25,7 @@ import numpy as np
 from sklearn.metrics import silhouette_score
 from numpy.typing import NDArray
 
+from classes import ClusterTreeNode
 from database import (
     get_clusters_needing_projection,
     get_reduced_vectors_for_cluster,
@@ -358,17 +359,13 @@ def run_recursive_clustering(
     logger.info("Creating root node with ID %s", root_node_id)
 
     # Insert root node
-    inserted_node_id = insert_cluster_tree_node(
-        sqlconn=sqlconn,
+    node = ClusterTreeNode(
         namespace=namespace,
         node_id=root_node_id,
-        parent_id=None,
         depth=0,
-        centroid=None,  # Will be computed after clustering
-        doc_count=doc_count,
-        top_terms=None,
-        sample_doc_ids=None
+        doc_count=doc_count
     )
+    inserted_node_id = insert_cluster_tree_node(sqlconn=sqlconn, node=node)
     logger.info("Inserted node ID: %d", inserted_node_id)
     assert root_node_id == inserted_node_id
 
@@ -476,8 +473,8 @@ def _recursive_cluster_node(
     )
 
     # Process each child cluster
-    child_nodes = []
-    cluster_sizes = []
+    child_nodes_processed = 0
+    descendant_nodes_processed = 0
 
     for cluster_id in range(k):
         # Get documents belonging to this cluster
@@ -486,7 +483,6 @@ def _recursive_cluster_node(
         cluster_vectors = page_vectors[cluster_mask]
 
         cluster_size = len(cluster_page_ids)
-        cluster_sizes.append(cluster_size)
 
         logger.debug("Subcluster %d:%d has %s documents", node_id, cluster_id, cluster_size)
 
@@ -495,25 +491,24 @@ def _recursive_cluster_node(
 
         # Create child node
         child_node_id = get_cluster_tree_max_node_id(sqlconn) + 1
-        child_nodes.append(child_node_id)
 
         # Insert child node
-        inserted_node_id = insert_cluster_tree_node(
-            sqlconn=sqlconn,
+        child_node = ClusterTreeNode(
             namespace=namespace,
             node_id=child_node_id,
             parent_id=node_id,
             depth=depth + 1,
-            centroid=None,  # Will be computed after clustering
             doc_count=cluster_size,
-            top_terms=None,
             sample_doc_ids=cluster_page_ids[:10]  # Sample first 10 doc IDs
         )
+        inserted_node_id = insert_cluster_tree_node(sqlconn=sqlconn, node=child_node)
+        child_nodes_processed += 1
+        descendant_nodes_processed += 1
         logger.debug("Max node + 1: %d, inserted node id: %d", child_node_id, inserted_node_id)
         assert child_node_id == inserted_node_id
 
         # Recursively process child node
-        child_nodes_processed = _recursive_cluster_node(
+        descendant_nodes_processed += _recursive_cluster_node(
             sqlconn=sqlconn,
             namespace=namespace,
             page_ids=cluster_page_ids,
@@ -530,17 +525,14 @@ def _recursive_cluster_node(
             tracker=tracker
         )
 
-        # Add the child node ID once for each node it represents (including itself)
-        child_nodes.extend([child_node_id] * child_nodes_processed)
-
     # Update child count for parent node
-    update_cluster_tree_child_count(node_id, len(child_nodes), sqlconn)
+    update_cluster_tree_child_count(namespace, node_id, child_nodes_processed, sqlconn)
 
     # Update progress tracker
     if tracker:
         tracker.update(1)
 
     # Return total nodes processed (1 for this node + all child nodes)
-    return 1 + len(child_nodes)
+    return descendant_nodes_processed
 
 

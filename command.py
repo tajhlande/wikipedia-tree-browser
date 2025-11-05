@@ -818,7 +818,7 @@ class ReduceCommand(Command):
             if estimated_vector_count < target_dim:
                 return (
                     Result.FAILURE,
-                    f"✗ Only found {estimated_vector_count} records, "
+                    f"{X} Only found {estimated_vector_count} records, "
                     f"need at least {target_dim} to do PCA at that dimension"
                 )
 
@@ -848,7 +848,7 @@ class ReduceCommand(Command):
             )
         except Exception as e:
             logger.exception(f"Failed to reduce embeddings: {e}")
-            return Result.FAILURE, f"✗ Failed to reduce embeddings: {e}"
+            return Result.FAILURE, f"{X} Failed to reduce embeddings: {e}"
 
 
 LEAF_TARGET_ARGUMENT = Argument(name="leaf-target", type="integer", required=False, default=50,
@@ -910,7 +910,7 @@ class ClusterCommand(Command):
             return Result.SUCCESS, f"{CHECK} Clustered reduced page embeddings in namespace {namespace} using incremental K-means"
         except Exception as e:
             logger.error(f"Failed to cluster embeddings: {e}")
-            return Result.FAILURE, f"✗ Failed to cluster embeddings: {e}"
+            return Result.FAILURE, f"{X} Failed to cluster embeddings: {e}"
 
 
 OPTIONAL_CLUSTER_LIMIT_ARGUMENT = Argument(name="limit", type="integer", required=False,
@@ -950,7 +950,7 @@ class RecursiveClusterCommand(Command):
             print(f"Parameters: leaf-target={leaf_target}, max-k={max_k}, max-depth={max_depth}, min-silhouette={min_silhouette}, batch-size={batch_size}")
 
             with ProgressTracker(description="Recursive clustering", unit=" nodes") as tracker:
-                nodes_processed = run_recursive_clustering(
+                nodes_created = run_recursive_clustering(
                     sqlconn,
                     namespace=namespace,
                     leaf_target=leaf_target,
@@ -963,12 +963,36 @@ class RecursiveClusterCommand(Command):
 
             return (
                 Result.SUCCESS,
-                f"{CHECK} Recursive clustering completed. Processed {nodes_processed} nodes "
-                f"in cluster tree for namespace {namespace}"
+                f"{CHECK} Recursive clustering completed. Created {nodes_created} nodes "
+                f"in cluster tree for namespace {namespace}."
             )
         except Exception as e:
             logger.exception(f"Failed to run recursive clustering: {e}")
-            return Result.FAILURE, f"✗ Failed to run recursive clustering: {e}"
+            return Result.FAILURE, f"{X} Failed to run recursive clustering: {e}"
+
+
+class LabelClustersCommand(Command):
+    """Use an LLM to label clusters according to their content"""
+
+    def __init__(self):
+        super().__init__(
+            name="label-clusters",
+            description="Use an LLM to label clusters according to their content.",
+            expected_args=[
+                REQUIRED_NAMESPACE_ARGUMENT
+            ]
+        )
+
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+        try:
+            namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
+            return Result.SUCCESS, f"{CHECK}"
+
+
+
+        except Exception as e:
+            logger.exception(f"Failed to label clusters: {e}")
+            return Result.FAILURE, f"{X} Failed to label clusters: {e}"
 
 
 class ProjectCommand(Command):
@@ -999,7 +1023,7 @@ class ProjectCommand(Command):
             )
         except Exception as e:
             logger.exception(f"Failed to cluster embeddings: {e}")
-            return Result.FAILURE, f"✗ Failed to project reduced page embeddings into 3-space: {e}"
+            return Result.FAILURE, f"{X} Failed to project reduced page embeddings into 3-space: {e}"
 
 
 class StatusCommand(Command):
@@ -1188,7 +1212,7 @@ class StatusCommand(Command):
 
         except Exception as e:
             logger.error(f"Failed to get status: {e}")
-            return Result.FAILURE, f"✗ Failed to get status: {e}"
+            return Result.FAILURE, f"{X} Failed to get status: {e}"
 
 
 COMMAND_NAME_ARGUMENT = Argument(name="command", type="string", required=False,
