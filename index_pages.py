@@ -106,10 +106,10 @@ def test_one_embedding():
     if len(embeddings) > 1:
         logger.warning("More than one embedding returned, only storing the first one.")
     embedding = embeddings[0]
-    update_embeddings_for_page(page.page_id, embedding, sqlconn)
+    update_embeddings_for_page(page.namespace, page.page_id, embedding, sqlconn)
 
     # retrieve the embedding
-    retrieved_page_vectors = get_page_vectors(page.page_id, sqlconn)
+    retrieved_page_vectors = get_page_vectors(page.namespace, page.page_id, sqlconn)
 
     assert (
         retrieved_page_vectors is not None
@@ -136,6 +136,7 @@ def timer():
 
 
 def compute_embeddings_for_chunk(
+    namespace: str,
     chunk_name: str,
     embedding_function: EmbeddingFunction,
     sqlconn: sqlite3.Connection,
@@ -144,7 +145,7 @@ def compute_embeddings_for_chunk(
 ) -> None:
 
     # logger.info("Computing embeddings for chunk %s", chunk_name)
-    page_id_list = get_page_ids_needing_embedding_for_chunk(chunk_name, sqlconn)
+    page_id_list = get_page_ids_needing_embedding_for_chunk(chunk_name, sqlconn, namespace=namespace)
     # logger.info("Found %d pages needing embeddings in chunk %s", len(page_id_list), chunk_name)
 
     # Apply limit if specified
@@ -173,7 +174,7 @@ def compute_embeddings_for_chunk(
     buffer = []
     counter = 0
     for page_id in page_id_list:
-        page = get_page_by_id(page_id, sqlconn)
+        page = get_page_by_id(namespace, page_id, sqlconn)
         if not page:
             logger.warning("Page with page_id %d not found, skipping.", page_id)
             continue
@@ -184,14 +185,14 @@ def compute_embeddings_for_chunk(
         buffer.append((page.page_id, embedding))
         embedding = embeddings[0]
         if len(buffer) >= BUFFER_SIZE:
-            upsert_embeddings_in_batch(buffer, sqlconn, BUFFER_SIZE)
+            upsert_embeddings_in_batch(namespace, buffer, sqlconn, BUFFER_SIZE)
             tracker.update(len(buffer)) if tracker else None
             counter += len(buffer)
             buffer = []
 
     # flush remainder
     if buffer:
-        upsert_embeddings_in_batch(buffer, sqlconn, BUFFER_SIZE)
+        upsert_embeddings_in_batch(namespace, buffer, sqlconn, BUFFER_SIZE)
         tracker.update(len(buffer)) if tracker else None
         counter += len(buffer)
 
@@ -251,6 +252,7 @@ if __name__ == "__main__":
     enwiki_ns_0 = "enwiki_namespace_0"
     enwiki_chunk_0 = "enwiki_namespace_0_chunk_0"
     compute_embeddings_for_chunk(
+        namespace=enwiki_ns_0,
         chunk_name=enwiki_chunk_0,
         embedding_function=jina_text_matching_function,
         sqlconn=sqlconn,

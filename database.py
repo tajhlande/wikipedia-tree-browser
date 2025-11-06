@@ -3,7 +3,7 @@ import json
 import sqlite3
 import logging
 from dataclasses import asdict, fields
-from typing import Iterator, Optional, Type, TypeVar, List, Dict
+from typing import Iterator, Optional, Type, TypeVar, List
 
 import numpy as np
 
@@ -17,35 +17,58 @@ logger = logging.getLogger(__name__)
 
 def ensure_tables(sqlconn: sqlite3.Connection):
     chunk_log_table_sql = """
-        CREATE TABLE IF NOT EXISTS chunk_log (
-            chunk_name TEXT NOT NULL PRIMARY KEY,
+        CREATE TABLE IF NOT EXISTS chunk_log_2 (
             namespace TEXT NOT NULL,
+            chunk_name TEXT NOT NULL,
             chunk_archive_path TEXT,
             chunk_extracted_path TEXT,
             downloaded_at DATETIME,
-            unpacked_at DATETIME
+            unpacked_at DATETIME,
+            PRIMARY KEY (namespace, chunk_name)
         );
         """
+    """
+    INSERT INTO chunk_log_2 (namespace, chunk_name, chunk_archive_path,
+            chunk_extracted_path, downloaded_at, unpacked_at)
+    SELECT namespace, chunk_name, chunk_archive_path, chunk_extracted_path, downloaded_at, unpacked_at
+    FROM chunk_log;
+    """
     page_log_table_sql = """
-        CREATE TABLE IF NOT EXISTS page_log (
-            page_id INTEGER NOT NULL PRIMARY KEY,
+        CREATE TABLE IF NOT EXISTS page_log_2 (
+            namespace TEXT NOT NULL,
+            page_id INTEGER NOT NULL,
             title TEXT,
             chunk_name TEXT,
             url TEXT,
             extracted_at DATETIME,
-            abstract TEXT
+            abstract TEXT,
+            PRIMARY KEY (namespace, page_id)
         );
         """
+    """
+    INSERT INTO page_log_2 (namespace, page_id, title, chunk_name, url, extracted_at, abstract)
+    SELECT 'enwiki_namespace_0', page_id, title, chunk_name, url, extracted_at, abstract
+    FROM page_log;
+    """
     # New tables for vector storage and clustering information
     page_vector_table_sql = """
-        CREATE TABLE IF NOT EXISTS page_vector (
-            page_id INTEGER PRIMARY KEY REFERENCES page_log(page_id) ON DELETE CASCADE,
+        CREATE TABLE IF NOT EXISTS page_vector_2 (
+            namespace TEXT NOT NULL,
+            page_id INTEGER NOT NULL REFERENCES page_log(page_id) ON DELETE CASCADE,
             embedding_vector BLOB,    -- original 2048-dim numpy array (float32)
             reduced_vector BLOB,      -- PCA-reduced 100-dim array (float32)
             cluster_id INTEGER,       -- FK to cluster_info.cluster_id
-            three_d_vector TEXT       -- JSON "[x, y, z]"
+            cluster_node_id INTEGER,  -- FK to cluster_tree.node_id
+            three_d_vector TEXT,       -- JSON "[x, y, z]"
+            PRIMARY KEY (namespace, page_id)
         );
         """
+    """
+    INSERT INTO page_vector_2 (namespace, page_id, embedding_vector, reduced_vector,
+             cluster_id, cluster_node_id, three_d_vector)
+    SELECT 'enwiki_namespace_0', page_id, embedding_vector, reduced_vector, cluster_id, NULL, three_d_vector
+    FROM page_vector;
+    """
     cluster_info_table_sql = """
         CREATE TABLE IF NOT EXISTS cluster_info (
             cluster_id INTEGER NOT NULL,
@@ -143,7 +166,7 @@ def _row_to_dataclass(row: sqlite3.Row, cls: Type[T]) -> T:
 
 def get_any_page(sqlconn: sqlite3.Connection) -> Optional[Page]:
     select_a_page_sql = """
-        SELECT page_id, title, chunk_name, url, extracted_at, abstract
+        SELECT namespace, page_id, title, chunk_name, url, extracted_at, abstract
         FROM page_log
         LIMIT 1
         """
@@ -152,19 +175,19 @@ def get_any_page(sqlconn: sqlite3.Connection) -> Optional[Page]:
     return _row_to_dataclass(row, Page)
 
 
-def get_page_by_id(page_id: int, sqlconn: sqlite3.Connection) -> Optional[Page]:
+def get_page_by_id(namespace: str, page_id: int, sqlconn: sqlite3.Connection) -> Optional[Page]:
     select_page_sql = """
-        SELECT page_id, title, chunk_name, url, extracted_at, abstract
+        SELECT namespace, page_id, title, chunk_name, url, extracted_at, abstract
         FROM page_log
-        WHERE page_id = ?
+        WHERE namespace = ? AND page_id = ?
         LIMIT 1
         """
-    cursor = sqlconn.execute(select_page_sql, (page_id,))
+    cursor = sqlconn.execute(select_page_sql, (namespace, page_id,))
     row = cursor.fetchone()
     if row:
         return _row_to_dataclass(row, Page)
     else:
-        logger.warning(f"No page found with page_id: {page_id}")
+        logger.warning("No page found in namespace %s with page_id %d", namespace, page_id)
         return None
 
 
@@ -233,9 +256,9 @@ def upsert_new_page_data(page: Page, sqlconn: sqlite3.Connection) -> None:
         raise ValueError(f"Tried to upsert page with no page ID. Page contents: {page.to_json}")
 
     page_data_upsert_sql = """
-        INSERT INTO page_log(page_id, title, chunk_name, url, extracted_at, abstract)
-        VALUES(:page_id, :title, :chunk_name, :url, CURRENT_TIMESTAMP, :abstract)
-        ON CONFLICT(page_id) DO UPDATE
+        INSERT INTO page_log(namespace, page_id, title, chunk_name, url, extracted_at, abstract)
+        VALUES(:namespace, :page_id, :title, :chunk_name, :url, CURRENT_TIMESTAMP, :abstract)
+        ON CONFLICT(namespace, page_id) DO UPDATE
         SET title = :title,
             chunk_name = :chunk_name,
             url = :url,
@@ -260,9 +283,9 @@ def upsert_new_page_data(page: Page, sqlconn: sqlite3.Connection) -> None:
 
 def upsert_new_pages_in_batch(pages: list[Page], sqlconn: sqlite3.Connection, batch_size: int = 1000):
     sql = """
-      INSERT INTO page_log(page_id, title, chunk_name, url, extracted_at, abstract)
-      VALUES(:page_id, :title, :chunk_name, :url, CURRENT_TIMESTAMP, :abstract)
-      ON CONFLICT(page_id) DO UPDATE SET
+      INSERT INTO page_log(namespace, page_id, title, chunk_name, url, extracted_at, abstract)
+      VALUES(:namespace, :page_id, :title, :chunk_name, :url, CURRENT_TIMESTAMP, :abstract)
+      ON CONFLICT(namespace, page_id) DO UPDATE SET
         title = :title,
         chunk_name = :chunk_name,
         url = :url,
@@ -285,8 +308,8 @@ def upsert_new_chunk_data(chunk: Chunk, sqlconn: sqlite3.Connection) -> None:
     upsert_sql = """
         INSERT INTO chunk_log(chunk_name, namespace, downloaded_at, unpacked_at)
           VALUES(:chunk_name, :namespace, NULL, NULL)
-          ON CONFLICT(chunk_name) DO UPDATE
-          SET chunk_name = :chunk_name, downloaded_at = NULL, unpacked_at = NULL;
+          ON CONFLICT(chunk_name, namespace) DO UPDATE
+          SET downloaded_at = NULL, unpacked_at = NULL;
         """
     try:
         cursor = sqlconn.cursor()
@@ -312,7 +335,7 @@ def update_chunk_data(chunk: Chunk, sqlconn: sqlite3.Connection) -> None:
             chunk_extracted_path = :chunk_extracted_path,
             downloaded_at = :downloaded_at,
             unpacked_at = :unpacked_at
-        WHERE chunk_name = :chunk_name
+        WHERE chunk_name = :chunk_name AND namespace = :namespace
         """
     try:
         cursor = sqlconn.cursor()
@@ -329,19 +352,19 @@ def update_chunk_data(chunk: Chunk, sqlconn: sqlite3.Connection) -> None:
         raise
 
 
-def get_chunk_data(chunk_name: str, sqlconn: sqlite3.Connection) -> Optional[Chunk]:
+def get_chunk_data(namespace: str, chunk_name: str, sqlconn: sqlite3.Connection) -> Optional[Chunk]:
     select_sql = """
         SELECT chunk_name, namespace, chunk_archive_path, chunk_extracted_path, downloaded_at, completed_at
         FROM chunk_log
-        WHERE chunk_name = :chunk_name
+        WHERE chunk_name = :chunk_name AND namespace = :namespace
         LIMIT 1
         """
-    cursor = sqlconn.execute(select_sql, {"chunk_name": chunk_name})
+    cursor = sqlconn.execute(select_sql, {"chunk_name": chunk_name, "namespace": namespace})
     row = cursor.fetchone()
     if row:
         return _row_to_dataclass(row, Chunk)
     else:
-        logger.warning(f"No chunk found with chunk_name: {chunk_name}")
+        logger.warning("No chunk found in namespace %s with chunk_name %s", namespace, chunk_name)
         return None
 
 
@@ -355,10 +378,8 @@ def get_embedding_count(namespace: str, sqlconn: sqlite3.Connection) -> int:
     select_sql = """
         SELECT COUNT(embedding_vector)
         FROM page_vector
-        INNER JOIN page_log ON page_vector.page_id = page_log.page_id
-        INNER JOIN chunk_log ON chunk_log.chunk_name = page_log.chunk_name
         WHERE embedding_vector IS NOT NULL
-        AND chunk_log.namespace = :namespace
+        AND namespace = :namespace
     """
 
     cursor = sqlconn.execute(select_sql, {"namespace": namespace})
@@ -371,10 +392,8 @@ def get_reduced_vector_count(namespace: str, sqlconn: sqlite3.Connection) -> int
     select_sql = """
         SELECT COUNT(reduced_vector)
         FROM page_vector
-        INNER JOIN page_log ON page_vector.page_id = page_log.page_id
-        INNER JOIN chunk_log ON chunk_log.chunk_name = page_log.chunk_name
         WHERE reduced_vector IS NOT NULL
-        AND chunk_log.namespace = :namespace
+        AND namespace = :namespace
     """
 
     cursor = sqlconn.execute(select_sql, {"namespace": namespace})
@@ -383,71 +402,62 @@ def get_reduced_vector_count(namespace: str, sqlconn: sqlite3.Connection) -> int
 
 
 def get_page_vectors(
-    page_id: int, sqlconn: sqlite3.Connection
+    namespace: str,
+    page_id: int,
+    sqlconn: sqlite3.Connection
 ) -> Optional[PageVectors]:
     select_sql = """
         SELECT page_id, embedding_vector, reduced_vector, cluster_id, three_d_vector
         FROM page_vector
-        WHERE page_id = ?
+        WHERE namespace = ? AND page_id = ?
         LIMIT 1
         """
-    cursor = sqlconn.execute(select_sql, (page_id,))
+    cursor = sqlconn.execute(select_sql, (namespace, page_id,))
     row = cursor.fetchone()
     if row:
         return _row_to_dataclass(row, PageVectors)
     else:
-        logger.warning(f"No page vectors found with page_id: {page_id}")
+        logger.warning("No page vectors found in namespace %s with %d", namespace, page_id)
         return None
 
 
 def store_vector(
-    page_id: int, column: VectorType, np_array: NDArray, sqlconn: sqlite3.Connection
+    namespace: str,
+    page_id: int,
+    column: VectorType,
+    np_array: NDArray,
+    sqlconn: sqlite3.Connection
 ) -> None:
     """
     Serialise a NumPy array as float32 bytes and store it in *column*.
     """
 
     blob = np_array.astype(np.float32).tobytes()
-    sql = f"UPDATE page_vector SET {column} = :blob WHERE page_id = :page_id"
-    logger.debug(f"SQL update statement: {sql}")
+    sql = f"UPDATE page_vector SET {column} = :blob WHERE namespace = :namespace AND page_id = :page_id"
+    logger.debug("SQL update statement: %s", sql)
     try:
-        sqlconn.execute(sql, {"blob": blob, "page_id": page_id})
+        sqlconn.execute(sql, {"blob": blob, "page_id": page_id, "namespace": namespace})
         sqlconn.commit()
     except sqlite3.Error as e:
-        logger.error(f"Failed to store blob for page {page_id}: {e}")
+        logger.error("Failed to store blob in namespace %s for page %d: %s", namespace, page_id, e)
         raise
 
 
 def store_three_d_vector(
-    page_id: int, vector: Vector3D, sqlconn: sqlite3.Connection
+    namespace: str, page_id: int, vector: Vector3D, sqlconn: sqlite3.Connection
 ) -> None:
     """Serialise *data* to JSON and store it in *column*.
 
     Currently used for ``three_d_vector`` (JSON array ``[x, y, z]``).
     """
     json_str = json.dumps(vector)
-    sql = "UPDATE page_vector SET three_d_vector = ? WHERE page_id = ?"
+    sql = "UPDATE page_vector SET three_d_vector = ? WHERE namespace = ? AND page_id = ?"
     try:
-        sqlconn.execute(sql, (json_str, page_id))
+        sqlconn.execute(sql, (json_str, namespace, page_id))
         sqlconn.commit()
     except sqlite3.Error as e:
-        logger.error(f"Failed to store JSON for page {page_id}: {e}")
+        logger.error("Failed to store JSON in namespace %s for page %d: %s", namespace, page_id, e)
         raise
-
-
-def get_page_embeddings(
-    sqlconn: sqlite3.Connection,
-) -> Iterator[tuple[int, Optional[NDArray]]]:
-    """
-    Yield tuples containing ``page_id`` and ``embedding_vector`` in NumPy array form.
-    """
-    sql = "SELECT page_id, embedding_vector FROM page_vector"
-    cursor = sqlconn.execute(sql)
-    for row in cursor:
-        page_id = row["page_id"]
-        vector_blob = row["embedding_vector"]
-        vector = bytes_to_numpy(vector_blob)
-        yield (page_id, vector)
 
 
 def get_page_reduced_vectors(
@@ -458,15 +468,11 @@ def get_page_reduced_vectors(
     Yield tuples containing ``page_id`` and ``reduced_vector`` in NumPy array form.
     """
     sql = """
-        SELECT page_vector.page_id, reduced_vector
+        SELECT page_id, reduced_vector
         FROM page_vector
-        INNER JOIN page_log ON page_vector.page_id = page_log.page_id
-        INNER JOIN chunk_log ON page_log.chunk_name = chunk_log.chunk_name
-        WHERE chunk_log.namespace = ?
+        WHERE namespace = ?
         AND reduced_vector IS NOT NULL
         """
-    # SELECT page_vector.page_id, reduced_vector FROM page_vector INNER JOIN page_log ON page_vector.page_id = page_log.page_id INNER JOIN chunk_log ON page_log.chunk_name = chunk_log.chunk_name WHERE chunk_log.namespace = 'enwiki_namespace_0' AND reduced_vector IS NOT NULL LIMIT 10;
-    # SELECT count(*) FROM page_vector INNER JOIN page_log ON page_vector.page_id = page_log.page_id INNER JOIN chunk_log ON page_log.chunk_name = chunk_log.chunk_name WHERE chunk_log.namespace = 'enwiki_namespace_0' AND reduced_vector IS NOT NULL;
     cursor = sqlconn.execute(sql, (namespace,))
     for row in cursor:
         page_id = row["page_id"]
@@ -476,14 +482,15 @@ def get_page_reduced_vectors(
 
 
 def update_embeddings_for_page(
-    page_id: int, embedding_vector: NDArray, sqlconn: sqlite3.Connection
+    namespace: str, page_id: int, embedding_vector: NDArray, sqlconn: sqlite3.Connection
 ) -> None:
     # convert numpy arrays to bytes for storage
     embedding_vector_bytes = numpy_to_bytes(embedding_vector)
-    prepared_data = {"page_id": page_id, "embedding_vector": embedding_vector_bytes}
+    prepared_data = {"namespace": namespace, "page_id": page_id, "embedding_vector": embedding_vector_bytes}
     update_page_vector_sql = """
-        INSERT INTO page_vector (page_id, embedding_vector) VALUES (:page_id, :embedding_vector)
-        ON CONFLICT(page_id) DO
+        INSERT INTO page_vector (namespace, page_id, embedding_vector)
+        VALUES (:namespace, :page_id, :embedding_vector)
+        ON CONFLICT(namespace, page_id) DO
         UPDATE SET embedding_vector = :embedding_vector WHERE page_id = :page_id;
         """
 
@@ -503,10 +510,15 @@ def update_embeddings_for_page(
         raise
 
 
-def upsert_embeddings_in_batch(pages: list[tuple[int, NDArray]], sqlconn: sqlite3.Connection, batch_size: int = 1000):
-
+def upsert_embeddings_in_batch(
+    namespace: str,
+    pages: list[tuple[int, NDArray]],
+    sqlconn: sqlite3.Connection,
+    batch_size: int = 1000
+):
     page_dict_list = [
         {
+            "namespace": namespace,
             "page_id": page[0],
             "embedding_vector": numpy_to_bytes(page[1])
          }
@@ -514,8 +526,9 @@ def upsert_embeddings_in_batch(pages: list[tuple[int, NDArray]], sqlconn: sqlite
     ]
 
     update_page_vector_sql = """
-        INSERT INTO page_vector (page_id, embedding_vector) VALUES (:page_id, :embedding_vector)
-        ON CONFLICT(page_id) DO
+        INSERT INTO page_vector (namespace, page_id, embedding_vector)
+        VALUES (:namespace, :page_id, :embedding_vector)
+        ON CONFLICT(namespace, page_id) DO
         UPDATE SET embedding_vector = :embedding_vector WHERE page_id = :page_id;
         """
 
@@ -556,7 +569,10 @@ def update_reduced_vector_for_page(
 
 
 def update_three_d_vector_for_page(
-    page_id: int, vector: NDArray, sqlconn: sqlite3.Connection
+    namespace: str,
+    page_id: int,
+    vector: NDArray,
+    sqlconn: sqlite3.Connection
 ) -> None:
     # convert vector to text for storage
     # Handle both numpy arrays and lists
@@ -570,18 +586,23 @@ def update_three_d_vector_for_page(
     vector_text = three_d_vector_to_text(vector_array)
 
     # Debug logging
-    logger.debug(
-        f"Page {page_id}: vector type={type(vector)}, "
-        f"vector_text type={type(vector_text)}, vector_text={repr(vector_text)}"
-    )
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "Page %d: vector type=%s, vector_text type=%s, vector_text=%s",
+            page_id, type(vector), type(vector_text), repr(vector_text)
+        )
 
     if vector_text is None:
         logger.warning(f"Vector text is None for page {page_id}, vector={vector}")
-        vector_text = json.dumps([0.0, 0.0, 0.0])  # Fallback to zero vector
+        # vector_text = json.dumps([0.0, 0.0, 0.0])  # Fallback to zero vector
 
-    prepared_data = {"page_id": page_id, "vector_text": vector_text}
+    prepared_data = {"namespace": namespace, "page_id": page_id, "vector_text": vector_text}
     update_page_vector_sql = (
-        "UPDATE page_vector SET three_d_vector = :vector_text WHERE page_id = :page_id;"
+        """
+        UPDATE page_vector
+        SET three_d_vector = :vector_text
+        WHERE namespace = :namespace AND page_id = :page_id;
+        """
     )
 
     try:
@@ -628,12 +649,14 @@ def update_cluster_centroid(
 
 
 def get_page_ids_needing_embedding_for_chunk(
-    chunk_name: str, sqlconn: sqlite3.Connection
+    chunk_name: str,
+    sqlconn: sqlite3.Connection,
+    namespace: Optional[str]
 ) -> list[int]:
     select_sql = """
         SELECT page_id
         FROM page_log
-        LEFT OUTER JOIN page_vector USING(page_id)
+        LEFT OUTER JOIN page_vector USING(namespace, page_id)
         WHERE chunk_name = :chunk_name
         AND embedding_vector IS NULL
         ORDER BY page_id ASC;
@@ -644,20 +667,19 @@ def get_page_ids_needing_embedding_for_chunk(
     return page_id_list
 
 
-def get_clusters_needing_projection(sqlconn: sqlite3.Connection,
-                                    namespace: str,
-                                    limit: Optional[int],
-                                    ) -> list[tuple[int, int]]:
+def get_clusters_needing_projection(
+    sqlconn: sqlite3.Connection,
+    namespace: str,
+    limit: Optional[int],
+) -> list[tuple[int, int]]:
     select_sql = f"""
-        SELECT page_vector.cluster_id, COUNT(page_vector.page_id)
+        SELECT cluster_id, COUNT(page_id)
         FROM page_vector
-        INNER JOIN page_log ON page_vector.page_id = page_log.page_id
-        INNER JOIN chunk_log ON page_log.chunk_name = chunk_log.chunk_name
-        WHERE page_vector.three_d_vector IS NULL
-        AND page_vector.cluster_id IS NOT NULL
-        AND chunk_log.namespace = :namespace
-        GROUP BY page_vector.cluster_id
-        ORDER BY page_vector.cluster_id ASC
+        WHERE three_d_vector IS NULL
+        AND cluster_id IS NOT NULL
+        AND namespace = :namespace
+        GROUP BY cluster_id
+        ORDER BY cluster_id ASC
         {f'LIMIT {limit}' if limit else ''}
         """
     cursor = sqlconn.execute(select_sql, {'namespace': namespace})
@@ -665,16 +687,17 @@ def get_clusters_needing_projection(sqlconn: sqlite3.Connection,
     return [(row[0], row[1]) for row in rows]
 
 
-def get_reduced_vectors_for_cluster(sqlconn: sqlite3.Connection, namespace: str, cluster_id: int
-                                    ) -> list[tuple[int, bytes]]:
+def get_reduced_vectors_for_cluster(
+    sqlconn: sqlite3.Connection,
+    namespace: str,
+    cluster_id: int
+) -> list[tuple[int, bytes]]:
     select_sql = """
-        SELECT page_vector.page_id, page_vector.reduced_vector
+        SELECT page_id, reduced_vector
         FROM page_vector
-        INNER JOIN page_log ON page_vector.page_id = page_log.page_id
-        INNER JOIN chunk_log ON page_log.chunk_name = chunk_log.chunk_name
-        WHERE page_vector.cluster_id = :cluster_id
-        AND chunk_log.namespace = :namespace
-        ORDER BY page_vector.page_id ASC
+        WHERE cluster_id = :cluster_id
+        AND namespace = :namespace
+        ORDER BY page_id ASC
         """
     cursor = sqlconn.execute(select_sql, {'namespace': namespace, 'cluster_id': cluster_id})
     rows = cursor.fetchall()
@@ -729,6 +752,7 @@ def insert_cluster_tree_node(
         logger.error(f"Failed to retrieve most recently generated cluster_tree ID: {e}")
         raise
 
+
 def update_cluster_tree_child_count(
     namespace: str,
     node_id: int,
@@ -754,7 +778,7 @@ def update_cluster_tree_child_count(
 def _row_to_ctn_dict(row) -> dict:
     result = dict()
     for key in ["node_id", "namespace", "parent_id", "child_count", "depth", "doc_count",
-            "first_label", "final_label"]:
+                "first_label", "final_label"]:
         result[key] = row[key]
     result['centroid'] = bytes_to_numpy(row['centroid']) if row['centroid'] else None
     result['top_terms'] = json.loads(row['top_terms']) if row['top_terms'] else None
@@ -803,7 +827,8 @@ def get_cluster_tree_node_by_id(
 def get_cluster_tree_root_nodes(sqlconn: sqlite3.Connection) -> List[ClusterTreeNode]:
     """Get all root nodes (nodes with no parent) from cluster_tree."""
     sql = """
-        SELECT namespace, node_id, parent_id, depth, centroid, doc_count, top_terms, sample_doc_ids, child_count, first_label, final_label
+        SELECT namespace, node_id, parent_id, depth, centroid, doc_count, top_terms,
+                sample_doc_ids, child_count, first_label, final_label
         FROM cluster_tree
         WHERE parent_id IS NULL
         ORDER BY namespace ASC, node_id ASC

@@ -16,9 +16,8 @@ operate directly on the SQLite database via the helper utilities defined in
 from __future__ import annotations
 
 import logging
-import json
 import math
-from typing import Iterable, Iterator, List, Optional, Dict, Any
+from typing import Iterable, List, Optional
 
 import sqlite3
 import numpy as np
@@ -35,16 +34,14 @@ from database import (
     update_three_d_vector_for_page,
     insert_cluster_tree_node,
     update_cluster_tree_child_count,
-    get_cluster_tree_nodes_by_parent,
     get_cluster_tree_max_node_id,
     get_page_reduced_vectors,
-    get_embedding_count,
     numpy_to_bytes,
 )
 from progress_utils import ProgressTracker
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # we are logging here because these import statements are sooooo slooooow
 logger.info("Initializing scikit-learn...")
@@ -299,7 +296,7 @@ def run_umap_per_cluster(
         three_space_vectors = reducer.fit_transform(vectors).astype(np.float32)  # type: ignore
         # Store each 3-D vector as JSON.
         for pid, vec in zip(page_ids, three_space_vectors):
-            update_three_d_vector_for_page(pid, vec.tolist(), sqlconn)
+            update_three_d_vector_for_page(namespace, pid, vec.tolist(), sqlconn)
         # Update centroid in cluster_info.
         centroid = three_space_vectors.mean(axis=0).tolist()
         sqlconn.execute(
@@ -430,11 +427,9 @@ def _recursive_cluster_node(
 
     # Check stopping conditions
     if (doc_count <= leaf_target or
-        depth >= max_depth):
+            depth >= max_depth):
         logger.debug("Node %s is a leaf (doc_count=%s, depth=%s)", node_id, doc_count, depth)
         return 1
-
-
 
     logger.debug("Processing %s vectors for node %s", len(page_vectors), node_id)
 
@@ -458,7 +453,7 @@ def _recursive_cluster_node(
 
         if silhouette_avg < min_silhouette_threshold:
             logger.debug("Node %s has poor clustering quality (silhouette=%s < %s), stopping recursion",
-                        node_id, silhouette_avg, min_silhouette_threshold)
+                         node_id, silhouette_avg, min_silhouette_threshold)
             return 1
     except Exception as e:
         logger.warning("Could not calculate silhouette score for node %s: %s", node_id, e)
@@ -508,7 +503,7 @@ def _recursive_cluster_node(
         assert child_node_id == inserted_node_id
 
         # Recursively process child node
-        descendant_nodes_processed += _recursive_cluster_node(
+        recursive_descendant_nodes_processed = _recursive_cluster_node(
             sqlconn=sqlconn,
             namespace=namespace,
             page_ids=cluster_page_ids,
@@ -524,6 +519,12 @@ def _recursive_cluster_node(
             batch_size=batch_size,
             tracker=tracker
         )
+        descendant_nodes_processed += recursive_descendant_nodes_processed
+
+        # if child was a leaf, assign the pages to it
+        if recursive_descendant_nodes_processed == 1:
+            # update_cluster_tree_assignments(sqlconn, namespace, cluster_vectors)
+            pass
 
     # Update child count for parent node
     update_cluster_tree_child_count(namespace, node_id, child_nodes_processed, sqlconn)
@@ -534,5 +535,3 @@ def _recursive_cluster_node(
 
     # Return total nodes processed (1 for this node + all child nodes)
     return descendant_nodes_processed
-
-

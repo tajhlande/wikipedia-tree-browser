@@ -93,6 +93,7 @@ OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT = Argument(name="limit", type="integer",
 CHECK = "✓"
 X = "✗"
 
+
 class Command(ABC):
     """Abstract base class for all commands."""
 
@@ -324,7 +325,11 @@ class RefreshChunkDataCommand(Command):
             )
             count = cursor.fetchone()["count"]
 
-            return Result.SUCCESS, f"{CHECK} Refreshed chunk data for namespace: {namespace}\nFound {count} chunks in namespace {namespace}"
+            return (
+                Result.SUCCESS,
+                f"{CHECK} Refreshed chunk data for namespace: {namespace}\n"
+                f"Found {count} chunks in namespace {namespace}"
+            )
 
         except Exception as e:
             logger.error(f"Failed to refresh chunk data: {e}")
@@ -555,7 +560,7 @@ class UnpackProcessChunksCommand(Command):
                             "Parsing chunk file", total=file_line_count, unit="pages"
                         ) as tracker:
                             line_count = parse_chunk_file(
-                                sqlconn, chunk_name, chunk_file_path, tracker
+                                sqlconn, chunk_namespace, chunk_name, chunk_file_path, tracker
                             )
                         logger.debug(
                             "Parsed %d pages from chunk file %s",
@@ -599,9 +604,11 @@ class UnpackProcessChunksCommand(Command):
                     logger.error(f"Failed to unpack {chunk_name}: {e}")
                     continue
 
-            return (Result.SUCCESS,  f"{CHECK} Unpacked and processed {processed_count} chunk(s). "
-                f"Processed {total_pages} pages from {processed_count} chunks")
-
+            return (
+                Result.SUCCESS,
+                f"{CHECK} Unpacked and processed {processed_count} chunk(s). "
+                f"Processed {total_pages} pages from {processed_count} chunks"
+            )
 
         except Exception as e:
             logger.error(f"Failed to unpack chunks: {e}")
@@ -615,7 +622,11 @@ class EmbedPagesCommand(Command):
         super().__init__(
             name="embed",
             description="Process remaining pages for embedding computation",
-            expected_args=[OPTIONAL_CHUNK_NAME_ARGUMENT, OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT]
+            expected_args=[
+                OPTIONAL_NAMESPACE_ARGUMENT,
+                OPTIONAL_CHUNK_NAME_ARGUMENT,
+                OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT
+            ]
         )
         embedding_model_name, embedding_model_api_url, embedding_model_api_key = (
             get_embedding_model_config()
@@ -625,11 +636,17 @@ class EmbedPagesCommand(Command):
         self.embedding_model_api_key = embedding_model_api_key
 
     def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+        namespace = args.get(OPTIONAL_NAMESPACE_ARGUMENT.name)
         chunk_name = args.get(OPTIONAL_CHUNK_NAME_ARGUMENT.name)
+
+        if chunk_name and not namespace:
+            return Result.FAILURE, f"{X} --namespace is required when --chunk_name is provided"
+
         limit = args.get(OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT.name, OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT.default)
 
         logger.info(
-            "Computing embeddings for pages%s%s...",
+            "Computing embeddings for pages%s%s%s...",
+            f" in namespace {namespace}" if namespace else "",
             f" in chunk {chunk_name}" if chunk_name else "",
             f" with limit {limit}" if limit else "",
         )
@@ -647,7 +664,7 @@ class EmbedPagesCommand(Command):
 
             if chunk_name:
                 # Process specific chunk
-                page_ids = get_page_ids_needing_embedding_for_chunk(chunk_name, sqlconn)
+                page_ids = get_page_ids_needing_embedding_for_chunk(chunk_name, sqlconn, namespace=namespace)
 
                 if limit:
                     pages_to_process = min(len(page_ids), limit)
@@ -682,10 +699,12 @@ class EmbedPagesCommand(Command):
                     total=pages_to_process,
                     unit="pages",
                 ) as tracker:
+                    assert namespace is not None
                     compute_embeddings_for_chunk(
-                        chunk_name,
-                        embedding_function,
-                        sqlconn,
+                        namespace=namespace,
+                        chunk_name=chunk_name,
+                        embedding_function=embedding_function,
+                        sqlconn=sqlconn,
                         limit=pages_to_process,
                         tracker=tracker,
                     )
@@ -699,22 +718,33 @@ class EmbedPagesCommand(Command):
                     f"up to {limit} " if limit else "",
                 )
 
-                cursor = sqlconn.execute(
+                if namespace:
+                    sql = """
+                        SELECT DISTINCT namespace, chunk_name
+                        FROM page_log
+                        LEFT JOIN page_vector ON page_log.page_id = page_vector.page_id
+                        WHERE namespace = ? AND page_vector.embedding_vector IS NULL
+                        ORDER BY chunk_name ASC;
                     """
-                    SELECT DISTINCT chunk_name
-                    FROM page_log
-                    LEFT JOIN page_vector ON page_log.page_id = page_vector.page_id
-                    WHERE page_vector.embedding_vector IS NULL;
+                    cursor = sqlconn.execute(sql, (namespace))
+                else:
+                    sql = """
+                        SELECT DISTINCT namespace, chunk_name
+                        FROM page_log
+                        LEFT JOIN page_vector ON page_log.page_id = page_vector.page_id
+                        WHERE page_vector.embedding_vector IS NULL
+                        ORDER BY namespace ASC, chunk_name ASC;
                     """
-                )
-                chunk_name_list = [row["chunk_name"] for row in cursor.fetchall()]
+                    cursor = sqlconn.execute(sql)
+
+                chunk_name_list = [(row["namespace"], row["chunk_name"]) for row in cursor.fetchall()]
 
                 if not chunk_name_list:
                     return Result.FAILURE, f"{X} No pages needing embeddings"
 
                 total_processed = 0
 
-                for chunk_name in chunk_name_list:
+                for chunk_namespace, chunk_name in chunk_name_list:
                     try:
                         # Check if we have remaining limit capacity
                         if limit and total_processed >= limit:
@@ -722,7 +752,7 @@ class EmbedPagesCommand(Command):
 
                         # Get pages needing embeddings for this chunk
                         page_ids = get_page_ids_needing_embedding_for_chunk(
-                            chunk_name, sqlconn
+                            chunk_name=chunk_name, sqlconn=sqlconn, namespace=chunk_namespace,
                         )
 
                         if not page_ids:
@@ -760,9 +790,10 @@ class EmbedPagesCommand(Command):
                                 unit="pages",
                             ) as tracker:
                                 compute_embeddings_for_chunk(
-                                    chunk_name,
-                                    embedding_function,
-                                    sqlconn,
+                                    namespace=chunk_namespace,
+                                    chunk_name=chunk_name,
+                                    embedding_function=embedding_function,
+                                    sqlconn=sqlconn,
                                     limit=pages_to_process,
                                     tracker=tracker,
                                 )
@@ -775,7 +806,10 @@ class EmbedPagesCommand(Command):
                         logger.exception(f"Failed to process chunk {chunk_name}: {e}")
                         continue
 
-                return Result.SUCCESS, f"{CHECK} Embedded {total_processed} pages across {len(chunk_name_list)} chunk(s)"
+                return (
+                    Result.SUCCESS,
+                    f"{CHECK} Embedded {total_processed} pages across {len(chunk_name_list)} chunk(s)"
+                )
 
         except Exception as e:
             logger.exception(f"Failed to process pages: {e}")
@@ -854,9 +888,9 @@ class ReduceCommand(Command):
 LEAF_TARGET_ARGUMENT = Argument(name="leaf-target", type="integer", required=False, default=50,
                                 description="Target number of documents per leaf cluster")
 MAX_K_ARGUMENT = Argument(name="max-k", type="integer", required=False, default=50,
-                         description="Maximum number of clusters to create at each level")
+                          description="Maximum number of clusters to create at each level")
 MAX_DEPTH_ARGUMENT = Argument(name="max-depth", type="integer", required=False, default=10,
-                             description="Maximum depth for recursion")
+                              description="Maximum depth for recursion")
 MIN_SILHOUETTE_ARGUMENT = Argument(name="min-silhouette", type="float", required=False, default=0.1,
                                    description="Minimum silhouette score to continue clustering")
 CLUSTER_COUNT_ARGUMENT = Argument(name="clusters", type="integer", required=False, default=10_000,
@@ -907,7 +941,10 @@ class ClusterCommand(Command):
                     tracker=tracker,
                 )
 
-            return Result.SUCCESS, f"{CHECK} Clustered reduced page embeddings in namespace {namespace} using incremental K-means"
+            return (
+                Result.SUCCESS,
+                f"{CHECK} Clustered reduced page embeddings in namespace {namespace} using incremental K-means"
+            )
         except Exception as e:
             logger.error(f"Failed to cluster embeddings: {e}")
             return Result.FAILURE, f"{X} Failed to cluster embeddings: {e}"
@@ -947,7 +984,8 @@ class RecursiveClusterCommand(Command):
             ensure_tables(sqlconn)
 
             print(f"Running recursive clustering on namespace {namespace}")
-            print(f"Parameters: leaf-target={leaf_target}, max-k={max_k}, max-depth={max_depth}, min-silhouette={min_silhouette}, batch-size={batch_size}")
+            print(f"Parameters: leaf-target={leaf_target}, max-k={max_k}, max-depth={max_depth}, "
+                  f"min-silhouette={min_silhouette}, batch-size={batch_size}")
 
             with ProgressTracker(description="Recursive clustering", unit=" nodes") as tracker:
                 nodes_created = run_recursive_clustering(
@@ -971,28 +1009,29 @@ class RecursiveClusterCommand(Command):
             return Result.FAILURE, f"{X} Failed to run recursive clustering: {e}"
 
 
-class LabelClustersCommand(Command):
-    """Use an LLM to label clusters according to their content"""
+# class LabelClustersCommand(Command):
+#     """Use an LLM to label clusters according to their content"""
 
-    def __init__(self):
-        super().__init__(
-            name="label-clusters",
-            description="Use an LLM to label clusters according to their content.",
-            expected_args=[
-                REQUIRED_NAMESPACE_ARGUMENT
-            ]
-        )
+#     def __init__(self):
+#         super().__init__(
+#             name="label-clusters",
+#             description="Use an LLM to label clusters according to their content.",
+#             expected_args=[
+#                 REQUIRED_NAMESPACE_ARGUMENT,
+#                 OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT
+#             ]
+#         )
 
-    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
-        try:
-            namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
-            return Result.SUCCESS, f"{CHECK}"
+#     def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+#         try:
+#             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
+#             limit = args[OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT.name]
 
+#             return Result.SUCCESS, f"{CHECK}"
 
-
-        except Exception as e:
-            logger.exception(f"Failed to label clusters: {e}")
-            return Result.FAILURE, f"{X} Failed to label clusters: {e}"
+#         except Exception as e:
+#             logger.exception(f"Failed to label clusters: {e}")
+#             return Result.FAILURE, f"{X} Failed to label clusters: {e}"
 
 
 class ProjectCommand(Command):
@@ -1339,18 +1378,18 @@ class CommandInterpreter:
         command = self.parser.commands.get(command_name)
         if command:
             for arg in command.get_required_args():
-                    if arg.type == "integer":
-                        parser.add_argument(
-                            f"--{arg.name}", type=int, required=True, help=f"Required argument: {arg.name}"
-                        )
-                    elif arg.type == "float":
-                        parser.add_argument(
-                            f"--{arg.name}", type=float, required=True, help=f"Required argument: {arg.name}"
-                        )
-                    else:
-                        parser.add_argument(
-                            f"--{arg.name}", required=True, help=f"Required argument: {arg.name}"
-                        )
+                if arg.type == "integer":
+                    parser.add_argument(
+                        f"--{arg.name}", type=int, required=True, help=f"Required argument: {arg.name}"
+                    )
+                elif arg.type == "float":
+                    parser.add_argument(
+                        f"--{arg.name}", type=float, required=True, help=f"Required argument: {arg.name}"
+                    )
+                else:
+                    parser.add_argument(
+                        f"--{arg.name}", required=True, help=f"Required argument: {arg.name}"
+                    )
 
             for arg in command.get_optional_args():
                 if arg.type == "integer":

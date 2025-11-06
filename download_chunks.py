@@ -197,6 +197,7 @@ def count_lines_in_file(file_path: str) -> int:
 
 def parse_chunk_file(
     sqlconn: sqlite3.Connection,
+    namespace: str,
     chunk_name: str,
     chunk_file_path: str,
     tracker: Optional[ProgressTracker] = None,
@@ -231,6 +232,7 @@ def parse_chunk_file(
                 if page_id is None:
                     raise ValueError(f"Can't get page id from raw page: {line[:100]}...")
                 page = Page(
+                    namespace=namespace,
                     page_id=page_id,
                     title=raw_page_data.get("name"),
                     chunk_name=chunk_name,
@@ -353,7 +355,7 @@ def process_one_chunk():
 
     sqlconn = get_sql_conn()
     parse_chunk_file(
-        sqlconn, chunk_name, os.path.join(extracted_chunk_path, extracted_file_name)
+        sqlconn, namespace, chunk_name, os.path.join(extracted_chunk_path, extracted_file_name)
     )
 
 

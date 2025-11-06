@@ -4,6 +4,7 @@ from typing import Optional
 
 from numpy.typing import NDArray
 
+
 @dataclass
 class Chunk:
     chunk_name: str
@@ -16,6 +17,7 @@ class Chunk:
 
 @dataclass
 class Page:
+    namespace: str
     page_id: int
     title: str
     chunk_name: str
@@ -29,6 +31,7 @@ class Page:
 
 @dataclass
 class PageVectors:
+    namespace: str
     page_id: int
     embedding_vector: Optional[bytes] = None  # Stored as a blob
     reduced_vector: Optional[bytes] = None  # Stored as a blob
