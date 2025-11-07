@@ -846,11 +846,10 @@ def get_cluster_tree_max_node_id(sqlconn: sqlite3.Connection) -> int:
     return row[0] if row[0] else 0
 
 
-def update_cluster_tree_node_first_label(
+def update_cluster_tree_first_labels(
         sqlconn: sqlite3.Connection,
         namespace: str,
-        node_id: int,
-        first_label: str
+        cluster_ids_and_labels: list[tuple[int, Optional[str]]]
         ) -> None:
     """Update the first_label for the given cluster tree node."""
     sql = """
@@ -859,8 +858,9 @@ def update_cluster_tree_node_first_label(
         WHERE namespace = ? AND node_id = ?
     """
     try:
+        params = [(id_and_label[1], namespace, id_and_label[0]) for id_and_label in cluster_ids_and_labels]
         cursor = sqlconn.cursor()
-        cursor.execute(sql, (first_label, namespace, node_id))
+        cursor.executemany(sql, params)
         sqlconn.commit()
     except sqlite3.Error as e:
         try:
@@ -868,7 +868,33 @@ def update_cluster_tree_node_first_label(
         except Exception as e1:
             logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
             pass
-        logger.exception(f"Failed to update first_label for cluster_tree node {node_id}: {e}")
+        logger.exception(f"Failed to update first labels for namespace {namespace}: {e}")
+        raise
+
+
+def update_cluster_tree_final_labels(
+        sqlconn: sqlite3.Connection,
+        namespace: str,
+        cluster_ids_and_labels: list[tuple[int, Optional[str]]]
+        ) -> None:
+    """Update the first_label for the given cluster tree node."""
+    sql = """
+        UPDATE cluster_tree
+        SET final_label = ?
+        WHERE namespace = ? AND node_id = ?
+    """
+    try:
+        params = [(id_and_label[1], namespace, id_and_label[0]) for id_and_label in cluster_ids_and_labels]
+        cursor = sqlconn.cursor()
+        cursor.executemany(sql, params)
+        sqlconn.commit()
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to update final labels for namespace {namespace}: {e}")
         raise
 
 
@@ -926,4 +952,179 @@ def delete_cluster_tree(sqlconn: sqlite3.Connection, namespace: str):
             logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
             pass
         logger.exception(f"Failed to delete cluster tree for namespace {namespace}: {e}")
+        raise
+
+
+def get_leaf_cluster_node_count(sqlconn: sqlite3.Connection, namespace: str) -> int:
+    """Get the count of the number of leaf cluster nodes that have pages"""
+    sql = """
+        SELECT COUNT(distinct cluster_node_id)
+        FROM page_vector
+        WHERE namespace = ?
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace,))
+        row = cursor.fetchone()
+        return row[0]
+
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to count leaf cluster nodes for namespace {namespace}: {e}")
+        raise
+
+
+def get_leaf_cluster_node_ids(sqlconn: sqlite3.Connection, namespace: str) -> list[int]:
+    """Get the list of leaf cluster node ids that have pages"""
+    sql = """
+        SELECT distinct cluster_node_id
+        FROM page_vector
+        WHERE namespace = ?
+        ORDER BY cluster_node_id ASC
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace,))
+        rows = cursor.fetchall()
+        return [row[0] for row in rows]
+
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to get leaf cluster node ids for namespace {namespace}: {e}")
+        raise
+
+
+def get_pages_in_cluster(sqlconn: sqlite3.Connection, namespace: str, node_id: int) -> list[Page]:
+    """Get the list of page_ids for the given cluster node"""
+    sql = """
+        SELECT pl.namespace, pl.page_id, pl.title, pl.chunk_name, pl.url, pl.extracted_at, pl.abstract
+        FROM page_log pl
+        INNER JOIN page_vector pv on pl.namespace = pv.namespace and pl.page_id = pv.page_id
+        WHERE pl.namespace = ?
+        AND pv.cluster_node_id = ?
+        ORDER BY pl.page_id ASC
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace, node_id, ))
+        rows = cursor.fetchall()
+        return [_row_to_dataclass(row, Page) for row in rows]
+
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to get pages for cluster node {node_id} in namespace {namespace}: {e}")
+        raise
+
+
+def get_cluster_parent_id(sqlconn: sqlite3.Connection, namespace: str, node_id: int) -> Optional[int]:
+    """Get the id of the cluster node's parent node."""
+    sql = """
+        SELECT parent_id
+        FROM cluster_tree
+        WHERE namespace = ?
+        AND node_id = ?
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace, node_id,))
+        row = cursor.fetchone()
+        return row[0]
+
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to get parent id for cluster in {namespace} with node id {node_id}: {e}")
+        raise
+
+
+def get_neighboring_first_topics(sqlconn: sqlite3.Connection,
+                                 namespace: str,
+                                 node_id: int,
+                                 parent_node_id: int) -> list[str]:
+    """Get the list of first_topics for the given cluster node"""
+    sql = """
+        SELECT first_label
+        FROM cluster_tree
+        WHERE namespace = ?
+        AND parent_id = ?
+        AND node_id <> ?
+        AND first_label IS NOT NULL
+        ORDER BY node_id ASC
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace, parent_node_id, node_id))
+        rows = cursor.fetchall()
+        return [row[0] for row in rows]
+
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to get list of first_topics for cluster node {node_id} in namespace {namespace}: {e}")
+        raise
+
+
+def get_cluster_node_first_pass_topic(sqlconn: sqlite3.Connection, namespace: str, node_id: int) -> str:
+    """Get the first pass topic for a given cluster node"""
+    sql = """
+        SELECT first_label
+        FROM cluster_tree
+        WHERE namespace = ?
+        AND node_id = ?
+        ORDER BY node_id ASC
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace, node_id, ))
+        row = cursor.fetchone()
+        return row[0]
+
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to get first topic for cluster node {node_id} in namespace {namespace}: {e}")
+        raise
+
+
+def get_cluster_final_topics(sqlconn: sqlite3.Connection, namespace: str) -> list[tuple[int, int, str]]:
+    sql = """
+        SELECT parent_id, node_id, first_label
+        FROM cluster_tree
+        WHERE namespace = ?
+        ORDER BY parent_id ASC
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace, ))
+        rows = cursor.fetchall()
+        return [(row[0], row[1], row[2], ) for row in rows]
+
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to get final topics for cluster in namespace {namespace}: {e}")
         raise

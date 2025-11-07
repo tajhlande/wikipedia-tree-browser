@@ -8,7 +8,7 @@ from openai import OpenAI
 from classes import Page
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 TOPIC_GENERATION_SYSTEM_PROMPT = " ".join("""
     You are a multi-lingual summarization assistant.
@@ -61,7 +61,7 @@ class TopicDiscovery:
             )
 
     def summarize_page_topics(self, page_list: list[Page]) -> Optional[str]:
-        # let's just use page titles for now. we will introduce page abstract content later if we need it
+        # TODO let's just use page titles for now. we will introduce page abstract content later if we need it
         submitted_titles = ", ".join([page.title for page in page_list])
 
         prompt = " ".join(f"""
@@ -71,7 +71,7 @@ class TopicDiscovery:
             Only use punctuation as appropriate for the words in the topic.
             You do not need to produce a complete sentence and should not end the topic with a period
             or other sentence terminator.
-            The topics are: {submitted_titles}.
+            The page titles are: {submitted_titles}.
         """.split())
 
         logger.debug("Prompt: %s", prompt)
@@ -79,11 +79,8 @@ class TopicDiscovery:
         completion = self._openai_client.chat.completions.create(
             model=self.model_name,
             messages=[
-                {"role": "developer", "content": TOPIC_GENERATION_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
+                {"role": "developer", "content": TOPIC_GENERATION_SYSTEM_PROMPT, },
+                {"role": "user", "content": prompt, },
             ],
         )
 
@@ -96,3 +93,36 @@ class TopicDiscovery:
         # )
 
         # return response.output_text
+
+    def adversely_summarize_page_topics(self,
+                                        page_list: list[Page],
+                                        neighboring_topics_list: list[str]
+                                        ) -> Optional[str]:
+        # TODO let's just use page titles for now. we will introduce page abstract content later if we need it
+        submitted_titles = ", ".join([page.title for page in page_list])
+        neighboring_topics = ", ".join(neighboring_topics_list)
+
+        prompt = " ".join(f"""
+            Describe the best common topic for the following page titles.
+            Consider also the neighboring topics, and how best to ensure the generated topic
+            remains distinct from the neighboring topics, or at least as distinct is reasonable.
+            Only generate a topic, in a few words or word-equivalents if the language is non-Latin.
+            Do not generate any other text besides the topic.
+            Only use punctuation as appropriate for the words in the topic.
+            You do not need to produce a complete sentence and should not end the topic with a period
+            or other sentence terminator.
+            The page titles are: {submitted_titles}.
+            The neighboring topics from which the generated topic should be distinct are: {neighboring_topics}.
+        """.split())
+
+        logger.debug("Prompt: %s", prompt)
+
+        completion = self._openai_client.chat.completions.create(
+            model=self.model_name,
+            messages=[
+                {"role": "developer", "content": TOPIC_GENERATION_SYSTEM_PROMPT, },
+                {"role": "user", "content": prompt, },
+            ],
+        )
+
+        return completion.choices[0].message.content

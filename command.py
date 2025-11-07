@@ -7,16 +7,24 @@ import readline
 import sys
 from abc import ABC, abstractmethod
 from enum import IntEnum
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 # Import existing modules
 from database import (
     delete_cluster_tree,
+    get_cluster_node_first_pass_topic,
+    get_cluster_parent_id,
     get_embedding_count,
+    get_leaf_cluster_node_count,
+    get_leaf_cluster_node_ids,
+    get_neighboring_first_topics,
+    get_pages_in_cluster,
     get_reduced_vector_count,
     get_sql_conn,
     ensure_tables,
     get_page_ids_needing_embedding_for_chunk,
+    update_cluster_tree_final_labels,
+    update_cluster_tree_first_labels,
 )
 from download_chunks import (
     count_lines_in_file,
@@ -33,6 +41,7 @@ from index_pages import (
     get_embedding_model_config,
 )
 from progress_utils import ProgressTracker
+from topic_discovery import TopicDiscovery
 from transform import run_kmeans, run_pca, run_umap_per_cluster, run_recursive_clustering
 
 logging.basicConfig(
@@ -1012,29 +1021,69 @@ class RecursiveClusterCommand(Command):
             return Result.FAILURE, f"{X} Failed to run recursive clustering: {e}"
 
 
-# class LabelClustersCommand(Command):
-#     """Use an LLM to label clusters according to their content"""
+class TopicsCommand(Command):
+    """Use an LLM to discover topics for clusters according to their page content."""
 
-#     def __init__(self):
-#         super().__init__(
-#             name="label-clusters",
-#             description="Use an LLM to label clusters according to their content.",
-#             expected_args=[
-#                 REQUIRED_NAMESPACE_ARGUMENT,
-#                 OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT
-#             ]
-#         )
+    def __init__(self):
+        super().__init__(
+            name="topics",
+            description="Use an LLM to discover topics for clusters according to their page content.",
+            expected_args=[
+                REQUIRED_NAMESPACE_ARGUMENT
+            ]
+        )
 
-#     def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
-#         try:
-#             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
-#             limit = args[OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT.name]
+    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+        try:
+            namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
 
-#             return Result.SUCCESS, f"{CHECK}"
+            sqlconn = get_sql_conn()
+            topic_discovery = TopicDiscovery.get_from_env()
 
-#         except Exception as e:
-#             logger.exception(f"Failed to label clusters: {e}")
-#             return Result.FAILURE, f"{X} Failed to label clusters: {e}"
+            cluster_count = get_leaf_cluster_node_count(sqlconn, namespace)
+            first_topic_list: list[tuple[int, Optional[str]]] = []
+
+            with ProgressTracker(description="Cluster topic pass 1/2",
+                                 unit="cluster",
+                                 total=cluster_count) as tracker:
+                node_id_list = get_leaf_cluster_node_ids(sqlconn, namespace)
+                for node_id in node_id_list:
+                    page_list = get_pages_in_cluster(sqlconn, namespace, node_id)
+                    first_pass_topic = topic_discovery.summarize_page_topics(page_list)
+                    first_topic_list.append((node_id, first_pass_topic, ))
+                    tracker.update(1)
+
+                update_cluster_tree_first_labels(sqlconn, namespace, first_topic_list)
+
+            final_topic_list: list[tuple[int, Optional[str]]] = []
+            with ProgressTracker(description="Cluster topic pass 2/2",
+                                 unit="cluster",
+                                 total=cluster_count) as tracker:
+                node_id_list = get_leaf_cluster_node_ids(sqlconn, namespace)
+                for node_id in node_id_list:
+                    page_list = get_pages_in_cluster(sqlconn, namespace, node_id)
+                    parent_node_id = get_cluster_parent_id(sqlconn, namespace, node_id)
+                    if parent_node_id is None:
+                        final_pass_topic = get_cluster_node_first_pass_topic(sqlconn, namespace, node_id)
+                    else:
+                        neighbor_topic_list = get_neighboring_first_topics(
+                            sqlconn, namespace, node_id=node_id, parent_node_id=parent_node_id)
+                        # logger.info("\nNeighboring topic list: %s", json.dumps(neighbor_topic_list))
+                        if not neighbor_topic_list:
+                            final_pass_topic = get_cluster_node_first_pass_topic(sqlconn, namespace, node_id)
+                        else:
+                            final_pass_topic = topic_discovery.adversely_summarize_page_topics(
+                                page_list, neighbor_topic_list)
+                    final_topic_list.append((node_id, final_pass_topic, ))
+                    tracker.update(1)
+
+                update_cluster_tree_final_labels(sqlconn, namespace, final_topic_list)
+
+            return Result.SUCCESS, f"{CHECK} Completed cluster topic discovery for namespace {namespace}."
+
+        except Exception as e:
+            logger.exception(f"Failed to discover cluster topics: {e}")
+            return Result.FAILURE, f"{X} Failed to discover cluster topics: {e}"
 
 
 class ProjectCommand(Command):
@@ -1310,6 +1359,7 @@ class CommandInterpreter:
         self.parser.register_command(ClusterCommand())
         self.parser.register_command(RecursiveClusterCommand())
         self.parser.register_command(ProjectCommand())
+        self.parser.register_command(TopicsCommand())
         self.parser.register_command(StatusCommand())
         self.parser.register_command(HelpCommand(self.parser))
 

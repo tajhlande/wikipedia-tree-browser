@@ -1,13 +1,20 @@
 import logging
 
 from classes import Page
-from database import get_sql_conn, _row_to_dataclass
+from database import (
+    get_cluster_node_first_pass_topic,
+    get_cluster_parent_id,
+    get_neighboring_first_topics,
+    get_pages_in_cluster,
+    get_sql_conn,
+    _row_to_dataclass
+)
 from topic_discovery import TopicDiscovery
 
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 
 def test_topic_summary_llm_call():
@@ -37,5 +44,41 @@ def test_topic_summary_llm_call():
     logger.info("Summarized topic: %s", topic)
 
 
+def test_adverse_topic_summary():
+    """
+    Some leaf cluster IDs:
+        3
+        5
+        7
+        8
+        11
+        12
+        13
+        15
+        16
+        17
+    """
+
+    sqlconn = get_sql_conn()
+    namespace = "enwiki_namespace_0"
+    cluster_id = 3
+    parent_id = get_cluster_parent_id(sqlconn, namespace, cluster_id)
+    assert parent_id is not None
+    logger.debug(f"finding adverse topic for cluster {cluster_id} with parent {parent_id}")
+    first_topic = get_cluster_node_first_pass_topic(sqlconn, namespace, cluster_id)
+    logger.debug(f"First pass topic: {first_topic}")
+    page_list = get_pages_in_cluster(sqlconn, namespace, cluster_id)
+
+    logger.debug(f"Page titles: {', '.join([page.title for page in page_list[:5]])}, ...")
+
+    neighboring_topic_list = get_neighboring_first_topics(sqlconn, namespace, cluster_id, parent_id)
+    logger.debug(f"Neighboring topics: {', '.join(neighboring_topic_list[:5])}, ...")
+
+    topic_discovery = TopicDiscovery.get_from_env()
+
+    final_topic = topic_discovery.adversely_summarize_page_topics(page_list, neighboring_topic_list)
+    logger.debug(f"Final pass topic: {final_topic}")
+
+
 if __name__ == "__main__":
-    test_topic_summary_llm_call()
+    test_adverse_topic_summary()
