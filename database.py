@@ -870,3 +870,60 @@ def update_cluster_tree_node_first_label(
             pass
         logger.exception(f"Failed to update first_label for cluster_tree node {node_id}: {e}")
         raise
+
+
+def update_cluster_tree_assignments(
+        sqlconn: sqlite3.Connection,
+        namespace: str,
+        cluster_node_id: int,
+        cluster_page_ids: list[int],
+        batch_size: int = 1000
+        ):
+    """Assign a list of page IDs to a cluster tree node"""
+
+    sql = """
+        UPDATE page_vector
+        SET cluster_node_id = ?
+        WHERE namespace = ? AND page_id = ?;
+    """
+    try:
+        cursor = sqlconn.cursor()
+        for i in range(0, len(cluster_page_ids), batch_size):
+            batch = cluster_page_ids[i: i + batch_size]
+            params = [(cluster_node_id, namespace, page_id) for page_id in batch]
+            cursor.executemany(sql, params)
+            sqlconn.commit()
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to update cluster_node_id assignments for cluster node {cluster_node_id}: {e}")
+        raise
+
+
+def delete_cluster_tree(sqlconn: sqlite3.Connection, namespace: str):
+    """Delete the existing cluster tree nodes and the cluster node assignments for pages for a given namespace."""
+    page_vector_delete_sql = """
+        UPDATE page_vector
+        SET cluster_node_id = NULL
+        WHERE namespace = ?;
+    """
+    cluster_node_delete_sql = """
+        DELETE FROM cluster_tree
+        WHERE namespace = ?;
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(page_vector_delete_sql, (namespace,))
+        cursor.execute(cluster_node_delete_sql, (namespace,))
+        sqlconn.commit()
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to delete cluster tree for namespace {namespace}: {e}")
+        raise

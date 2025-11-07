@@ -11,6 +11,7 @@ from typing import Dict, List, Any
 
 # Import existing modules
 from database import (
+    delete_cluster_tree,
     get_embedding_count,
     get_reduced_vector_count,
     get_sql_conn,
@@ -986,6 +987,8 @@ class RecursiveClusterCommand(Command):
             print(f"Running recursive clustering on namespace {namespace}")
             print(f"Parameters: leaf-target={leaf_target}, max-k={max_k}, max-depth={max_depth}, "
                   f"min-silhouette={min_silhouette}, batch-size={batch_size}")
+
+            delete_cluster_tree(sqlconn, namespace)
 
             with ProgressTracker(description="Recursive clustering", unit=" nodes") as tracker:
                 nodes_created = run_recursive_clustering(

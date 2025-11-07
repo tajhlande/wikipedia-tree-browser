@@ -30,6 +30,7 @@ from database import (
     get_reduced_vectors_for_cluster,
     three_d_vector_to_text,
     update_cluster_centroid,
+    update_cluster_tree_assignments,
     update_reduced_vector_for_page,
     update_three_d_vector_for_page,
     insert_cluster_tree_node,
@@ -335,8 +336,8 @@ def run_recursive_clustering(
     Returns:
         Total number of nodes created in the cluster tree
     """
-    logger.info("Starting recursive clustering with leaf_target=%s, max_k=%s, max_depth=%s",
-                leaf_target, max_k, max_depth)
+    logger.debug("Starting recursive clustering with leaf_target=%s, max_k=%s, max_depth=%s",
+                 leaf_target, max_k, max_depth)
 
     # Get total document count for the namespace
     pages_and_vectors = list(get_page_reduced_vectors(sqlconn=sqlconn, namespace=namespace))
@@ -353,7 +354,7 @@ def run_recursive_clustering(
 
     # Start with root node containing all documents
     root_node_id = get_cluster_tree_max_node_id(sqlconn) + 1
-    logger.info("Creating root node with ID %s", root_node_id)
+    logger.debug("Creating root node with ID %s", root_node_id)
 
     # Insert root node
     node = ClusterTreeNode(
@@ -363,7 +364,7 @@ def run_recursive_clustering(
         doc_count=doc_count
     )
     inserted_node_id = insert_cluster_tree_node(sqlconn=sqlconn, node=node)
-    logger.info("Inserted node ID: %d", inserted_node_id)
+    logger.debug("Inserted node ID: %d", inserted_node_id)
     assert root_node_id == inserted_node_id
 
     # Start recursive clustering from root
@@ -384,7 +385,7 @@ def run_recursive_clustering(
         tracker=tracker
     )
 
-    logger.info("Recursive clustering completed. Total nodes processed: %s", nodes_processed)
+    logger.debug("Recursive clustering completed. Total nodes processed: %s", nodes_processed)
     return nodes_processed
 
 
@@ -523,8 +524,9 @@ def _recursive_cluster_node(
 
         # if child was a leaf, assign the pages to it
         if recursive_descendant_nodes_processed == 1:
-            # update_cluster_tree_assignments(sqlconn, namespace, cluster_vectors)
-            pass
+            logger.debug("Processing node %d as a leaf node, adding %d pages", child_node.node_id,
+                         len(cluster_page_ids))
+            update_cluster_tree_assignments(sqlconn, namespace, child_node.node_id, cluster_page_ids)
 
     # Update child count for parent node
     update_cluster_tree_child_count(namespace, node_id, child_nodes_processed, sqlconn)
