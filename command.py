@@ -733,20 +733,20 @@ class EmbedPagesCommand(Command):
 
                 if namespace:
                     sql = """
-                        SELECT DISTINCT namespace, chunk_name
-                        FROM page_log
-                        LEFT JOIN page_vector ON page_log.page_id = page_vector.page_id
-                        WHERE namespace = ? AND page_vector.embedding_vector IS NULL
-                        ORDER BY chunk_name ASC;
+                        SELECT DISTINCT pl.namespace, pl.chunk_name
+                        FROM page_log pl
+                        LEFT JOIN page_vector pv ON pl.page_id = pv.page_id
+                        WHERE pl.namespace = ? AND pv.embedding_vector IS NULL
+                        ORDER BY pl.chunk_name ASC;
                     """
                     cursor = sqlconn.execute(sql, (namespace))
                 else:
                     sql = """
-                        SELECT DISTINCT namespace, chunk_name
-                        FROM page_log
-                        LEFT JOIN page_vector ON page_log.page_id = page_vector.page_id
-                        WHERE page_vector.embedding_vector IS NULL
-                        ORDER BY namespace ASC, chunk_name ASC;
+                        SELECT DISTINCT pl.namespace, pl.chunk_name
+                        FROM page_log pl
+                        LEFT JOIN page_vector pv ON pl.page_id = pv.page_id
+                        WHERE pv.embedding_vector IS NULL
+                        ORDER BY pl.namespace ASC, pl.chunk_name ASC;
                     """
                     cursor = sqlconn.execute(sql)
 
