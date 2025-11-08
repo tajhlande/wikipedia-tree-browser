@@ -11,6 +11,7 @@ import chromadb.utils.embedding_functions as embedding_functions
 
 from chromadb.api.types import EmbeddingFunction, Embeddings
 from chromadb.api.models.Collection import Collection as ChromaCollection
+import openai
 
 from classes import Page
 from database import (
@@ -77,7 +78,17 @@ def compute_page_embeddings(
 ) -> Embeddings:
     logger.debug("Computing embedding for page(%d) titled %s", page.page_id, page.title)
     text_content = f"{page.title}\n{page.abstract}"
-    return embedding_function(text_content)
+    try:
+        return embedding_function(text_content)
+    except openai.InternalServerError as e:
+        while "input is too large to process" in str(e) and len(text_content) > 1:
+            try:
+                logger.warning("Cutting text content in half to fit context for page %d", page.page_id)
+                text_content = text_content[:len(text_content)//2]
+                return embedding_function(text_content)
+            except openai.InternalServerError as e2:
+                e = e2
+        raise
 
 
 def test_one_embedding():
