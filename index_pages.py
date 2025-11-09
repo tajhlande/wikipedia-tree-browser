@@ -213,8 +213,8 @@ def compute_embeddings_for_chunk(
                 tracker.update(len(buffer)) if tracker else None
                 counter += len(buffer)
                 buffer = []
-        except Exception as e:
-            logger.exception("Exception while computing embedding for page {page.page_id}")
+        except Exception:
+            logger.exception(f"Exception while computing embedding for page {page.page_id}")
 
     # flush remainder
     if buffer:
