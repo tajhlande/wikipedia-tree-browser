@@ -203,15 +203,18 @@ def compute_embeddings_for_chunk(
             continue
 
         # Assuming each line is a JSON object representing a page
-        embeddings = compute_page_embeddings(page, embedding_function)
-        embedding = embeddings[0]
-        buffer.append((page.page_id, embedding))
-        embedding = embeddings[0]
-        if len(buffer) >= BUFFER_SIZE:
-            upsert_embeddings_in_batch(namespace, buffer, sqlconn, BUFFER_SIZE)
-            tracker.update(len(buffer)) if tracker else None
-            counter += len(buffer)
-            buffer = []
+        try:
+            embeddings = compute_page_embeddings(page, embedding_function)
+            embedding = embeddings[0]
+            buffer.append((page.page_id, embedding))
+            embedding = embeddings[0]
+            if len(buffer) >= BUFFER_SIZE:
+                upsert_embeddings_in_batch(namespace, buffer, sqlconn, BUFFER_SIZE)
+                tracker.update(len(buffer)) if tracker else None
+                counter += len(buffer)
+                buffer = []
+        except Exception as e:
+            logger.exception("Exception while computing embedding for page {page.page_id}")
 
     # flush remainder
     if buffer:
