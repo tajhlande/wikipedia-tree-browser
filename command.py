@@ -904,7 +904,7 @@ MAX_K_ARGUMENT = Argument(name="max-k", type="integer", required=False, default=
                           description="Maximum number of clusters to create at each level")
 MAX_DEPTH_ARGUMENT = Argument(name="max-depth", type="integer", required=False, default=10,
                               description="Maximum depth for recursion")
-MIN_SILHOUETTE_ARGUMENT = Argument(name="min-silhouette", type="float", required=False, default=0.1,
+MIN_SILHOUETTE_ARGUMENT = Argument(name="min-silhouette", type="float", required=False, default=0.03,
                                    description="Minimum silhouette score to continue clustering")
 CLUSTER_COUNT_ARGUMENT = Argument(name="clusters", type="integer", required=False, default=10_000,
                                   description="Number of clusters to process")
