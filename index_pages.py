@@ -104,7 +104,7 @@ def compute_page_embeddings(
 
 
 def test_one_embedding():
-    sqlconn = get_sql_conn()
+    sqlconn = get_sql_conn("enwiki_namespace_0")
     embedding_model_name, embedding_model_api_url, embedding_model_api_key = (
         get_embedding_model_config()
     )
@@ -263,7 +263,10 @@ def get_embedding_model_config() -> tuple[str, str, str]:
 
 
 if __name__ == "__main__":
-    sqlconn = get_sql_conn()
+    enwiki_ns_0 = "enwiki_namespace_0"
+    enwiki_chunk_0 = "enwiki_namespace_0_chunk_0"
+
+    sqlconn = get_sql_conn(enwiki_ns_0)
 
     embedding_model_name, embedding_model_api_url, embedding_model_api_key = (
         get_embedding_model_config()
@@ -275,8 +278,6 @@ if __name__ == "__main__":
         openai_api_key=embedding_model_api_key,
     )
 
-    enwiki_ns_0 = "enwiki_namespace_0"
-    enwiki_chunk_0 = "enwiki_namespace_0_chunk_0"
     compute_embeddings_for_chunk(
         namespace=enwiki_ns_0,
         chunk_name=enwiki_chunk_0,

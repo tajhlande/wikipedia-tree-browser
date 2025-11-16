@@ -27,8 +27,10 @@ e.g. on Mac:
 
 """
 
-sqlconn = get_sql_conn()
-rows = get_cluster_final_topics(sqlconn, namespace="enwiki_namespace_0")
+namespace = "enwiki_namespace_0"
+
+sqlconn = get_sql_conn(namespace)
+rows = get_cluster_final_topics(sqlconn, namespace)
 
 net = Network(height="1600px", width="100%", notebook=False, directed=True)
 for parent_id, node_id, final_label in rows:

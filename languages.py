@@ -2,6 +2,7 @@ import csv
 import logging
 from pathlib import Path
 from typing import Dict, Tuple
+from threading import Lock
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,7 @@ def make_namespace_to_language_index(lang_dict: Dict[str, Tuple[str, str]]) -> D
 
 lang_dict: Dict[str, tuple[str, str]] = dict()
 namespace_dict: Dict[str, str] = dict()
+_dict_init_lock = Lock()
 
 
 def get_language_for_namespace(namespace: str) -> str:
@@ -92,10 +94,13 @@ def get_language_for_namespace(namespace: str) -> str:
     Given a namespace, get the name of the corresponding language for it.
     Loads the language data from a CSV file, and uses global dict variables to cache it.
     """
-    global namespace_dict
-    if not namespace_dict:
-        global lang_dict
-        if not lang_dict:
-            lang_dict = load_languages_from_csv()
-        namespace_dict = make_namespace_to_language_index(lang_dict)
+    global namespace_dict, lang_dict
+    if namespace_dict:
+        return namespace_dict[namespace]
+
+    with _dict_init_lock:
+        if not namespace_dict:
+            if not lang_dict:
+                lang_dict = load_languages_from_csv()
+            namespace_dict = make_namespace_to_language_index(lang_dict)
     return namespace_dict[namespace]

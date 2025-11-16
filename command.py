@@ -7,7 +7,8 @@ import readline
 import sys
 from abc import ABC, abstractmethod
 from enum import IntEnum
-from typing import Dict, List, Any, Optional
+from itertools import batched
+from typing import Dict, List, Any
 
 # Import existing modules
 from database import (
@@ -16,11 +17,12 @@ from database import (
     get_cluster_node_first_pass_topic,
     get_cluster_node_ids_with_missing_topics,
     get_cluster_parent_id,
+    get_cluster_root_node_ids,
     get_embedding_count,
     get_leaf_cluster_node_count,
     get_leaf_cluster_node_ids,
     get_neighboring_first_topics,
-    get_pages_in_cluster,
+    get_pages_in_all_clusters,
     get_reduced_vector_count,
     get_sql_conn,
     ensure_tables,
@@ -43,6 +45,7 @@ from index_pages import (
     compute_embeddings_for_chunk,
     get_embedding_model_config,
 )
+from languages import get_language_for_namespace
 from progress_utils import ProgressTracker
 from topic_discovery import TopicDiscovery
 from transform import run_kmeans, run_pca, run_umap_per_cluster, run_recursive_clustering
@@ -101,7 +104,8 @@ OPTIONAL_CHUNK_NAME_ARGUMENT = Argument(name="chunk", type="string", required=Fa
                                         description="The name of the chunk to process")
 OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT = Argument(name="limit", type="integer", required=False,
                                                    description="Number of pages to process")
-
+OPTIONAL_BATCH_SIZE_ARGUMENT = Argument(name="batch", type="integer", required=False, default=1000,
+                                        description="Size of batch to process at a time")
 
 CHECK = "✓"
 X = "✗"
@@ -1032,97 +1036,146 @@ class TopicsCommand(Command):
             name="topics",
             description="Use an LLM to discover topics for clusters according to their page content.",
             expected_args=[
-                REQUIRED_NAMESPACE_ARGUMENT
+                REQUIRED_NAMESPACE_ARGUMENT,
+                OPTIONAL_BATCH_SIZE_ARGUMENT
             ]
         )
 
     def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
+            batch_size = args.get(OPTIONAL_BATCH_SIZE_ARGUMENT.name, OPTIONAL_BATCH_SIZE_ARGUMENT.default)
 
             sqlconn = get_sql_conn(namespace)
             topic_discovery = TopicDiscovery.get_from_env()
+            topic_discovery.accumulated_errors = 0
 
+            logger.debug("Removing any existing cluster topics")
             remove_existing_cluster_topics(sqlconn, namespace)
 
             cluster_count = get_leaf_cluster_node_count(sqlconn, namespace)
             logger.debug("Cluster count: %d", cluster_count)
-            first_topic_list: list[tuple[int, Optional[str]]] = []
 
-            with ProgressTracker(description="Cluster topic pass 1/4",
-                                 unit="cluster",
-                                 total=cluster_count) as tracker:
-                node_id_list = get_leaf_cluster_node_ids(sqlconn, namespace)
-                for node_id in node_id_list:
-                    page_list = get_pages_in_cluster(sqlconn, namespace, node_id)
-                    first_pass_topic = topic_discovery.summarize_page_topics(page_list)
-                    first_topic_list.append((node_id, first_pass_topic, ))
-                    tracker.update(1)
+            # with ProgressTracker(description="Cluster topic pass 1/4",
+            #                      unit="cluster",
+            #                      total=cluster_count) as tracker:
+            #     node_id_list = get_leaf_cluster_node_ids(sqlconn, namespace)
+            #     for node_id in node_id_list:
+            #         page_list = get_pages_in_cluster(sqlconn, namespace, node_id)
+            #         first_pass_topic = topic_discovery.summarize_page_topics(namespace, page_list)
+            #         first_topic_list.append((node_id, first_pass_topic, ))
+            #         tracker.update(1)
 
-                update_cluster_tree_first_labels(sqlconn, namespace, first_topic_list)
+            #     update_cluster_tree_first_labels(sqlconn, namespace, first_topic_list)
 
-            final_topic_list: list[tuple[int, Optional[str]]] = []
-            with ProgressTracker(description="Cluster topic pass 2/4",
-                                 unit="cluster",
-                                 total=cluster_count) as tracker:
-                node_id_list = get_leaf_cluster_node_ids(sqlconn, namespace)
-                for node_id in node_id_list:
-                    page_list = get_pages_in_cluster(sqlconn, namespace, node_id)
+            # preload all pages to avoid repeated DB calls
+            logger.debug("Getting leaf node cluster IDs")
+            leaf_node_id_list = get_leaf_cluster_node_ids(sqlconn, namespace)
+            logger.debug("Building leaf node page ID map")
+            leaf_node_page_map: dict[int, list[tuple[int, str, str]]] = get_pages_in_all_clusters(sqlconn, namespace)
+
+            # Pass 1: generation of leaf cluster node topics
+            with ProgressTracker(description="Leaf node page topic pass 1/4", unit="cluster",
+                                 total=len(leaf_node_id_list)) as tracker:
+                for batch in batched(leaf_node_page_map.items(), batch_size):
+                    batch_node_ids = [node_id for node_id, _ in batch]
+                    batch_page_id_lists = [page_id_list for _, page_id_list in batch]
+                    first_topics = topic_discovery.summarize_page_topics_batch(namespace, batch_page_id_lists)
+                    first_topic_list = list(zip(batch_node_ids, first_topics))
+                    update_cluster_tree_first_labels(sqlconn, namespace, first_topic_list)
+                    tracker.update(len(batch))
+
+            # Pass 2: adversarial re-generation of leaf cluster node topics
+            root_node_ids = get_cluster_root_node_ids(sqlconn, namespace)
+            non_root_leaf_nodes = [node_id for node_id in leaf_node_id_list if node_id not in root_node_ids]
+            with ProgressTracker(description="Leaf node adversarial topic pass 2/4", unit="cluster",
+                                 total=len(non_root_leaf_nodes)) as tracker:
+
+                neighboring_topic_map = {}
+                for node_id in non_root_leaf_nodes:
                     parent_node_id = get_cluster_parent_id(sqlconn, namespace, node_id)
-                    if parent_node_id is None:
-                        final_pass_topic = get_cluster_node_first_pass_topic(sqlconn, namespace, node_id)
-                    else:
-                        neighbor_topic_list = get_neighboring_first_topics(
-                            sqlconn, namespace, node_id=node_id, parent_node_id=parent_node_id)
-                        # logger.info("\nNeighboring topic list: %s", json.dumps(neighbor_topic_list))
-                        if not neighbor_topic_list:
-                            final_pass_topic = get_cluster_node_first_pass_topic(sqlconn, namespace, node_id)
-                        else:
-                            final_pass_topic = topic_discovery.adversely_summarize_page_topics(
-                                page_list, neighbor_topic_list)
-                    final_topic_list.append((node_id, final_pass_topic, ))
-                    tracker.update(1)
+                    assert parent_node_id
+                    neighbor_topic_list = get_neighboring_first_topics(sqlconn, namespace, node_id, parent_node_id)
+                    neighboring_topic_map[node_id] = neighbor_topic_list
 
-                update_cluster_tree_final_labels(sqlconn, namespace, final_topic_list)
+                for node_id_batch in batched(non_root_leaf_nodes, batch_size):
+                    batch_child_pages = [leaf_node_page_map[node_id] for node_id in node_id_batch]
+                    batch_neighbor_topics = [neighboring_topic_map[node_id] for node_id in node_id_batch]
+                    adverse_batch = list(zip(batch_child_pages, batch_neighbor_topics))
+                    final_page_topics = topic_discovery.adversely_summarize_page_topics_batch(namespace, adverse_batch)
+                    final_page_ids_and_topics = list(zip(node_id_batch, final_page_topics))
+                    update_cluster_tree_final_labels(sqlconn, namespace, final_page_ids_and_topics)
+                    tracker.update(len(node_id_batch))
 
-            missed_topic_first_list = []
-            node_id_list = get_cluster_node_ids_with_missing_topics(sqlconn, namespace)
+            # Pass 3: Label topics for nodes that don't have topics yet. Should be non-leaf nodes
+            nodes_missing_topics = [node_id for node_id in get_cluster_node_ids_with_missing_topics(sqlconn, namespace)
+                                    if node_id not in root_node_ids]
 
-            with ProgressTracker(description="Missing topic pass 3/4",
+            with ProgressTracker(description="Non-leaf summary topics pass 3/4",
                                  unit="cluster",
-                                 total=len(node_id_list)) as tracker:
-                for node_id in node_id_list:
-                    cluster_children_topics = get_cluster_children_topics(sqlconn, namespace, node_id)
-                    first_pass_topic = topic_discovery.summarize_cluster_topics(cluster_children_topics)
-                    missed_topic_first_list.append((node_id, first_pass_topic, ))
-                    tracker.update(1)
+                                 total=len(nodes_missing_topics)) as tracker:
+                node_child_topic_map = {node_id: get_cluster_children_topics(sqlconn, namespace, node_id)
+                                        for node_id in nodes_missing_topics}
+                for node_id_batch in batched(nodes_missing_topics, batch_size):
+                    batch_child_topics = [node_child_topic_map[node_id] for node_id in node_id_batch]
+                    first_pass_topic_batch = topic_discovery.summarize_cluster_topics_batch(namespace,
+                                                                                            batch_child_topics)
+                    topic_tuple_list = list(zip(node_id_batch, first_pass_topic_batch))
+                    update_cluster_tree_first_labels(sqlconn, namespace, topic_tuple_list)
+                    tracker.update(len(node_id_batch))
 
-            update_cluster_tree_first_labels(sqlconn, namespace, missed_topic_first_list)
-
-            missed_topic_final_list = []
-
-            with ProgressTracker(description="Missing topic pass 4/4",
+            # Pass 4: Adversarial label for non-leaf nodes
+            with ProgressTracker(description="Non-leaf adversarial topics pass 4/4",
                                  unit="cluster",
-                                 total=len(node_id_list)) as tracker:
-                for node_id in node_id_list:
-                    cluster_children_topics = get_cluster_children_topics(sqlconn, namespace, node_id)
-                    parent_node_id = get_cluster_parent_id(sqlconn, namespace, node_id)
-                    if parent_node_id is None:
-                        # TODO look up and set to wiki name based on namespace
-                        final_pass_topic = get_cluster_node_first_pass_topic(sqlconn, namespace, node_id)
-                    else:
-                        neighbor_topic_list = get_neighboring_first_topics(
-                            sqlconn, namespace, node_id=node_id, parent_node_id=parent_node_id)
-                        # logger.info("\nNeighboring topic list: %s", json.dumps(neighbor_topic_list))
-                        if not neighbor_topic_list:
-                            final_pass_topic = get_cluster_node_first_pass_topic(sqlconn, namespace, node_id)
-                        else:
-                            final_pass_topic = topic_discovery.adversely_summarize_cluster_topics(
-                                cluster_children_topics, neighbor_topic_list)
-                    missed_topic_final_list.append((node_id, final_pass_topic, ))
-                    tracker.update(1)
+                                 total=len(nodes_missing_topics)) as tracker:
+                for node_id_batch in batched(nodes_missing_topics, batch_size):
+                    parent_id_map = {node_id: get_cluster_parent_id(sqlconn, namespace, node_id)
+                                     for node_id in node_id_batch}
 
-                update_cluster_tree_final_labels(sqlconn, namespace, missed_topic_final_list)
+                    neighbor_topic_map = {node_id: get_neighboring_first_topics(
+                            sqlconn, namespace, node_id, parent_id_map[node_id])  # type: ignore
+                            for node_id in node_id_batch}
+
+                    node_ids_with_neighbor_topic = [node_id for node_id in node_id_batch
+                                                    if neighbor_topic_map[node_id]]
+                    node_ids_without_neighbor_topic = [node_id for node_id in node_id_batch
+                                                       if node_id not in node_ids_with_neighbor_topic]
+
+                    child_topics = [node_child_topic_map[node_id] for node_id in node_ids_with_neighbor_topic]
+                    neighbor_topics = [neighbor_topic_map[node_id] for node_id in node_ids_with_neighbor_topic]
+                    adverse_batch = list(zip(child_topics, neighbor_topics))
+
+                    final_topics_for_nodes_with_neighbors = \
+                        topic_discovery.adversely_summarize_cluster_topics_batch(namespace, adverse_batch)
+                    final_topics_for_nodes_without_neighbors = \
+                        [get_cluster_node_first_pass_topic(sqlconn, namespace, node_id)
+                            for node_id in node_ids_without_neighbor_topic]
+
+                    assert len(final_topics_for_nodes_with_neighbors) == len(node_ids_with_neighbor_topic), \
+                        "Final topic list is not the same length as nodes with neighbors list in batch"
+                    assert len(final_topics_for_nodes_without_neighbors) == len(node_ids_without_neighbor_topic), \
+                        "Final topic list is not the same length as nodes without neighbors list in batch"
+
+                    final_node_ids = node_ids_with_neighbor_topic + node_ids_without_neighbor_topic
+                    final_topics = final_topics_for_nodes_with_neighbors + final_topics_for_nodes_without_neighbors
+
+                    assert len(final_node_ids) == len(final_topics), \
+                        "Final node ID list is not the same length as final topics list in batch"
+                    nodes_and_final_topics = list(zip(final_node_ids, final_topics))
+                    update_cluster_tree_final_labels(sqlconn, namespace, nodes_and_final_topics)
+
+                    tracker.update(len(node_id_batch))
+
+            # TODO write "wikipedia" in the language appropriate way
+            root_label = f"{get_language_for_namespace(namespace)} Wikipedia"
+            wiki_labels = [root_label, ] * len(root_node_ids)
+            root_labels_zip_list = list(zip(root_node_ids, wiki_labels))
+            logger.info("Root node ID list: %s", root_node_ids)
+            logger.info("Root node label list: %s", wiki_labels)
+            logger.info("Root label zip list: %s", root_labels_zip_list)
+            update_cluster_tree_final_labels(sqlconn, namespace, root_labels_zip_list)  # type: ignore
+
+            logger.info("Handled %d errors from openai endpoint", topic_discovery.accumulated_errors)
 
             return Result.SUCCESS, f"{CHECK} Completed cluster topic discovery for namespace {namespace}."
 

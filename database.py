@@ -138,7 +138,7 @@ def _get_sql_conn_for_file(db_file: str = "chunk_log.db") -> sqlite3.Connection:
         return _sqlconns[db_file]
 
     # otherwise, make a new connection
-    logger.info("Establishing SQLite connection")
+    logger.info("Establishing SQLite connection to %s", db_file)
     sqlconn = sqlite3.connect(db_file)
     sqlconn.row_factory = sqlite3.Row  # This enables dict-like access to rows
 
@@ -1070,6 +1070,45 @@ def get_pages_in_cluster(sqlconn: sqlite3.Connection, namespace: str, node_id: i
         raise
 
 
+def get_pages_in_all_clusters(sqlconn: sqlite3.Connection,
+                              namespace: str
+                              ) -> dict[int, list[tuple[int, str, str]]]:
+    """Get the map of node_id to tuple of (page_id, title, abstract) for the given namespace"""
+    sql = """
+        SELECT pv.cluster_node_id, pl.page_id, pl.title, pl.abstract
+        FROM page_log pl
+        INNER JOIN page_vector pv on pl.namespace = pv.namespace and pl.page_id = pv.page_id
+        WHERE pl.namespace = ?
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace, ))
+        results = dict()
+        while True:
+            rows = cursor.fetchmany(100)
+            if not rows:
+                break
+            for row in rows:
+                node_id = row[0]
+                page_id = row[1]
+                title = row[2]
+                abstract = row[3]
+
+                if node_id not in results:
+                    results[node_id] = list()
+                results[node_id].append((page_id, title, abstract, ))
+        return results
+
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to get pages for all clusters in namespace {namespace}: {e}")
+        raise
+
+
 def get_cluster_parent_id(sqlconn: sqlite3.Connection, namespace: str, node_id: int) -> Optional[int]:
     """Get the id of the cluster node's parent node."""
     sql = """
@@ -1106,7 +1145,6 @@ def get_neighboring_first_topics(sqlconn: sqlite3.Connection,
         AND parent_id = ?
         AND node_id <> ?
         AND first_label IS NOT NULL
-        ORDER BY node_id ASC
     """
     try:
         cursor = sqlconn.cursor()
@@ -1201,7 +1239,7 @@ def get_cluster_node_ids_with_missing_topics(sqlconn: sqlite3.Connection, namesp
         raise
 
 
-def get_cluster_children_topics(sqlconn: sqlite3.Connection, namespace: str, node_id: int):
+def get_cluster_children_topics(sqlconn: sqlite3.Connection, namespace: str, node_id: int) -> list[str]:
     """Get the topics of the cluster node's children"""
     sql = """
         SELECT COALESCE(final_label, first_label) as label
@@ -1226,7 +1264,7 @@ def get_cluster_children_topics(sqlconn: sqlite3.Connection, namespace: str, nod
         raise
 
 
-def remove_existing_cluster_topics(sqlconn, namespace):
+def remove_existing_cluster_topics(sqlconn: sqlite3.Connection, namespace: str) -> None:
     """Remove existing topics for cluster """
     sql = """
         UPDATE cluster_tree
@@ -1247,3 +1285,23 @@ def remove_existing_cluster_topics(sqlconn, namespace):
         logger.exception(f"Failed to remove labels on cluster tree for namespace {namespace}: {e}")
         raise
 
+
+def get_cluster_root_node_ids(sqlconn: sqlite3.Connection, namespace: str) -> list[int]:
+    """Find root nodes if any. There should be at most 1, but who knows what might have gone wrong here."""
+    sql = """
+    SELECT node_id
+    FROM cluster_tree
+    WHERE namespace = ? AND parent_id IS NULL;
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace, ))
+        return [row[0] for row in cursor.fetchall()]
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to find root nodes on cluster tree for namespace {namespace}: {e}")
+        raise

@@ -1,11 +1,14 @@
 import logging
 import os
+import concurrent.futures
+
+from random import random
+import time
 from typing import Dict, Optional
 from dotenv import load_dotenv
 
-from openai import OpenAI
+from openai import OpenAI, InternalServerError
 
-from classes import Page
 from languages import get_language_for_namespace
 
 logger = logging.getLogger(__name__)
@@ -50,12 +53,14 @@ class TopicDiscovery:
 
     _openai_client: OpenAI
     model_name: str
+    accumulated_errors: int = 0
+    _max_workers: int = 8
 
     def __init__(
         self,
         ai_server_base_url: str,
         ai_server_key: Optional[str],
-        model_name: str = DEFAULT_MODEL_NAME
+        model_name: str = DEFAULT_MODEL_NAME,
     ):
         logger.info("Opening connection to OpenAI compatible server at %s", ai_server_base_url)
         self._openai_client = OpenAI(
@@ -63,6 +68,7 @@ class TopicDiscovery:
            base_url=ai_server_base_url
         )
         self.model_name = model_name
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=self._max_workers)
 
     @classmethod
     def get_from_env(cls):
@@ -80,9 +86,60 @@ class TopicDiscovery:
             model_name=model_name
             )
 
-    def summarize_page_topics(self, page_list: list[Page]) -> Optional[str]:
+    def _call_openai_completions_endpoint(self, system_prompt: str, user_prompt: str) -> Optional[str]:
+        """
+        Call the openai client and invoke the completions endpoint.
+        Do a few retries with truncated user prompt if 500-599 errors are caught
+        """
+        attempts = 0
+        max_attempts = 5
+        previous_error = None
+        original_user_prompt = user_prompt
+        while attempts < max_attempts:
+            try:
+                attempts += 1
+                completion = self._openai_client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[
+                        {"role": "developer", "content": system_prompt, },
+                        {"role": "user", "content": user_prompt, },
+                    ],
+                    extra_body={
+                        # llama.cpp-specific slot parameters to deal with "500: context shift is disabled" errors
+                        "cache_prompt": False,
+                        "n_keep": 0,
+                        # "temperature": 0.0,
+                    }
+                )
+                return completion.choices[0].message.content
+
+            except InternalServerError as e:
+                self.accumulated_errors += 1
+                previous_error = e
+                if e.status_code >= 500 and e.status_code <= 599:
+                    # random sleep fallback of 25-225 ms
+                    time.sleep((random() * 200 + 25)/1000)
+                else:
+                    # we only retry internal server errors
+                    logger.error("Giving up on handling openai.InternalServerError after %d attempts", attempts)
+                    logger.error("System prompt (%d chars): %s", len(system_prompt), system_prompt)
+                    logger.error("Last user prompt (%d chars): %s", len(user_prompt), user_prompt)
+                    logger.error("Original user prompt (%d chars): %s", len(original_user_prompt), original_user_prompt)
+                    raise
+                # if the user prompt was long, cut it in half for the retry
+                if len(user_prompt) > 250:
+                    user_prompt = user_prompt[:len(user_prompt) // 2]
+
+        if previous_error:
+            # raise the unsolvable error
+            raise previous_error
+
+        logger.warning("OpenAI server call failed multiple times but no previous error present")
+        return None
+
+    def summarize_page_topics(self, namespace: str, page_list: list[tuple[int, str, str]]) -> Optional[str]:
         # TODO let's just use page titles for now. we will introduce page abstract content later if we need it
-        submitted_titles = ", ".join([page.title for page in page_list])
+        submitted_titles = ", ".join([page[1] for page in page_list])
 
         prompt = " ".join(f"""
             Describe the best common topic for the page titles listed below.
@@ -99,15 +156,7 @@ class TopicDiscovery:
 
         logger.debug("Prompt: %s", prompt)
 
-        completion = self._openai_client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "developer", "content": TOPIC_GENERATION_SYSTEM_PROMPT, },
-                {"role": "user", "content": prompt, },
-            ],
-        )
-
-        return completion.choices[0].message.content
+        return self._call_openai_completions_endpoint(get_system_prompt_for_namespace(namespace), prompt)
 
         # response = self._openai_client.responses.create(
         #     model=self.model_name,
@@ -118,10 +167,11 @@ class TopicDiscovery:
         # return response.output_text
 
     def adversely_summarize_page_topics(self,
-                                        page_list: list[Page],
+                                        namespace: str,
+                                        page_list: list[tuple[int, str, str]],
                                         neighboring_topics_list: list[str]
                                         ) -> Optional[str]:
-        submitted_titles = ", ".join([page.title for page in page_list])
+        submitted_titles = ", ".join([page[1] for page in page_list])
         neighboring_topics = ", ".join(neighboring_topics_list)
 
         prompt = " ".join(f"""
@@ -142,17 +192,9 @@ class TopicDiscovery:
 
         logger.debug("Prompt: %s", prompt)
 
-        completion = self._openai_client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "developer", "content": TOPIC_GENERATION_SYSTEM_PROMPT, },
-                {"role": "user", "content": prompt, },
-            ],
-        )
+        return self._call_openai_completions_endpoint(get_system_prompt_for_namespace(namespace), prompt)
 
-        return completion.choices[0].message.content
-
-    def summarize_cluster_topics(self, child_topics: list[str]) -> Optional[str]:
+    def summarize_cluster_topics(self, namespace: str, child_topics: list[str]) -> Optional[str]:
         submitted_topics = ", ".join([topic for topic in child_topics if topic is not None])
 
         prompt = " ".join(f"""
@@ -170,17 +212,10 @@ class TopicDiscovery:
 
         logger.debug("Prompt: %s", prompt)
 
-        completion = self._openai_client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "developer", "content": TOPIC_GENERATION_SYSTEM_PROMPT, },
-                {"role": "user", "content": prompt, },
-            ],
-        )
-
-        return completion.choices[0].message.content
+        return self._call_openai_completions_endpoint(get_system_prompt_for_namespace(namespace), prompt)
 
     def adversely_summarize_cluster_topics(self,
+                                           namespace: str,
                                            child_topics: list[str],
                                            neighboring_topics_list: list[str]
                                            ) -> Optional[str]:
@@ -205,12 +240,49 @@ class TopicDiscovery:
 
         logger.debug("Prompt: %s", prompt)
 
-        completion = self._openai_client.chat.completions.create(
-            model=self.model_name,
-            messages=[
-                {"role": "developer", "content": TOPIC_GENERATION_SYSTEM_PROMPT, },
-                {"role": "user", "content": prompt, },
-            ],
-        )
+        return self._call_openai_completions_endpoint(get_system_prompt_for_namespace(namespace), prompt)
 
-        return completion.choices[0].message.content
+    # -----------------------------------------------------------------------
+    # new batch interface (used by TopicsCommand)
+    # -----------------------------------------------------------------------
+
+    def summarize_page_topics_batch(self, namespace: str, batch: list[list[tuple[int, str, str]]]
+                                    ) -> list[Optional[str]]:
+        futures = [
+            self._executor.submit(self.summarize_page_topics, namespace, page_group)
+            for page_group in batch
+        ]
+        return [f.result() for f in concurrent.futures.as_completed(futures)]
+
+    def adversely_summarize_page_topics_batch(self,
+                                              namespace: str,
+                                              batch: list[tuple[list[tuple[int, str, str]], list[str]]]
+                                              ) -> list[Optional[str]]:
+        futures = [
+            self._executor.submit(self.adversely_summarize_page_topics, namespace, page_tuple[0], page_tuple[1])
+            for page_tuple in batch
+        ]
+        return [f.result() for f in concurrent.futures.as_completed(futures)]
+
+    def summarize_cluster_topics_batch(self, namespace: str, batch: list[list[str]]) -> list[Optional[str]]:
+        futures = [
+            self._executor.submit(self.summarize_cluster_topics, namespace, child_topics)
+            for child_topics in batch
+        ]
+        return [f.result() for f in concurrent.futures.as_completed(futures)]
+
+    def adversely_summarize_cluster_topics_batch(self,
+                                                 namespace: str,
+                                                 batch: list[tuple[list[str], list[str]]]
+                                                 ) -> list[Optional[str]]:
+        """
+        Given a batch of tuples, do adverse summarization.
+        The first tuple entry is a list of child topics for a cluster node.
+        The second tuple entry is a list of neighbring topics for a cluster node.
+        """
+        futures = [
+            self._executor.submit(self.adversely_summarize_cluster_topics,
+                                  namespace, cluster_tuple[0], cluster_tuple[1])
+            for cluster_tuple in batch
+        ]
+        return [f.result() for f in concurrent.futures.as_completed(futures)]
