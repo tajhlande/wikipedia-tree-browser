@@ -17,6 +17,7 @@ wheels/
 *.db-journal
 *.db-shm
 *.db-wal
+*.db*
 *.duckdb
 *.wal
 

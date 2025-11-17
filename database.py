@@ -1044,6 +1044,38 @@ def get_leaf_cluster_node_ids(sqlconn: sqlite3.Connection, namespace: str) -> li
         raise
 
 
+def get_leaf_cluster_node_ids_missing_flag(sqlconn: sqlite3.Connection,
+                                           namespace: str,
+                                           flag_column: str) -> list[int]:
+    """
+    Get the list of leaf cluster node ids that have pages
+    and that have a cluster tree flag column with NULL value
+    """
+    sql = f"""
+        SELECT distinct pv.cluster_node_id
+        FROM page_vector pv
+        INNER JOIN cluster_tree ct ON pv.namespace = ct.namespace
+            AND pv.cluster_node_id = ct.node_id
+        WHERE pv.namespace = ?
+        AND ct.{flag_column} IS NULL
+        ORDER BY cluster_node_id ASC
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace,))
+        rows = cursor.fetchall()
+        return [row[0] for row in rows]
+
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to get leaf cluster node ids for namespace {namespace}: {e}")
+        raise
+
+
 def get_pages_in_cluster(sqlconn: sqlite3.Connection, namespace: str, node_id: int) -> list[Page]:
     """Get the list of page_ids for the given cluster node"""
     sql = """
@@ -1106,6 +1138,50 @@ def get_pages_in_all_clusters(sqlconn: sqlite3.Connection,
             logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
             pass
         logger.exception(f"Failed to get pages for all clusters in namespace {namespace}: {e}")
+        raise
+
+
+def get_pages_in_all_clusters_missing_flag(sqlconn: sqlite3.Connection,
+                                           namespace: str,
+                                           flag_column: str,
+                                           ) -> dict[int, list[tuple[int, str, str]]]:
+    """Get the map of node_id to tuple of (page_id, title, abstract) for the given namespace"""
+    sql = f"""
+        SELECT pv.cluster_node_id, pl.page_id, pl.title, pl.abstract
+        FROM page_log pl
+        INNER JOIN page_vector pv ON pl.namespace = pv.namespace AND pl.page_id = pv.page_id
+        INNER JOIN cluster_tree ct ON pv.namespace = ct.namespace
+            AND pv.cluster_node_id = ct.node_id
+        WHERE pl.namespace = ?
+        AND ct.{flag_column} IS NULL
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace, ))
+        results = dict()
+        while True:
+            rows = cursor.fetchmany(100)
+            if not rows:
+                break
+            for row in rows:
+                node_id = row[0]
+                page_id = row[1]
+                title = row[2]
+                abstract = row[3]
+
+                if node_id not in results:
+                    results[node_id] = list()
+                results[node_id].append((page_id, title, abstract, ))
+        return results
+
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to get pages for clusters in namespace {namespace} "
+                         f"with null flag column {flag_column}: {e}")
         raise
 
 
@@ -1210,7 +1286,7 @@ def get_cluster_final_topics(sqlconn: sqlite3.Connection, namespace: str) -> lis
         raise
 
 
-def get_cluster_node_ids_with_missing_topics(sqlconn: sqlite3.Connection, namespace: str) -> list[int]:
+def get_cluster_node_ids_with_missing_first_topics(sqlconn: sqlite3.Connection, namespace: str) -> list[int]:
     """
     Find the cluster nodes that are missing topics. They tend to be near the root of the tree.
     Higher depth nodes should be listed first, so that they can be processed earlier,
@@ -1221,6 +1297,35 @@ def get_cluster_node_ids_with_missing_topics(sqlconn: sqlite3.Connection, namesp
         FROM cluster_tree
         WHERE namespace = ?
         AND first_label IS NULL
+        ORDER BY depth DESC
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace,))
+        rows = cursor.fetchall()
+        return [row[0] for row in rows]
+
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.exception(f"Failed to get cluster node ids with missing first topics for namespace {namespace}: {e}")
+        raise
+
+
+def get_cluster_node_ids_with_missing_final_topics(sqlconn: sqlite3.Connection, namespace: str) -> list[int]:
+    """
+    Find the cluster nodes that are missing topics. They tend to be near the root of the tree.
+    Higher depth nodes should be listed first, so that they can be processed earlier,
+    to provide input to lower depth nodes.
+    """
+    sql = """
+        SELECT node_id
+        FROM cluster_tree
+        WHERE namespace = ?
+        AND final_label  IS NULL
         ORDER BY depth DESC
     """
     try:
@@ -1304,4 +1409,34 @@ def get_cluster_root_node_ids(sqlconn: sqlite3.Connection, namespace: str) -> li
             logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
             pass
         logger.exception(f"Failed to find root nodes on cluster tree for namespace {namespace}: {e}")
+        raise
+
+
+def get_clusters_for_pass(
+    sqlconn: sqlite3.Connection,
+    namespace: str,
+    flag_column: str,
+    limit: Optional[int],
+) -> list[int]:
+    """Assuming 'resume' mode, get clusters for a specific pass based on progress and limit."""
+    limit_clause = f" LIMIT {limit}" if limit else ""
+    sql = f"""
+        SELECT node_id FROM cluster_tree
+        WHERE namespace = ?
+        AND {flag_column} IS NULL
+        {limit_clause};
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace, ))
+        result = [row[0] for row in cursor.fetchall()]
+        return result
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.error(f"Failed to get clusters for pass for namespace `{namespace}`"
+                     f" and flag_column `{flag_column}`: {e}")
         raise
