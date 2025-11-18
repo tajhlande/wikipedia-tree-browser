@@ -35,7 +35,7 @@ SUMMARIZING_MODEL_API_KEY_KEY = "SUMMARIZING_MODEL_API_KEY"
 DEFAULT_MODEL_NAME = "gpt-oss-20b"
 
 APP_TITLE = "wp-embeddings"
-APP_URL = "TODO: put Github link here"
+APP_URL = "http://localhost:8080"
 
 namespace_to_system_prompt_dict: Dict[str, str] = dict()
 
@@ -111,13 +111,19 @@ class TopicDiscovery:
                         # llama.cpp-specific slot parameters to deal with "500: context shift is disabled" errors
                         "cache_prompt": False,
                         "n_keep": 0,
-                        # "temperature": 0.0,
+                        # OpenRouter.ai specific parameters
+                        "provider": {
+                            "order": ["novita/bf16", "ncompass", "gmicloud/fp4", "deepinfra/fp4", ]
+                            # "order": ["novita", "deepinfra", "wandb", ], # gpt-oss-20b preferences
+                        },
                     },
                     extra_headers={
                         # Headers for OpenRouter.ai
                         # "HTTP-Referer": APP_URL,
                         "X-Title": APP_TITLE,
                     },
+                    temperature=1.0,
+                    top_p=1.0,
                 )
                 return completion.choices[0].message.content
 
@@ -146,8 +152,8 @@ class TopicDiscovery:
         return None
 
     def summarize_page_topics(self, namespace: str, page_list: list[tuple[int, str, str]]) -> Optional[str]:
-        # TODO let's just use page titles for now. we will introduce page abstract content later if we need it
-        submitted_titles = ", ".join([page[1] for page in page_list])
+        # Using page title and the first 500 characters of the abstract for summaries
+        submitted_titles = "; ".join([page[1] + (f": {page[2][:500]}" if page[2] else "") for page in page_list[:100]])
 
         prompt = " ".join(f"""
             Describe the best common topic for the page titles listed below.
@@ -179,7 +185,7 @@ class TopicDiscovery:
                                         page_list: list[tuple[int, str, str]],
                                         neighboring_topics_list: list[str]
                                         ) -> Optional[str]:
-        submitted_titles = ", ".join([page[1] for page in page_list])
+        submitted_titles = "; ".join([page[1] + (f": {page[2][:500]}" if page[2] else "") for page in page_list[:100]])
         neighboring_topics = ", ".join(neighboring_topics_list)
 
         prompt = " ".join(f"""
