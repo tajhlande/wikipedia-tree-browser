@@ -1,0 +1,12 @@
+WME_USERNAME=my-wmf-user
+WME_PASSWORD=your_api_key_here
+
+PYTHONPATH=.
+
+EMBEDDING_MODEL_NAME=jina-embeddings-v4-text-matching-GGUF
+EMBEDDING_MODEL_API_URL=https://api.example.com/v1/embeddings
+EMBEDDING_MODEL_API_KEY=your_api_key_here
+
+SUMMARIZING_MODEL_NAME=openai/gpt-oss-20b
+SUMMARIZING_MODEL_API_URL=https://maybe-a-different.api.example.com/v1
+SUMMARIZING_MODEL_API_KEY=your_api_key_here
