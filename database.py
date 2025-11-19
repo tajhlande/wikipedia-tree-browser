@@ -10,7 +10,7 @@ import numpy as np
 
 from numpy.typing import NDArray
 
-from classes import Chunk, ClusterTreeNode, Page, PageVectors, Vector3D
+from classes import Chunk, ClusterTreeNode, Page, PageContent, PageVectors, Vector3D, ClusterNodeTopics
 
 # logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ def ensure_tables(sqlconn: sqlite3.Connection):
             first_label TEXT,
             final_label TEXT,
             PRIMARY KEY (namespace, node_id),
-            FOREIGN KEY (parent_id) REFERENCES cluster_tree(node_id) ON DELETE CASCADE
+            FOREIGN KEY (namespace, parent_id) REFERENCES cluster_tree(namespace, node_id)
         );
         """
     try:
@@ -107,14 +107,14 @@ def ensure_tables(sqlconn: sqlite3.Connection):
         sqlconn.execute(cluster_tree_table_sql)
         # Index for fast cluster lookup
         sqlconn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_page_vector_cluster ON page_vector(cluster_id);"
+            "CREATE INDEX IF NOT EXISTS idx_page_vector_ns_cluster ON page_vector(namespace, cluster_id);"
         )
         # Indexes for cluster_tree table
         sqlconn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_cluster_tree_parent ON cluster_tree(parent_id, depth);"
+            "CREATE INDEX IF NOT EXISTS idx_cluster_tree_ns_parent ON cluster_tree(namespace, parent_id, depth);"
         )
         sqlconn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_cluster_tree_depth ON cluster_tree(depth);"
+            "CREATE INDEX IF NOT EXISTS idx_cluster_tree_ns_depth ON cluster_tree(namespace, depth);"
         )
 
         # performance pragmas
@@ -891,7 +891,7 @@ def get_cluster_tree_max_node_id(sqlconn: sqlite3.Connection) -> int:
 def update_cluster_tree_first_labels(
         sqlconn: sqlite3.Connection,
         namespace: str,
-        cluster_ids_and_labels: list[tuple[int, Optional[str]]]
+        cluster_nodes: Iterable[ClusterNodeTopics]
         ) -> None:
     """Update the first_label for the given cluster tree node."""
     sql = """
@@ -900,7 +900,7 @@ def update_cluster_tree_first_labels(
         WHERE namespace = ? AND node_id = ?
     """
     try:
-        params = [(id_and_label[1], namespace, id_and_label[0]) for id_and_label in cluster_ids_and_labels]
+        params = [(n.first_label, namespace, n.node_id, ) for n in cluster_nodes]
         cursor = sqlconn.cursor()
         cursor.executemany(sql, params)
         sqlconn.commit()
@@ -917,16 +917,16 @@ def update_cluster_tree_first_labels(
 def update_cluster_tree_final_labels(
         sqlconn: sqlite3.Connection,
         namespace: str,
-        cluster_ids_and_labels: list[tuple[int, Optional[str]]]
+        cluster_nodes: Iterable[ClusterNodeTopics]
         ) -> None:
-    """Update the first_label for the given cluster tree node."""
+    """Update the final_label for the given cluster tree node."""
     sql = """
         UPDATE cluster_tree
         SET final_label = ?
         WHERE namespace = ? AND node_id = ?
     """
     try:
-        params = [(id_and_label[1], namespace, id_and_label[0]) for id_and_label in cluster_ids_and_labels]
+        params = [(n.final_label, namespace, n.node_id) for n in cluster_nodes]
         cursor = sqlconn.cursor()
         cursor.executemany(sql, params)
         sqlconn.commit()
@@ -1104,10 +1104,11 @@ def get_pages_in_cluster(sqlconn: sqlite3.Connection, namespace: str, node_id: i
 
 def get_pages_in_all_clusters(sqlconn: sqlite3.Connection,
                               namespace: str
-                              ) -> dict[int, list[tuple[int, str, str]]]:
+                              ) -> dict[int, list[PageContent]]:
     """Get the map of node_id to tuple of (page_id, title, abstract) for the given namespace"""
+    # Trim abstracts to 500 characters
     sql = """
-        SELECT pv.cluster_node_id, pl.page_id, pl.title, pl.abstract
+        SELECT pv.cluster_node_id, pl.page_id, pl.title, SUBSTR(pl.abstract, 1, 500)
         FROM page_log pl
         INNER JOIN page_vector pv on pl.namespace = pv.namespace and pl.page_id = pv.page_id
         WHERE pl.namespace = ?
@@ -1122,13 +1123,14 @@ def get_pages_in_all_clusters(sqlconn: sqlite3.Connection,
                 break
             for row in rows:
                 node_id = row[0]
-                page_id = row[1]
-                title = row[2]
-                abstract = row[3]
-
+                page_content = PageContent(
+                    page_id=row[1],
+                    title=row[2],
+                    abstract=row[3]
+                )
                 if node_id not in results:
                     results[node_id] = list()
-                results[node_id].append((page_id, title, abstract, ))
+                results[node_id].append(page_content)
         return results
 
     except sqlite3.Error as e:
@@ -1439,4 +1441,41 @@ def get_clusters_for_pass(
             pass
         logger.error(f"Failed to get clusters for pass for namespace `{namespace}`"
                      f" and flag_column `{flag_column}`: {e}")
+        raise
+
+
+def get_all_cluster_nodes_for_topic_labeling(sqlconn: sqlite3.Connection,
+                                             namespace: str) -> list[ClusterNodeTopics]:
+    """
+    Load all the cluster tree nodes at once for topic labeling.
+    Marks no nodes as leaf nodes yet, that must be done after.
+
+    :param: sqlconn   The Sqlite3 connection to use
+    :param: namespace  The namespace for the cluster tree
+    :return: A list of cluster node topic objects
+    """
+    sql = """
+        SELECT node_id, depth, parent_id, first_label, final_label
+        FROM cluster_tree
+        WHERE namespace = ?;
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace, ))
+        result = [ClusterNodeTopics(
+            node_id=row[0],
+            depth=row[1],
+            parent_id=row[2],
+            first_label=row[3],
+            final_label=row[4],
+            is_leaf=False  # mark none as leaf now, find leaves later
+        ) for row in cursor.fetchall()]
+        return result
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.error(f"Failed to get cluster nodes for namespace `{namespace}`: {e}")
         raise

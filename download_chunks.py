@@ -24,7 +24,7 @@ from progress_utils import ProgressTracker
 # Load environment variables from .env file
 load_dotenv()
 
-logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Apply import fix before importing wme_sdk_python modules

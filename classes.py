@@ -64,3 +64,20 @@ class ClusterTreeNode:
     sample_doc_ids: Optional[list[int]] = None
     first_label: Optional[str] = None
     final_label: Optional[str] = None
+
+
+@dataclass
+class PageContent:
+    page_id: int
+    title: str
+    abstract: str
+
+
+@dataclass
+class ClusterNodeTopics:
+    node_id: int
+    depth: int
+    parent_id: Optional[int]
+    first_label: Optional[str]
+    final_label: Optional[str]
+    is_leaf: bool

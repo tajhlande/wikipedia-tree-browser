@@ -27,7 +27,7 @@ from database import (
 from progress_utils import ProgressTracker
 
 # Configure logging to suppress INFO messages from httpx
-logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 

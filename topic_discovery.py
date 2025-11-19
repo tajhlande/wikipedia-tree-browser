@@ -4,11 +4,12 @@ import concurrent.futures
 
 from random import random
 import time
-from typing import Dict, Optional
+from typing import Dict, Iterable, Optional
 from dotenv import load_dotenv
 
 from openai import OpenAI, InternalServerError
 
+from classes import ClusterNodeTopics, PageContent
 from languages import get_language_for_namespace
 
 logger = logging.getLogger(__name__)
@@ -113,8 +114,8 @@ class TopicDiscovery:
                         "n_keep": 0,
                         # OpenRouter.ai specific parameters
                         "provider": {
-                            "order": ["novita/bf16", "ncompass", "gmicloud/fp4", "deepinfra/fp4", ]
-                            # "order": ["novita", "deepinfra", "wandb", ], # gpt-oss-20b preferences
+                            # "order": ["novita/bf16", "ncompass", "gmicloud/fp4", "deepinfra/fp4", ]  # gpt-oss-120b
+                            "order": ["novita", "deepinfra", "wandb", ],  # gpt-oss-20b preferences
                         },
                     },
                     extra_headers={
@@ -151,9 +152,11 @@ class TopicDiscovery:
         logger.warning("OpenAI server call failed multiple times but no previous error present")
         return None
 
-    def summarize_page_topics(self, namespace: str, page_list: list[tuple[int, str, str]]) -> Optional[str]:
-        # Using page title and the first 500 characters of the abstract for summaries
-        submitted_titles = "; ".join([page[1] + (f": {page[2][:500]}" if page[2] else "") for page in page_list[:100]])
+    def naively_summarize_page_topics(self, namespace: str, node: ClusterNodeTopics, pages: list[PageContent]) -> None:
+        # Using page title and abstract clip for summaries
+        # only first 100 pages. leaf nodes shouldn't be larger than that anyway
+        submitted_titles = "; ".join([page.title + (f": {page.abstract}" if page.abstract else "")
+                                      for page in pages[:100]])
 
         prompt = " ".join(f"""
             Describe the best common topic for the page titles listed below.
@@ -165,28 +168,24 @@ class TopicDiscovery:
             You do not need to produce a complete sentence and should not end the topic with a period
             or other sentence terminator.
             The first word in the topic should be capitalized, if the language has capitalization.
-            The page titles are: {submitted_titles}.
+            The page titles and abstracts are: {submitted_titles}.
         """.split())
 
         logger.debug("Prompt: %s", prompt)
 
-        return self._call_openai_completions_endpoint(get_system_prompt_for_namespace(namespace), prompt)
-
-        # response = self._openai_client.responses.create(
-        #     model=self.model_name,
-        #     instructions=TOPIC_GENERATION_SYSTEM_PROMPT,
-        #     input=prompt,
-        # )
-
-        # return response.output_text
+        node.first_label = self._call_openai_completions_endpoint(get_system_prompt_for_namespace(namespace), prompt)
+        node.first_label = node.first_label.strip() if node.first_label else None
 
     def adversely_summarize_page_topics(self,
                                         namespace: str,
-                                        page_list: list[tuple[int, str, str]],
-                                        neighboring_topics_list: list[str]
-                                        ) -> Optional[str]:
-        submitted_titles = "; ".join([page[1] + (f": {page[2][:500]}" if page[2] else "") for page in page_list[:100]])
-        neighboring_topics = ", ".join(neighboring_topics_list)
+                                        node: ClusterNodeTopics,
+                                        pages: list[PageContent],
+                                        siblings: list[ClusterNodeTopics]
+                                        ):
+        # use title and abstract
+        submitted_titles = "; ".join([page.title + (f": {page.abstract}" if page.abstract else "")
+                                      for page in pages[:100]])
+        neighboring_topics = ", ".join([sib.first_label for sib in siblings if sib.first_label])
 
         prompt = " ".join(f"""
             Describe the best common topic for the following page titles.
@@ -200,16 +199,20 @@ class TopicDiscovery:
             Only use punctuation as appropriate for the words in the topic.
             You do not need to produce a complete sentence and should not end the topic with a period
             or other sentence terminator.
+            The first word in the topic should be capitalized, if the language has capitalization.
             The page titles are: {submitted_titles}.
             The neighboring topics from which the generated topic should be distinct are: {neighboring_topics}.
         """.split())
 
         logger.debug("Prompt: %s", prompt)
 
-        return self._call_openai_completions_endpoint(get_system_prompt_for_namespace(namespace), prompt)
+        node.final_label = self._call_openai_completions_endpoint(get_system_prompt_for_namespace(namespace), prompt)
+        node.final_label = node.final_label.strip() if node.final_label else None
 
-    def summarize_cluster_topics(self, namespace: str, child_topics: list[str]) -> Optional[str]:
-        submitted_topics = ", ".join([topic for topic in child_topics if topic is not None])
+    def naively_summarize_cluster_topics(self, namespace: str,
+                                         node: ClusterNodeTopics,
+                                         child_nodes: list[ClusterNodeTopics]):
+        submitted_topics = ", ".join([c.first_label for c in child_nodes if c.first_label])
 
         prompt = " ".join(f"""
             Describe the best common topic for the cluster topics listed below.
@@ -221,23 +224,25 @@ class TopicDiscovery:
             You do not need to produce a complete sentence and should not end the topic with a period
             or other sentence terminator.
             The first word in the topic should be capitalized, if the language has capitalization.
-            The cluster topic are: {submitted_topics}.
+            The cluster topics are: {submitted_topics}.
         """.split())
 
         logger.debug("Prompt: %s", prompt)
 
-        return self._call_openai_completions_endpoint(get_system_prompt_for_namespace(namespace), prompt)
+        node.first_label = self._call_openai_completions_endpoint(get_system_prompt_for_namespace(namespace), prompt)
+        node.first_label = node.first_label.strip() if node.first_label else None
 
     def adversely_summarize_cluster_topics(self,
                                            namespace: str,
-                                           child_topics: list[str],
-                                           neighboring_topics_list: list[str]
-                                           ) -> Optional[str]:
-        submitted_titles = ", ".join([topic for topic in child_topics if topic is not None])
-        neighboring_topics = ", ".join(neighboring_topics_list)
+                                           node: ClusterNodeTopics,
+                                           child_nodes: list[ClusterNodeTopics],
+                                           sibling_nodes: list[ClusterNodeTopics]
+                                           ):
+        cluster_topics = ", ".join([c.final_label for c in child_nodes if c.final_label])
+        neighboring_topics = ", ".join([s.first_label for s in sibling_nodes if s.first_label])
 
         prompt = " ".join(f"""
-            Describe the best common topic for the following page titles.
+            Describe the best common topic for the following cluster topics.
             Consider also the neighboring topics, and generate a topic that
             is as distinct from the neighboring topics as it can reasonably be, without distorting
             the topic's descriptive power.
@@ -248,46 +253,71 @@ class TopicDiscovery:
             Only use punctuation as appropriate for the words in the topic.
             You do not need to produce a complete sentence and should not end the topic with a period
             or other sentence terminator.
-            The page titles are: {submitted_titles}.
+            The first word in the topic should be capitalized, if the language has capitalization.
+            The cluster topics are: {cluster_topics}.
             The neighboring topics from which the generated topic should be distinct are: {neighboring_topics}.
         """.split())
 
         logger.debug("Prompt: %s", prompt)
 
-        return self._call_openai_completions_endpoint(get_system_prompt_for_namespace(namespace), prompt)
+        node.final_label = self._call_openai_completions_endpoint(get_system_prompt_for_namespace(namespace), prompt)
+        node.final_label = node.final_label.strip() if node.final_label else None
 
     # -----------------------------------------------------------------------
     # new batch interface (used by TopicsCommand)
     # -----------------------------------------------------------------------
 
-    def summarize_page_topics_batch(self, namespace: str, batch: list[list[tuple[int, str, str]]]
-                                    ) -> list[Optional[str]]:
+    def naively_summarize_page_topics_batch(self,
+                                            namespace: str,
+                                            batch: Iterable[ClusterNodeTopics],
+                                            page_content_map: dict[int, list[PageContent]]
+                                            ):
         futures = [
-            self._executor.submit(self.summarize_page_topics, namespace, page_group)
-            for page_group in batch
+            self._executor.submit(self.naively_summarize_page_topics, namespace, node, page_content_map[node.node_id])
+            for node in batch
         ]
         return [f.result() for f in concurrent.futures.as_completed(futures)]
+
+    def _get_siblings(self,
+                      node: ClusterNodeTopics,
+                      parent_children: list[ClusterNodeTopics]
+                      ) -> list[ClusterNodeTopics]:
+        return [
+            s for s in parent_children
+            if s.node_id != node.node_id
+        ]
 
     def adversely_summarize_page_topics_batch(self,
                                               namespace: str,
-                                              batch: list[tuple[list[tuple[int, str, str]], list[str]]]
-                                              ) -> list[Optional[str]]:
+                                              batch: Iterable[ClusterNodeTopics],
+                                              page_content_map: dict[int, list[PageContent]],
+                                              parent_id_child_map: dict[int, list[ClusterNodeTopics]]
+                                              ):
         futures = [
-            self._executor.submit(self.adversely_summarize_page_topics, namespace, page_tuple[0], page_tuple[1])
-            for page_tuple in batch
+            self._executor.submit(self.adversely_summarize_page_topics,
+                                  namespace, node, page_content_map[node.node_id],
+                                  self._get_siblings(node, parent_id_child_map[node.parent_id]))
+            for node in batch if node.parent_id
         ]
         return [f.result() for f in concurrent.futures.as_completed(futures)]
 
-    def summarize_cluster_topics_batch(self, namespace: str, batch: list[list[str]]) -> list[Optional[str]]:
+    def naively_summarize_cluster_topics_batch(self,
+                                               namespace: str,
+                                               batch: Iterable[ClusterNodeTopics],
+                                               parent_id_child_map: dict[int, list[ClusterNodeTopics]]):
         futures = [
-            self._executor.submit(self.summarize_cluster_topics, namespace, child_topics)
-            for child_topics in batch
+            self._executor.submit(self.naively_summarize_cluster_topics,
+                                  namespace=namespace,
+                                  node=node,
+                                  child_nodes=parent_id_child_map[node.node_id])
+            for node in batch
         ]
         return [f.result() for f in concurrent.futures.as_completed(futures)]
 
     def adversely_summarize_cluster_topics_batch(self,
                                                  namespace: str,
-                                                 batch: list[tuple[list[str], list[str]]]
+                                                 batch: list[ClusterNodeTopics],
+                                                 parent_id_child_map: dict[int, list[ClusterNodeTopics]]
                                                  ) -> list[Optional[str]]:
         """
         Given a batch of tuples, do adverse summarization.
@@ -296,7 +326,8 @@ class TopicDiscovery:
         """
         futures = [
             self._executor.submit(self.adversely_summarize_cluster_topics,
-                                  namespace, cluster_tuple[0], cluster_tuple[1])
-            for cluster_tuple in batch
+                                  namespace, node, parent_id_child_map[node.node_id],
+                                  self._get_siblings(node, parent_id_child_map[node.parent_id]))
+            for node in batch if node.parent_id
         ]
         return [f.result() for f in concurrent.futures.as_completed(futures)]

@@ -12,7 +12,7 @@ from database import (
 from topic_discovery import TopicDiscovery, get_system_prompt_for_namespace
 
 
-logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
