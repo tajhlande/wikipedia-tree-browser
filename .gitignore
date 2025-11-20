@@ -21,6 +21,9 @@ wheels/
 *.duckdb
 *.wal
 
+# IDE cruft
+.idea/
+
 # work directories and files
 downloaded
 extracted

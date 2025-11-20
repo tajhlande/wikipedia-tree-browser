@@ -25,3 +25,15 @@ dependencies = [
 [tool.flake8]
 exclude = [".venv", "wme_sdk"]
 max-line-length = 120
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.5",
+]
+
+[tool.ruff]
+exclude = [
+    ".venv", "wme_sdk"
+]
+line-length = 120
+
