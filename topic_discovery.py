@@ -84,7 +84,7 @@ class TransformersPipelineClient(ChatModelCaller):
         self._pipeline = pipeline(
             "text-generation",
             model=self.model_name,
-            model_kwargs={"torch_dtype": torch.bfloat16},
+            model_kwargs={"dtype": torch.bfloat16},
             device_map="auto",
         )
     @classmethod
@@ -102,7 +102,7 @@ class TransformersPipelineClient(ChatModelCaller):
             {"role": "user", "content": user_prompt, },
         ]
 
-        return self._pipe(messages)
+        return self._pipeline(messages)
 
 
 class TransformersAutoModelClient(ChatModelCaller):
