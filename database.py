@@ -14,7 +14,7 @@ from classes import Chunk, ClusterTreeNode, Page, PageContent, PageVectors, Vect
 
 # logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 
 def ensure_tables(sqlconn: sqlite3.Connection):

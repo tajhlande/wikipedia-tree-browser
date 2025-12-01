@@ -48,7 +48,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 # Store the command history (feel free to change the path)
 _HISTFILE = os.path.join(os.path.expanduser("."), ".wp_transform_history")
