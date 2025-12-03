@@ -7,17 +7,23 @@ requires-python = ">=3.13"
 dependencies = [
     "chromadb>=1.2.0",
     "duckdb>=1.4.1",
+    "fastapi>=0.123.4",
+    "lagom>=2.7.7",
     "matplotlib==3.10.0",
     "numpy>=2.3.3",
     "openai>=2.5.0",
     "pandas==2.2.3",
+    "pydantic>=2.12.3",
     "pytest==8.3.3",
     "python-dotenv==1.0.1",
+    "python-multipart>=0.0.20",
     "pyvis>=0.3.2",
     "requests==2.32.3",
     "scikit-learn>=1.7.2",
+    "sqlalchemy>=2.0.44",
     "tqdm>=4.67.1",
     "umap-learn>=0.5.9.post2",
+    "uvicorn>=0.38.0",
 ]
 
 [tool.flake8]
