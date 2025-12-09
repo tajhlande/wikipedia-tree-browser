@@ -88,7 +88,7 @@ async def get_cluster_node_siblings(
         return children
     except Exception as e:
         logger.exception("Unable to find siblings")
-        raise HTTPException(status_code=500, detail=f"Error retrieving cluster children: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving cluster siblings: {str(e)}")
 
 
 @router.get("/namespace/{namespace}/node_id/{node_id}/parent")

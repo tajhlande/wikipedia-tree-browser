@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from typing import Annotated, List
 from web.backend.models.page import PageResponse, PageDetailResponse
 from web.backend.services.cluster_service import ClusterService
-from web.backend.services.service_setup import service_provider
+from web.backend.services.service_setup import get_cluster_service
 
 router = APIRouter()
 
@@ -20,7 +20,7 @@ async def get_pages_in_cluster(
     node_id: Annotated[int, Path(title="Cluster node ID")],
     limit: Annotated[int, Query(description="Maximum number of pages to return")] = 50,
     offset: Annotated[int, Query(description="Offset for pagination")] = 0,
-    cluster_service: ClusterService = Depends(lambda: service_provider("cluster_service")),
+    cluster_service: ClusterService = Depends(get_cluster_service),  # lambda: service_provider("cluster_service")
 ):
     """Get pages in a specific cluster node"""
     try:
@@ -34,7 +34,7 @@ async def get_pages_in_cluster(
 async def get_page_details(
     namespace: Annotated[str, Path(title="Wikipedia namespace")],
     page_id: Annotated[int, Path(title="Page ID")],
-    cluster_service: ClusterService = Depends(lambda: service_provider("cluster_service")),
+    cluster_service: ClusterService = Depends(get_cluster_service),
 ):
     """Get detailed information about a specific page"""
     try:

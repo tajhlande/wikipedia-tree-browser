@@ -1,3 +1,4 @@
+from functools import partial
 import logging
 
 from typing import Any
@@ -38,3 +39,6 @@ def service_provider(service_name: str) -> Any:
         return _service_catalog[service_name]
     else:
         raise ValueError(f"No service named {service_name}")
+
+
+get_cluster_service = partial(service_provider, "cluster_service")
