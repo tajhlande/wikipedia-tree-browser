@@ -1,34 +1,29 @@
 [project]
-name = "wp-embeddings"
+name = "wp-embeddings-dataprep"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
+description = "Data preparation pipeline for Wikipedia embeddings and clustering"
+readme = "../README.md"
 requires-python = ">=3.13"
 dependencies = [
     "chromadb>=1.2.0",
     "duckdb>=1.4.1",
-    "fastapi>=0.123.4",
     "lagom>=2.7.7",
     "matplotlib==3.10.0",
     "numpy>=2.3.3",
     "openai>=2.5.0",
     "pandas==2.2.3",
-    "pydantic>=2.12.3",
-    "pytest==8.3.3",
-    "pytest-asyncio>=1.3.0",
-    "python-dotenv==1.0.1",
-    "python-multipart>=0.0.20",
     "pyvis>=0.3.2",
     "requests==2.32.3",
     "scikit-learn>=1.7.2",
     "sqlalchemy>=2.0.44",
     "tqdm>=4.67.1",
     "umap-learn>=0.5.9.post2",
-    "uvicorn>=0.38.0",
+    "pytest==8.3.3",
+    "python-dotenv==1.0.1",
 ]
 
 [tool.flake8]
-exclude = [".venv", "wme_sdk"]
+exclude = [".venv", "../wme_sdk", "../web"]
 max-line-length = 120
 
 [dependency-groups]
@@ -41,7 +36,6 @@ dev = [
 
 [tool.ruff]
 exclude = [
-    ".venv", "wme_sdk"
+    ".venv", "../wme_sdk", "../web"
 ]
 line-length = 120
-

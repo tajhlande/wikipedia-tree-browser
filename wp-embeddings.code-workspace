@@ -1,0 +1,21 @@
+{
+  "folders": [
+    {
+      "path": "dataprep"
+    },
+    {
+      "path": "web"
+    },
+    {
+      "path": "."
+    }
+  ],
+  "settings": {
+    "dataprep": {
+      "python.defaultInterpreterPath": "${workspaceFolder:dataprep}/.venv/bin/python"
+    },
+    "web": {
+      "python.defaultInterpreterPath": "${workspaceFolder:web}/.venv/bin/python"
+    }
+  }
+}

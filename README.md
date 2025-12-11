@@ -1,18 +1,48 @@
 # Wikipedia Embeddings and Visualization
 
-This project downloads and extracts Wikipedia article page titles and abstracts from [Wikimedia Enterprise](https://enterprise.wikimedia.com/),
-then computes embeddings on them and recursively clusters the embeddings, for the purpose of visualizing all the knowledge in Wikipedia.
+This project consists of two separate Python applications that work together to process and visualize Wikipedia embeddings:
+
+1. **Data Preparation** (`dataprep/`) - Downloads, processes, and analyzes Wikipedia data
+2. **Web Application** (`web/`) - Provides 3D visualization of the processed embeddings
+
+The data preparation component downloads and extracts Wikipedia article page titles and abstracts from [Wikimedia Enterprise](https://enterprise.wikimedia.com/),
+then computes embeddings on them and recursively clusters the embeddings. The web application provides an interactive 3D visualization of the resulting cluster trees.
 
 The goal is to have visualizations for multiple languages – as many as can be supported by the ML models I've selected for this project:
 
 * [jinaai/jina-embeddings-v4-text-matching-GGUF](https://huggingface.co/jinaai/jina-embeddings-v4-text-matching-GGUF) for embeddings
 * [ggml-org/gpt-oss-20b-GGUF](https://huggingface.co/ggml-org/gpt-oss-20b-GGUF) for topic discovery
 
-## Project functions and structure
-
-The primary module for the project is `command.py`, and it can be invoked interactively:
+## Project Structure
 
 ```
+wp-embeddings/
+├── dataprep/          # Data preparation application
+│   ├── command.py     # CLI interface for data processing
+│   ├── classes.py     # Data models
+│   ├── database.py    # Database operations
+│   ├── download_chunks.py    # Download Wikipedia chunks
+│   ├── index_pages.py        # Process page content
+│   ├── transform.py          # ML transformations
+│   └── pyproject.toml        # Dependencies for data prep
+├── web/               # Web application for 3D visualization
+│   ├── backend/       # FastAPI backend
+│   ├── frontend/      # BabylonJS frontend
+│   ├── test_*.py      # Web application tests
+│   └── pyproject.toml # Dependencies for web app
+├── data/              # Shared data directory (created during setup)
+│   ├── downloaded/    # Raw downloaded chunks
+│   ├── extracted/     # Extracted page data
+│   └── *.db          # SQLite databases
+└── wme_sdk/          # Wikimedia Enterprise SDK (shared)
+```
+
+## Data Preparation Application
+
+The data preparation application handles downloading, processing, and analyzing Wikipedia data. It can be invoked interactively:
+
+```
+$ cd dataprep
 $ python -m command
 Welcome to wp-embeddings command interpreter!
 Type 'help' for available commands or 'quit' to exit.
@@ -23,6 +53,7 @@ Type 'help' for available commands or 'quit' to exit.
 or with command parameters:
 
 ```
+$ cd dataprep
 $ python -m command help
 Available commands:
   refresh - Refresh chunk data for a namespace
@@ -67,9 +98,11 @@ Their code has its own license, to be found in the [wme_sdk/LICENSE](wme_sdk/LIC
 The remainder of the project is licensed by the file in [LICENSE](LICENSE).
 
 
-## Getting started
+## Getting Started
 
 This project is managed with [uv](https://docs.astral.sh/uv/), the awesome Python package manager from Astral.
+
+### Prerequisites
 
 First, install `uv` if you haven't already:
 
@@ -77,22 +110,23 @@ First, install `uv` if you haven't already:
 pip3 install uv
 ```
 
-Then create a virtual environment and activate it:
+### Data Preparation Setup
 
+1. Create a virtual environment for the data preparation application:
 ```bash
+cd dataprep
 uv venv
 source .venv/bin/activate
 ```
 
-Fetch the project dependencies:
-
+2. Fetch the data preparation dependencies:
 ```bash
 uv sync
 ```
 
-Run the command engine interactively:
-```
-$ python -m command
+3. Run the data preparation CLI interactively:
+```bash
+python -m command
 Welcome to wp-embeddings command interpreter!
 Type 'help' for available commands or 'quit' to exit.
 
@@ -111,11 +145,47 @@ Use 'help <command>' for more information about a specific command.
 Goodbye!
 ```
 
+### Web Application Setup
+
+1. Create a virtual environment for the web application:
+```bash
+cd web
+uv venv
+source .venv/bin/activate
+```
+
+2. Fetch the web application dependencies:
+```bash
+uv sync
+```
+
+3. Run the FastAPI development server:
+```bash
+python -m uvicorn backend.main:app --reload
+```
+
+The web application will be available at `http://localhost:8000`
+
 For required and optional parameters to a command, precede them with a double-dash,
 whether on the command line or within the command interpreter:
 
 ```bash
+cd dataprep
 python -m command refresh --namespace enwiki_namespace_0
+```
+
+### Running Tests
+
+**Data Preparation Tests:**
+```bash
+cd dataprep
+uv run pytest
+```
+
+**Web Application Tests:**
+```bash
+cd web
+uv run pytest
 ```
 
 ## Command notes and tips
@@ -132,13 +202,23 @@ The `topics` command also has a `--mode` option to select either `refresh` or `r
 can be used in combination with `--limit` to manage the workload.  This command is typically the most time consuming,
 because it invokes the gpt-oss-20b model to discover topics for each tree cluster node.
 
-## Operational notes
+## Operational Notes
 
-* For accessing the Wikimedia Enterprise API and the LLM API endpoints, the code expects a `.env` file containing valid credentials and configuration.
+### Data Storage
+
+* Data files are stored in the `data/` directory at the project root
+* Downloaded archive files are stored in `data/downloaded/{namespace}` and named like `{chunk_name}.tar.gz`
+* Extracted archives are stored in `data/extracted/{namespace}` and are deleted after unpacking and parsing completes (because they are about 2GB each!)
+* SQLite databases are stored in `data/` with names like `enwiki_namespace_0.db`
+
+### API Configuration
+
+For accessing the Wikimedia Enterprise API and the LLM API endpoints, the code expects a `.env` file containing valid credentials and configuration.
 A sample file can be found in [env-example](env-example).
-* Downloaded archive files are stored in `./downloaded/{namespace}` and named like `{chunk_name}.tar.gz`.
+
+### Data Processing
+
 * This code assumes that each archive contains exactly one chunk file in ndjson format. If Enterprise changes this, the code must be changed.
-* Extracted archives are stored in `./extracted/{namespace}` and are deleted after unpacking and parsing completes (because they are about 2GB each!)
 * Both download and extract operations will silently overwrite files if the files exist already.
 * Make sure you have enough disk space. For reference, the complete English Wikipedia namespace 0 archive (article pages) takes about 133G in .tar.gz form (as measured in October 2025).
 
@@ -158,6 +238,23 @@ EMBEDDING_MODEL_API_URL=https://api.example.com/v1/embeddings
 EMBEDDING_MODEL_API_KEY=your_api_key_here
 EMBEDDING_MODEL_NAME=jina-embeddings-v4-text-matching-GGUF
 ```
+
+### Data Processing Applications
+
+**Data Preparation Application (`dataprep/`):**
+- Downloads and extracts Wikipedia content
+- Computes embeddings using ML models
+- Performs clustering and dimensionality reduction
+- Discovers topics using LLMs
+- Stores results in SQLite databases
+
+**Web Application (`web/`):**
+- Provides REST API for accessing processed data
+- Offers 3D visualization of cluster trees using BabylonJS
+- Supports search and navigation of Wikipedia clusters
+- Serves static frontend assets
+
+Both applications share the same data files in the `data/` directory, allowing the data preparation pipeline to generate data that the web application can visualize.
 
 Embeddings are stored in the sqlite3 database after computation. Though `chromadb` is a project dependency, I am not using
 ChromaDB to store the embeddings.  ChromaDB's embedding function code is used to call the embedding
@@ -183,26 +280,64 @@ The sqlite3 database has the following tables:
 
 ## Visualization
 
-Most of the work for visualization hasn't been done yet, BUT...
+The primary visualization is provided by the web application, which offers:
 
-a test visualization of the cluster tree for English Wikipedia can be produced by running
+- **3D Cluster Visualization**: Interactive 3D representation of cluster trees using BabylonJS
+- **Namespace Selection**: Choose which Wikipedia namespace to visualize (e.g., enwiki_namespace_0)
+- **Hierarchical Navigation**: Explore cluster relationships and page distributions
+- **Search Functionality**: Find specific pages or clusters
+
+For development and testing, a 2D visualization can still be generated using:
 
 ```bash
+cd dataprep
 python graph_cluster_tree.py
 ```
 
 which produces `cluster_tree.html`, which you can load in the browser to view a flexible network diagram of the clusters.
 
-## CI
+## Development and CI
+
+### Linting and Code Quality
 
 This project uses [ruff](https://github.com/astral-sh/ruff) for linting (also from Astral Labs):
 
+**Data Preparation Application:**
 ```bash
-uvx ruff check
+cd dataprep
+uv run ruff check
 ```
 
-and [vulture]() to help find dead code, though the output must be evaluated by a human.
-
+**Web Application:**
 ```bash
-uvx vulture *.py
+cd web
+uv run ruff check
+```
+
+Both applications also use [vulture](https://github.com/jendrikseipp/vulture) to help find dead code, though the output must be evaluated by a human:
+
+**Data Preparation Application:**
+```bash
+cd dataprep
+uv run vulture *.py
+```
+
+**Web Application:**
+```bash
+cd web
+uv run vulture *.py
+```
+
+### Testing
+
+**Data Preparation Tests:**
+```bash
+cd dataprep
+uv run pytest
+```
+
+**Web Application Tests:**
+```bash
+cd web
+uv run pytest
 ```

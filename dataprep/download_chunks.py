@@ -2,11 +2,16 @@ import contextlib
 import io
 import json
 import logging
+import os
 import sqlite3
+import sys
 import tarfile
 from typing import Optional
 
 from dotenv import load_dotenv
+
+# Add parent directory to Python path to import wme_sdk
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # from wme_sdk.api.snapshot import Snapshot
 from classes import Chunk, Page
@@ -16,9 +21,9 @@ from database import (
     upsert_new_chunk_data,
     upsert_new_pages_in_batch,
 )
+from progress_utils import ProgressTracker
 from wme_sdk.auth.auth_client import AuthClient
 from wme_sdk.api.api_client import Client, Request, Filter
-from progress_utils import ProgressTracker
 
 # Load environment variables from .env file
 load_dotenv()

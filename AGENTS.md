@@ -3,46 +3,84 @@
 These guidelines help contributors work efficiently with **wp-embeddings**.  Follow them to keep the codebase consistent and easy to maintain.
 
 ## Project Structure & Module Organization
+
+This project consists of two separate Python applications that work together:
+
 ```
-.
-├─ wme_sdk/           # Copied and slightly modified Wikimedia Enterprise API SDK. Avoid making changes here.
-├─ downloaded/        # Raw .tar.gz chunk files per namespace
-├─ extracted/         # Extracted NDJSON files (temporary)
-├─ web/               # Web application for 3D cluster visualization
-│  ├─ backend/        # FastAPI backend
-│  │  ├─ main.py     # FastAPI application entry point
-│  │  ├─ api/        # API route handlers
-│  │  │  ├─ __init__.py
-│  │  │  ├─ pages.py # Page-related endpoints
-│  │  │  ├─ clusters.py # Cluster tree endpoints
-│  │  │  └─ search.py # Search functionality
-│  │  ├─ models/     # Pydantic models for API
-│  │  │  ├─ __init__.py
-│  │  │  ├─ page.py
-│  │  │  └─ cluster.py
-│  │  └─ services/   # Business logic layer
-│  │     ├─ __init__.py
-│  │     └─ database_service.py # Wrapper for database.py
-│  └─ frontend/      # BabylonJS 3D visualization frontend
-│     ├─ index.html  # Main application page
-│     ├─ css/
-│     │  └─ styles.css
-│     ├─ js/
-│     │  ├─ app.js # Main application logic
-│     │  ├─ babylon-scene.js # 3D visualization with BabylonJS
-│     │  └─ api-client.js # API communication
-│     └─ assets/     # Static assets (images, icons, etc.)
-├─ classes.py         # Dataclass objects for the application
-├─ command.py         # CLI entry point
-├─ database.py        # SQLite database helper methods
-├─ download_chunks.py # Methods to download and extract Wikipedia content archives from the Wikimedia Enterprise API
-├─ index_pages.py     # Methods to compute embeddings on the extracted page content
-├─ progress_utils.py  # Helper to show progress bars on long-running activities
-├─ test_*.py          # PyTest unit/integration tests and other manual tests
-├─ transform.py       # Sci-kit Learn and UMAP functions to reduce, cluster, and project embeddings down to 3-space
-└─ pyproject.toml     # Project metadata & dependencies
+wp-embeddings/
+├── dataprep/                    # Data preparation application
+│   ├── classes.py               # Dataclass objects for the application
+│   ├── command.py               # CLI entry point for data processing
+│   ├── database.py              # SQLite database helper methods
+│   ├── download_chunks.py       # Download and extract Wikipedia content
+│   ├── graph_cluster_tree.py    # Generate 2D cluster visualization
+│   ├── index_pages.py           # Compute embeddings on page content
+│   ├── languages.py            # Language mapping utilities
+│   ├── migrate_to_duck_db.py    # Database migration utilities
+│   ├── progress_utils.py       # Progress bar helpers
+│   ├── test_*.py               # PyTest unit/integration tests
+│   ├── topic_discovery.py       # LLM-based topic discovery
+│   ├── transform.py             # ML transformations (UMAP, clustering)
+│   └── pyproject.toml          # Data preparation dependencies
+├── web/                         # Web application for 3D visualization
+│   ├── backend/                # FastAPI backend
+│   │   ├── main.py             # FastAPI application entry point
+│   │   ├── api/                # API route handlers
+│   │   │   ├── __init__.py
+│   │   │   ├── pages.py        # Page-related endpoints
+│   │   │   ├── clusters.py     # Cluster tree endpoints
+│   │   │   └── search.py       # Search functionality
+│   │   ├── models/             # Pydantic models for API
+│   │   │   ├── __init__.py
+│   │   │   ├── page.py
+│   │   │   └── cluster.py
+│   │   └── services/           # Business logic layer
+│   │       ├── __init__.py
+│   │       ├── cluster_service.py
+│   │       ├── database_service.py
+│   │       ├── service_model.py
+│   │       └── service_setup.py
+│   ├── frontend/               # BabylonJS 3D visualization frontend
+│   │   ├── index.html          # Main application page
+│   │   ├── css/
+│   │   │   └── styles.css
+│   │   ├── js/
+│   │   │   ├── app.js          # Main application logic
+│   │   │   ├── babylon-scene.js # 3D visualization with BabylonJS
+│   │   │   └── api-client.js  # API communication
+│   │   └── assets/             # Static assets (images, icons, etc.)
+│   ├── test_clusters_service.py # Web application tests
+│   ├── test_pages_service.py
+│   └── pyproject.toml          # Web application dependencies
+├── data/                       # Shared data directory
+│   ├── downloaded/             # Raw .tar.gz chunk files per namespace
+│   ├── extracted/              # Extracted NDJSON files (temporary)
+│   └── *.db                    # SQLite databases (enwiki_namespace_0.db, etc.)
+├── wme_sdk/                    # Wikimedia Enterprise API SDK (shared)
+└── pyproject.toml              # Root configuration (deprecated)
 ```
-Source lives in the top‑level package files; tests start with `test_` and reside alongside the code they verify.
+
+## Application Responsibilities
+
+### Data Preparation Application (`dataprep/`)
+- Downloads and extracts Wikipedia content from Wikimedia Enterprise API
+- Computes embeddings using ML models (jina-embeddings-v4-text-matching-GGUF)
+- Performs dimensionality reduction using UMAP
+- Runs recursive clustering algorithms to build cluster trees
+- Discovers topics using LLMs (gpt-oss-20b)
+- Stores results in SQLite databases
+- Provides CLI interface for all data processing operations
+
+### Web Application (`web/`)
+- Provides REST API for accessing processed data
+- Offers 3D visualization of cluster trees using BabylonJS
+- Supports search and navigation of Wikipedia clusters
+- Serves static frontend assets
+- Implements pagination and performance optimizations
+
+### Shared Components
+- **`wme_sdk/`**: Wikimedia Enterprise API SDK (avoid making changes)
+- **`data/`**: Shared directory for all data files (databases, downloads, extracts)
 
 ## Build, Test, and Development Commands
 | Command                       | Description                                                     |
@@ -53,21 +91,49 @@ Source lives in the top‑level package files; tests start with `test_` and resi
 | `uv run black .`              | Reformat code with Black (if needed).                           |
 
 ## Coding Style & Naming Conventions
+
 * **Indentation** – 4 spaces, no tabs.
 * **Line length** – 88 characters (Black default).
 * **File names** – snake_case for modules, `CamelCase` for classes.
 * **Functions/variables** – lower_case_with_underscores.
-* **Formatting/Linting** – Black for formatting, flake8 for linting (`uv run flake8`).
+* **Formatting/Linting** – Black for formatting, ruff for linting (`uv run ruff check`).
+
+### Application-Specific Guidelines
+
+**Data Preparation Application:**
+- All ML processing code should be in `dataprep/`
+- CLI commands are accessible via `python -m command`
+- Database operations should use the `database.py` helper methods
+
+**Web Application:**
+- API endpoints should be in `web/backend/api/`
+- Business logic should be in `web/backend/services/`
+- Data models should be in `web/backend/models/`
+- Frontend code should be in `web/frontend/`
 
 ## Testing Guidelines
-* **Framework** – PyTest (declared in `pyproject.toml`).
+
+* **Framework** – PyTest (declared in each application's `pyproject.toml`).
 * **Naming** – Test files start with `test_`; test functions start with `test_`.
-* **Running** – `pytest` runs all tests; add `-k <expr>` to filter.
-    * **Coverage** – Aim for ≥80 % line coverage on new code (use `pytest --cov`).
+* **Running** – `uv run pytest` runs all tests; add `-k <expr>` to filter.
+    * **Coverage** – Aim for ≥80 % line coverage on new code (use `uv run pytest --cov`).
+
+### Application-Specific Testing
+
+**Data Preparation Tests:**
+- Located in `dataprep/test_*.py`
+- Test data processing, ML transformations, and CLI commands
+- Run with: `cd dataprep && uv run pytest`
+
+**Web Application Tests:**
+- Located in `web/test_*.py`
+- Test API endpoints, services, and business logic
+- Run with: `cd web && uv run pytest`
 
 **Agent Note:** No testing is required for code inside `wme_sdk`. Tests for that package are intentionally excluded from CI.
 
 ## Commit & Pull Request Guidelines
+
 * **Commit messages** – Follow the conventional format:
   ```
   type(scope): short description
@@ -75,8 +141,15 @@ Source lives in the top‑level package files; tests start with `test_` and resi
   Optional longer description.
   ```
   Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`.
+
+  **Scope prefixes:**
+  - `dataprep:` - Changes to data preparation application
+  - `web:` - Changes to web application
+  - `shared:` - Changes to shared components (data/, wme_sdk/)
+
 * **PR description** – Brief overview, related issue numbers (`Closes #123`), and any required screenshots or performance notes.
 * **CI checks** – All tests and linting must pass before merging.
+* **Scope** – Clearly indicate which application(s) are affected by your changes.
 
 ## Security & Configuration Tips (optional)
 * Store API credentials in a `.env` file – never commit it.
