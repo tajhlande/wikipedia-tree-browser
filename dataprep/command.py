@@ -9,7 +9,7 @@ import sys
 from abc import ABC, abstractmethod
 from enum import IntEnum
 from itertools import batched
-from typing import Dict, List, Any
+from typing import Any
 
 # Import existing modules
 from database import (
@@ -49,18 +49,45 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# Store the command history (feel free to change the path)
-_HISTFILE = os.path.join(os.path.expanduser("."), ".wp_transform_history")
+# Environment variables we will look for and set for commands
+DATA_STORAGE_DIRNAME_VAR = "DATA_STORAGE_DIRNAME"
+DOTENV_FILENAME_VAR = "DOTENV_FILENAME"
+COMMAND_HISTORY_FILENAME_VAR = "COMMAND_HISTORY_FILENAME"
 
-# Load existing history, ignore errors if the file does not exist yet
-if os.path.exists(_HISTFILE):
-    readline.read_history_file(_HISTFILE)
 
-# Save the history when the interpreter exits
-atexit.register(readline.write_history_file, _HISTFILE)
+def read_essential_env_variables() -> dict[str, str]:
+    """
+    Read essential environment variables and return their values,
+    setting defaults as appropriate
+    """
+    env_vars = {}
+    env_vars[DATA_STORAGE_DIRNAME_VAR] = os.environ.get(DATA_STORAGE_DIRNAME_VAR, "../data")
+    env_vars[DOTENV_FILENAME_VAR] = os.environ.get(DOTENV_FILENAME_VAR, "./.env")
+    env_vars[COMMAND_HISTORY_FILENAME_VAR] = os.environ.get(COMMAND_HISTORY_FILENAME_VAR)
+    return env_vars
 
-# Limit the size of the history file
-readline.set_history_length(1000)  # keep last 1000 lines
+
+def register_command_history_file(histfile_path: str | None) -> None:
+    """
+    Set up and/or read from the command history file, and register
+    it for being written to on exit
+    """
+    # Store the command history (feel free to change the path)
+    if not histfile_path:
+        histfile_path = os.path.join(os.path.expanduser("."), ".wp_transform_history")
+        logger.debug("Using default command history file: %s", histfile_path)
+    else:
+        logger.debug("Using configured command history file: %s", histfile_path)
+
+    # Load existing history, ignore errors if the file does not exist yet
+    if os.path.exists(histfile_path):
+        readline.read_history_file(histfile_path)
+
+    # Save the history when the interpreter exits
+    atexit.register(readline.write_history_file, histfile_path)
+
+    # Limit the size of the history file
+    readline.set_history_length(1000)  # keep last 1000 lines
 
 
 class Argument():
@@ -117,7 +144,7 @@ class Command(ABC):
         self,
         name: str,
         description: str,
-        expected_args: List[Argument] = []
+        expected_args: list[Argument] = []
     ):
         self.name = name
         self.description = description
@@ -130,11 +157,11 @@ class Command(ABC):
         return [arg for arg in self.expected_args if arg.required is False]
 
     @abstractmethod
-    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         """Execute the command with given arguments."""
         pass
 
-    def validate(self, args: Dict[str, Any]) -> bool:
+    def validate(self, args: dict[str, Any]) -> bool:
         """Validate command arguments."""
         logger.debug("Arguments: %s", json.dumps(args, indent=2))
         # Check required arguments
@@ -207,7 +234,7 @@ class CommandParser:
         """Register a command."""
         self.commands[command.name] = command
 
-    def parse_input(self, input_str: str) -> tuple[str, Dict[str, Any]]:
+    def parse_input(self, input_str: str) -> tuple[str, dict[str, Any]]:
         """Parse user input into command and arguments."""
         input_str = input_str.strip()
 
@@ -280,7 +307,7 @@ class CommandParser:
             return Result.SUCCESS, self.commands[command_name].get_help()
         return Result.FAILURE, f"Unknown command: {command_name}"
 
-    def get_available_commands(self) -> List[str]:
+    def get_available_commands(self) -> list[str]:
         """Get list of available commands."""
         return list(self.commands.keys())
 
@@ -308,7 +335,7 @@ class CommandDispatcher:
                 raise
         return self.api_client
 
-    def dispatch(self, command_name: str, args: Dict[str, Any]) -> tuple[Result, str]:
+    def dispatch(self, command_name: str, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         """Dispatch command to appropriate handler."""
         if not self.parser.validate_command(command_name):
             return Result.FAILURE, f"Unknown command: {command_name}"
@@ -316,7 +343,7 @@ class CommandDispatcher:
         try:
             command = self.parser.commands[command_name]
             command.validate(args)
-            return command.execute(args)
+            return command.execute(args, env_vars)
         except ValueError as e:
             return Result.FAILURE, f"Validation error: {e}"
         except Exception as e:
@@ -334,15 +361,15 @@ class RefreshChunkDataCommand(Command):
             expected_args=[REQUIRED_NAMESPACE_ARGUMENT]
         )
 
-    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
         logger.info("Refreshing chunk data for namespace: %s", namespace)
 
         try:
-            sqlconn = get_sql_conn(namespace)
+            sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
-            api_client = self._get_api_client()
+            api_client = self._get_api_client(env_vars[DOTENV_FILENAME_VAR])
             get_chunk_info_for_namespace(namespace, api_client, sqlconn)
 
             # Get count of chunks for the namespace
@@ -362,11 +389,12 @@ class RefreshChunkDataCommand(Command):
             logger.error(f"Failed to refresh chunk data: {e}")
             return Result.FAILURE, f"{X} Failed to refresh chunk data: {e}"
 
-    def _get_api_client(self):
+    def _get_api_client(self, dotenv_path: str):
         """Get or create API client with authentication."""
         if not hasattr(self, "api_client") or self.api_client is None:
             try:
-                auth_client, refresh_token, access_token = get_enterprise_auth_client()
+                logger.info("Dotenv path: %s", dotenv_path)
+                auth_client, refresh_token, access_token = get_enterprise_auth_client(dotenv_path)
                 self.api_client = get_enterprise_api_client(access_token)
             except Exception as e:
                 logger.error(f"Failed to authenticate: {e}")
@@ -384,12 +412,12 @@ class DownloadChunksCommand(Command):
             expected_args=[OPTIONAL_CHUNK_LIMIT_ARGUMENT, REQUIRED_NAMESPACE_ARGUMENT]
         )
 
-    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         limit = args.get(OPTIONAL_CHUNK_LIMIT_ARGUMENT.name, OPTIONAL_CHUNK_LIMIT_ARGUMENT.default)
         namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
 
         try:
-            sqlconn = get_sql_conn(namespace)
+            sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
             # Get chunks that need downloading
@@ -440,10 +468,11 @@ class DownloadChunksCommand(Command):
 
                 try:
                     # Create download directory
-                    download_dir = f"downloaded/{chunk_namespace}"
+                    download_dir = os.path.join(env_vars[DATA_STORAGE_DIRNAME_VAR], "downloaded", chunk_namespace)
                     os.makedirs(download_dir, exist_ok=True)
 
-                    chunk_file_path = f"{download_dir}/{chunk_name}.tar.gz"
+                    chunk_file_path = os.path.join(download_dir, f"{chunk_name}.tar.gz")
+                    logger.debug("Saving chunk to %s", chunk_file_path)
 
                     # Download chunk
                     with ProgressTracker(
@@ -504,12 +533,12 @@ class UnpackProcessChunksCommand(Command):
             expected_args=[REQUIRED_NAMESPACE_ARGUMENT, OPTIONAL_CHUNK_LIMIT_NO_DEFAULT_ARGUMENT]
         )
 
-    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
         limit = args.get(OPTIONAL_CHUNK_LIMIT_NO_DEFAULT_ARGUMENT.name)
 
         try:
-            sqlconn = get_sql_conn(namespace)
+            sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
             # Get chunks that need unpacking
@@ -562,7 +591,7 @@ class UnpackProcessChunksCommand(Command):
 
                 try:
                     # Create extraction directory
-                    extract_dir = f"extracted/{chunk_namespace}"
+                    extract_dir = os.path.join(env_vars[DATA_STORAGE_DIRNAME_VAR], "extracted", chunk_namespace)
                     os.makedirs(extract_dir, exist_ok=True)
 
                     # Extract archive
@@ -576,7 +605,7 @@ class UnpackProcessChunksCommand(Command):
                     )
 
                     if extracted_file:
-                        chunk_file_path = f"{extract_dir}/{extracted_file}"
+                        chunk_file_path = os.path.join(extract_dir, extracted_file)
 
                         # count lines in chunk file
                         file_line_count = count_lines_in_file(chunk_file_path)
@@ -662,7 +691,7 @@ class EmbedPagesCommand(Command):
         self.embedding_model_api_url = embedding_model_api_url
         self.embedding_model_api_key = embedding_model_api_key
 
-    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
         chunk_name = args.get(OPTIONAL_CHUNK_NAME_ARGUMENT.name)
 
@@ -679,7 +708,7 @@ class EmbedPagesCommand(Command):
         )
 
         try:
-            sqlconn = get_sql_conn(namespace)
+            sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
             # Setup embedding function
@@ -859,11 +888,11 @@ class ReduceCommand(Command):
             expected_args=[REQUIRED_NAMESPACE_ARGUMENT, TARGET_DIMENSIONS_ARGUMENT, BATCH_SIZE_ARGUMENT]
         )
 
-    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
 
-            sqlconn = get_sql_conn(namespace)
+            sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
             target_dim = args.get(TARGET_DIMENSIONS_ARGUMENT.name, TARGET_DIMENSIONS_ARGUMENT.default)
@@ -943,7 +972,7 @@ class RecursiveClusterCommand(Command):
             ]
         )
 
-    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
             leaf_target = args.get(LEAF_TARGET_ARGUMENT.name, LEAF_TARGET_ARGUMENT.default)
@@ -952,7 +981,7 @@ class RecursiveClusterCommand(Command):
             min_silhouette = args.get(MIN_SILHOUETTE_ARGUMENT.name, MIN_SILHOUETTE_ARGUMENT.default)
             batch_size = args.get(BATCH_SIZE_ARGUMENT.name, BATCH_SIZE_ARGUMENT.default)
 
-            sqlconn = get_sql_conn(namespace)
+            sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
             print(f"Running recursive clustering on namespace {namespace}")
@@ -998,7 +1027,7 @@ class TopicsCommand(Command):
             ]
         )
 
-    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
             batch_size = args.get(OPTIONAL_BATCH_SIZE_ARGUMENT.name, OPTIONAL_BATCH_SIZE_ARGUMENT.default)
@@ -1014,7 +1043,7 @@ class TopicsCommand(Command):
             else:
                 logger.debug("No limit specified")
 
-            sqlconn = get_sql_conn(namespace)
+            sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             topic_discovery = TopicDiscovery.get_from_env()
             topic_discovery.accumulated_errors = 0
 
@@ -1260,12 +1289,12 @@ class ProjectCommand(Command):
             expected_args=[REQUIRED_NAMESPACE_ARGUMENT, OPTIONAL_CLUSTER_LIMIT_ARGUMENT]
         )
 
-    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
             limit = args.get(OPTIONAL_CLUSTER_LIMIT_ARGUMENT.name)
 
-            sqlconn = get_sql_conn(namespace)
+            sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
             with ProgressTracker(description="Projecting into 3-space", unit="vectors") as tracker:
@@ -1291,10 +1320,10 @@ class StatusCommand(Command):
             expected_args=[REQUIRED_NAMESPACE_ARGUMENT]
         )
 
-    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
-            sqlconn = get_sql_conn(namespace)
+            sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
             # get distinct namespaces
@@ -1419,7 +1448,7 @@ class HelpCommand(Command):
         )
         self.parser = parser
 
-    def execute(self, args: Dict[str, Any]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         command_name = args.get(COMMAND_NAME_ARGUMENT.name)
 
         if command_name:
@@ -1442,10 +1471,11 @@ HAPPY_PROMPT = "> "
 class CommandInterpreter:
     """Main command interpreter class."""
 
-    def __init__(self):
+    def __init__(self, env_values: dict[str, str]):
         self.parser = CommandParser()
         self.dispatcher = CommandDispatcher(self.parser)
         self._register_commands()
+        self.env_values = env_values
 
     def _register_commands(self):
         """Register all commands."""
@@ -1482,7 +1512,7 @@ class CommandInterpreter:
                 if not command_name:
                     continue
 
-                result = self.dispatcher.dispatch(command_name, args)
+                result = self.dispatcher.dispatch(command_name, args, self.env_values)
                 print(result[1])
                 print()
 
@@ -1496,7 +1526,7 @@ class CommandInterpreter:
                 print(f"Error: {e}")
                 logger.error(f"Interactive mode error: {e}")
 
-    def run_command(self, command_args: List[str]) -> Result:
+    def run_command(self, command_args: list[str]) -> Result:
         """Run a single command."""
         if not command_args:
             print("Usage: python command.py <command> [options]")
@@ -1513,7 +1543,7 @@ class CommandInterpreter:
 
             help_command = self.parser.commands.get("help")
             if help_command:
-                result = help_command.execute(help_args)
+                result = help_command.execute(help_args, self.env_values)
                 print(result[1])
                 return result[0]
             else:
@@ -1561,14 +1591,15 @@ class CommandInterpreter:
         except SystemExit:
             return Result.FAILURE
 
-        result = self.dispatcher.dispatch(command_name, args)
+        result = self.dispatcher.dispatch(command_name, args, self.env_values)
         print(result[1])
         return result[0]
 
 
 def main() -> int:
     """Main entry point."""
-    interpreter = CommandInterpreter()
+    env_values = read_essential_env_variables()
+    interpreter = CommandInterpreter(env_values)
 
     if len(sys.argv) > 1:
         # Run single command
@@ -1576,6 +1607,7 @@ def main() -> int:
         return result
     else:
         # Run interactive mode
+        register_command_history_file(env_values[COMMAND_HISTORY_FILENAME_VAR])
         interpreter.run_interactive()
         return Result.SUCCESS.value
 

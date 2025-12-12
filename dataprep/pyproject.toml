@@ -20,6 +20,7 @@ dependencies = [
     "umap-learn>=0.5.9.post2",
     "pytest==8.3.3",
     "python-dotenv==1.0.1",
+    "wme-sdk",
 ]
 
 [tool.flake8]
@@ -31,6 +32,7 @@ dev = [
     "black>=25.11.0",
     "flake8-pyproject>=1.2.3",
     "ruff>=0.14.5",
+    "setuptools>=80.9.0",
     "vulture>=2.14",
 ]
 
@@ -39,3 +41,7 @@ exclude = [
     ".venv", "../wme_sdk", "../web"
 ]
 line-length = 120
+
+[tool.uv.sources]
+wme-sdk = { path = "../wme_sdk", editable = true }
+

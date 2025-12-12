@@ -4,14 +4,13 @@ import json
 import logging
 import os
 import sqlite3
-import sys
 import tarfile
 from typing import Optional
 
 from dotenv import load_dotenv
 
 # Add parent directory to Python path to import wme_sdk
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # from wme_sdk.api.snapshot import Snapshot
 from classes import Chunk, Page
@@ -58,10 +57,13 @@ logger = logging.getLogger(__name__)
 #     raise
 
 
-def get_enterprise_auth_client() -> tuple[AuthClient, str, str]:
+def get_enterprise_auth_client(dotenv_path: str | None = None) -> tuple[AuthClient, str, str]:
     logger.debug("Creating AuthClient and logging in")
     # Load environment variables from .env file
-    load_dotenv()
+    if dotenv_path:
+        dotenv_path = os.path.abspath(dotenv_path)
+        logger.info("Dotenv abs path: %s", dotenv_path)
+    load_dotenv(dotenv_path=dotenv_path)
     auth_client = AuthClient()
     try:
         login_response = auth_client.login()
@@ -268,7 +270,7 @@ def get_chunk_info_for_namespace(
     namespace: str, api_client: Client, sqlconn: sqlite3.Connection
 ):
     logger.info(f"Fetching chunk metadata for namespace: {namespace}")
-    request = Request(filters=[Filter(field="in_language.identifier", value="en")])
+    request = Request()  # Request(filters=[Filter(field="in_language.identifier", value="en")])
     chunk_data_list: list[dict] = api_client.get_chunks(namespace, request)
     chunk_list = [
         Chunk(chunk_name=chunk_data.get("identifier"), namespace=namespace)  # type: ignore
