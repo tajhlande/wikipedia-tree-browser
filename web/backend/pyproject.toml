@@ -1,11 +1,12 @@
 [project]
-name = "wp-embeddings-web"
+name = "wp_embeddings_web_backend"
 version = "0.1.0"
 description = "Web application for 3D visualization of Wikipedia embeddings clusters"
-readme = "../README.md"
+readme = "../../README.md"
 requires-python = ">=3.13"
+packages=[".", "api", "app", "models", "services"]
 dependencies = [
-    "fastapi>=0.123.4",
+    "fastapi[standard]>=0.123.4",
     "pydantic>=2.12.3",
     "python-dotenv==1.0.1",
     "python-multipart>=0.0.20",
@@ -15,7 +16,7 @@ dependencies = [
 ]
 
 [tool.flake8]
-exclude = [".venv", "../wme_sdk", "../dataprep"]
+exclude = [".venv"]
 max-line-length = 120
 
 [dependency-groups]
@@ -28,6 +29,9 @@ dev = [
 
 [tool.ruff]
 exclude = [
-    ".venv", "../wme_sdk", "../dataprep"
+    ".venv"
 ]
 line-length = 120
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"

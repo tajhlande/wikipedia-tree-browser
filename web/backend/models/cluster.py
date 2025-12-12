@@ -8,6 +8,7 @@ from typing import Optional, List
 
 class ClusterNodeResponse(BaseModel):
     """Response model for cluster node information"""
+
     node_id: int = Field(..., description="Unique cluster node identifier")
     parent_id: Optional[int] = Field(None, description="Parent node ID")
     depth: int = Field(..., description="Depth in the cluster tree")
@@ -18,6 +19,9 @@ class ClusterNodeResponse(BaseModel):
 
 class ClusterSearchResult(BaseModel):
     """Response model for cluster search results"""
-    clusters: List[ClusterNodeResponse] = Field(..., description="List of matching clusters")
+
+    clusters: List[ClusterNodeResponse] = Field(
+        ..., description="List of matching clusters"
+    )
     total_count: int = Field(..., description="Total number of matching clusters")
     query: str = Field(..., description="Search query used")

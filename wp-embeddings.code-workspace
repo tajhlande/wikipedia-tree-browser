@@ -4,7 +4,10 @@
       "path": "dataprep"
     },
     {
-      "path": "web"
+      "path": "web/backend"
+    },
+    {
+      "path": "web/frontend"
     },
     {
       "path": "."
@@ -14,8 +17,8 @@
     "dataprep": {
       "python.defaultInterpreterPath": "${workspaceFolder:dataprep}/.venv/bin/python"
     },
-    "web": {
-      "python.defaultInterpreterPath": "${workspaceFolder:web}/.venv/bin/python"
+    "web/backend": {
+      "python.defaultInterpreterPath": "${workspaceFolder:web/bakend}/.venv/bin/python"
     }
   }
 }

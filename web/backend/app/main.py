@@ -11,10 +11,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # API routes
-from web.backend.api import pages, clusters
+from api import pages, clusters
 
 # Injected service management
-from web.backend.services.service_setup import init_services, shutdown_services
+from services.service_setup import init_services, shutdown_services
 
 # logging setup
 logging.basicConfig(
@@ -66,8 +66,8 @@ async def root():
         "endpoints": {
             "pages": "/api/pages",
             "clusters": "/api/clusters",
-            "search": "/api/search"
-        }
+            "search": "/api/search",
+        },
     }
 
 

@@ -44,8 +44,8 @@ This project has been refactored to separate concerns into two distinct Python a
 - No need for absolute imports within dataprep/
 
 ### Web Application Imports
-- Backend imports use `web.backend.*` pattern
-- Test files in `web/` can import from `web.backend.*`
+- Backend imports use `backend.*` pattern
+- Test files in `web/` can import from `backend.*`
 
 ## Testing Strategy
 

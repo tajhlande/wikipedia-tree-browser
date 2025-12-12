@@ -46,7 +46,9 @@ async def get_available_namespaces():
         namespaces = db_service.get_available_namespaces()
         return {"namespaces": namespaces}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving namespaces: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving namespaces: {str(e)}"
+        )
 
 
 # @router.get("/suggestions")

@@ -116,17 +116,22 @@ pip3 install uv
 ```bash
 cd dataprep
 uv venv
-source .venv/bin/activate
 ```
 
 2. Fetch the data preparation dependencies:
 ```bash
 uv sync
+source .venv/bin/activate
 ```
 
 3. Run the data preparation CLI interactively:
 ```bash
 python -m command
+```
+
+and see
+
+```
 Welcome to wp-embeddings command interpreter!
 Type 'help' for available commands or 'quit' to exit.
 
@@ -151,7 +156,6 @@ Goodbye!
 ```bash
 cd web
 uv venv
-source .venv/bin/activate
 ```
 
 2. Fetch the web application dependencies:
@@ -161,7 +165,8 @@ uv sync
 
 3. Run the FastAPI development server:
 ```bash
-python -m uvicorn backend.main:app --reload
+cd web/backend
+uv run fastapi dev
 ```
 
 The web application will be available at `http://localhost:8000`
@@ -310,7 +315,7 @@ uv run ruff check
 
 **Web Application:**
 ```bash
-cd web
+cd web/backend
 uv run ruff check
 ```
 

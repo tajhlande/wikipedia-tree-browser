@@ -1,26 +1,31 @@
 """
 Page-related API endpoints for Wikipedia Embeddings
 """
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from typing import Annotated, List
-from web.backend.models.page import PageResponse, PageDetailResponse
-from web.backend.services.cluster_service import ClusterService
-from web.backend.services.service_setup import get_cluster_service
+from models.page import PageResponse, PageDetailResponse
+from services.cluster_service import ClusterService
+from services.service_setup import get_cluster_service
 
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
 
 
-@router.get("/namespace/{namespace}/node_id/{node_id}", response_model=List[PageResponse])
+@router.get(
+    "/namespace/{namespace}/node_id/{node_id}", response_model=List[PageResponse]
+)
 async def get_pages_in_cluster(
     namespace: Annotated[str, Path(title="Wikipedia namespace")],
     node_id: Annotated[int, Path(title="Cluster node ID")],
     limit: Annotated[int, Query(description="Maximum number of pages to return")] = 50,
     offset: Annotated[int, Query(description="Offset for pagination")] = 0,
-    cluster_service: ClusterService = Depends(get_cluster_service),  # lambda: service_provider("cluster_service")
+    cluster_service: ClusterService = Depends(
+        get_cluster_service
+    ),  # lambda: service_provider("cluster_service")
 ):
     """Get pages in a specific cluster node"""
     try:
@@ -30,7 +35,9 @@ async def get_pages_in_cluster(
         raise HTTPException(status_code=500, detail=f"Error retrieving pages: {str(e)}")
 
 
-@router.get("/namespace/{namespace}/page_id/{page_id}", response_model=PageDetailResponse)
+@router.get(
+    "/namespace/{namespace}/page_id/{page_id}", response_model=PageDetailResponse
+)
 async def get_page_details(
     namespace: Annotated[str, Path(title="Wikipedia namespace")],
     page_id: Annotated[int, Path(title="Page ID")],
@@ -46,7 +53,9 @@ async def get_page_details(
         raise
     except Exception as e:
         logger.exception("Unable to get pages for cluster")
-        raise HTTPException(status_code=500, detail=f"Error retrieving page details: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving page details: {str(e)}"
+        )
 
 
 # @router.get("/search/by-title")

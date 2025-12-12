@@ -2,8 +2,8 @@ from functools import partial
 import logging
 
 from typing import Any
-from web.backend.services.database_service import DatabaseService
-from web.backend.services.service_model import ManagedService
+from services.database_service import DatabaseService
+from services.service_model import ManagedService
 
 logger = logging.getLogger(__name__)
 

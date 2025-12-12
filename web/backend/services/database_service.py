@@ -12,9 +12,9 @@ from typing import Optional, Type, TypeVar, override
 
 from pydantic import BaseModel
 
-from web.backend.models.cluster import ClusterNodeResponse
-from web.backend.models.page import PageResponse
-from web.backend.services.cluster_service import ClusterService
+from models.cluster import ClusterNodeResponse
+from models.page import PageResponse
+from services.cluster_service import ClusterService
 
 # needs from api/clusters.py
 # node = db_service.get_root_node(namespace)
@@ -120,7 +120,13 @@ class DatabaseService(ClusterService):
             WHERE pl.namespace = ? AND pl.page_id = ?
             LIMIT 1
             """
-        cursor = sqlconn.execute(select_sql, (namespace, page_id,))
+        cursor = sqlconn.execute(
+            select_sql,
+            (
+                namespace,
+                page_id,
+            ),
+        )
         row = cursor.fetchone()
         if row:
             return _row_to_pydantic(row, PageResponse)
@@ -128,8 +134,9 @@ class DatabaseService(ClusterService):
             # logger.warning("No page found in namespace %s with page_id %d", namespace, page_id)
             return None
 
-    def get_pages_in_cluster(self, namespace: str, cluster_node_id: int, limit: int = 50, offset: int = 0
-                             ) -> list[PageResponse]:
+    def get_pages_in_cluster(
+        self, namespace: str, cluster_node_id: int, limit: int = 50, offset: int = 0
+    ) -> list[PageResponse]:
         """Get pages in a specific cluster node with pagination"""
         sqlconn = self._get_connection(namespace)
         select_sql = """
@@ -139,7 +146,15 @@ class DatabaseService(ClusterService):
             WHERE pl.namespace = ? AND pv.cluster_node_id = ?
             LIMIT ? OFFSET ?
         """
-        cursor = sqlconn.execute(select_sql, (namespace, cluster_node_id, limit, offset,))
+        cursor = sqlconn.execute(
+            select_sql,
+            (
+                namespace,
+                cluster_node_id,
+                limit,
+                offset,
+            ),
+        )
         rows = cursor.fetchall()
         return [_row_to_pydantic(row, PageResponse) for row in rows]
 
@@ -198,7 +213,9 @@ class DatabaseService(ClusterService):
     # ====================================================================================================
     # Cluster-related methods
 
-    def get_cluster_node(self, namespace: str, node_id: int) -> Optional[ClusterNodeResponse]:
+    def get_cluster_node(
+        self, namespace: str, node_id: int
+    ) -> Optional[ClusterNodeResponse]:
         """Get a specific cluster node"""
         sqlconn = self._get_connection(namespace)
         select_sql = """
@@ -206,7 +223,10 @@ class DatabaseService(ClusterService):
             FROM cluster_tree
             WHERE namespace = ? AND node_id = ?
         """
-        params = (namespace, node_id, )
+        params = (
+            namespace,
+            node_id,
+        )
         logger.info("Running sql: %s\nwith params %s", select_sql, params)
 
         cursor = sqlconn.execute(select_sql, params)
@@ -215,7 +235,9 @@ class DatabaseService(ClusterService):
             return None
         return _row_to_pydantic(row, ClusterNodeResponse)
 
-    def get_cluster_node_children(self, namespace: str, node_id: int) -> list[ClusterNodeResponse]:
+    def get_cluster_node_children(
+        self, namespace: str, node_id: int
+    ) -> list[ClusterNodeResponse]:
         """Get child nodes of a specific cluster node"""
         sqlconn = self._get_connection(namespace)
         select_sql = """
@@ -224,11 +246,19 @@ class DatabaseService(ClusterService):
             WHERE namespace = ? AND parent_id = ?
             ORDER BY node_id ASC
         """
-        cursor = sqlconn.execute(select_sql, (namespace, node_id, ))
+        cursor = sqlconn.execute(
+            select_sql,
+            (
+                namespace,
+                node_id,
+            ),
+        )
         rows = cursor.fetchall()
         return [_row_to_pydantic(row, ClusterNodeResponse) for row in rows]
 
-    def get_cluster_node_siblings(self, namespace, node_id: int) -> list[ClusterNodeResponse]:
+    def get_cluster_node_siblings(
+        self, namespace, node_id: int
+    ) -> list[ClusterNodeResponse]:
         """Get sibling nodes of a specific cluster node"""
         sqlconn = self._get_connection(namespace)
         select_sql = """
@@ -241,11 +271,19 @@ class DatabaseService(ClusterService):
                 AND p.node_id <> n.node_id
             ORDER BY p.node_id ASC;
         """
-        cursor = sqlconn.execute(select_sql, (node_id, namespace, ))
+        cursor = sqlconn.execute(
+            select_sql,
+            (
+                node_id,
+                namespace,
+            ),
+        )
         rows = cursor.fetchall()
         return [_row_to_pydantic(row, ClusterNodeResponse) for row in rows]
 
-    def get_cluster_node_parent(self, namespace, node_id: int) -> Optional[ClusterNodeResponse]:
+    def get_cluster_node_parent(
+        self, namespace, node_id: int
+    ) -> Optional[ClusterNodeResponse]:
         """Get sibling nodes of a specific cluster node"""
         sqlconn = self._get_connection(namespace)
         select_sql = """
@@ -257,7 +295,13 @@ class DatabaseService(ClusterService):
                 AND p.node_id = n.parent_id
             ORDER BY p.node_id ASC;
         """
-        cursor = sqlconn.execute(select_sql, (node_id, namespace, ))
+        cursor = sqlconn.execute(
+            select_sql,
+            (
+                node_id,
+                namespace,
+            ),
+        )
         row = cursor.fetchone()
         if not row:
             return None
@@ -271,7 +315,7 @@ class DatabaseService(ClusterService):
             FROM cluster_tree
             WHERE namespace = ? AND parent_id IS NULL
         """
-        cursor = sqlconn.execute(select_sql, (namespace, ))
+        cursor = sqlconn.execute(select_sql, (namespace,))
         row = cursor.fetchone()
         if not row:
             return None
