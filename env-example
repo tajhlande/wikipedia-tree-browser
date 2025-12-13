@@ -1,12 +1,30 @@
+# Example .env file
+# Note that your version of this file should have restricted read access, as it
+# will contain secret credentials!
+
+# Wikimedia Enterprise credentials
 WME_USERNAME=my-wmf-user
 WME_PASSWORD=your_api_key_here
 
-PYTHONPATH=.
-
+# Model endpoint, model name, and credential for embedding Wiki pages
 EMBEDDING_MODEL_NAME=jina-embeddings-v4-text-matching-GGUF
 EMBEDDING_MODEL_API_URL=https://api.example.com/v1/embeddings
 EMBEDDING_MODEL_API_KEY=your_api_key_here
 
+# Model endpoint, model name, and credential for summarizing cluster topics
 SUMMARIZING_MODEL_NAME=openai/gpt-oss-20b
 SUMMARIZING_MODEL_API_URL=https://maybe-a-different.api.example.com/v1
 SUMMARIZING_MODEL_API_KEY=your_api_key_here
+
+# ###################################################################
+# These variables have defaults but can be overridden
+
+# where the downloaded files and the sqlite database files will be stored
+DATA_STORAGE_DIRNAME_VAR=data
+
+# where to find your .env file if it isn't in the current directory
+# when the app is started
+DOTENV_FILENAME_VAR=.env
+
+# where the interactive command history is stored
+COMMAND_HISTORY_FILENAME_VAR=.wp_transform_history

@@ -24,22 +24,24 @@ wp-embeddings/
 │   └── pyproject.toml          # Data preparation dependencies
 ├── web/                         # Web application for 3D visualization
 │   ├── backend/                # FastAPI backend
-│   │   ├── main.py             # FastAPI application entry point
 │   │   ├── api/                # API route handlers
 │   │   │   ├── __init__.py
 │   │   │   ├── pages.py        # Page-related endpoints
 │   │   │   ├── clusters.py     # Cluster tree endpoints
 │   │   │   └── search.py       # Search functionality
+│   │   ├── app/                # FastAPI app path
+│   │   │   └── main.py         # FastAPI application entry point
 │   │   ├── models/             # Pydantic models for API
 │   │   │   ├── __init__.py
 │   │   │   ├── page.py
 │   │   │   └── cluster.py
-│   │   └── services/           # Business logic layer
-│   │       ├── __init__.py
-│   │       ├── cluster_service.py
-│   │       ├── database_service.py
-│   │       ├── service_model.py
-│   │       └── service_setup.py
+│   │   ├── services/           # Business logic layer
+│   │   │   ├── __init__.py
+│   │   │   ├── cluster_service.py
+│   │   │   ├── database_service.py
+│   │   │   ├── service_model.py
+│   │   │   └── service_setup.py
+│   │   └── test/               # Pytest tests
 │   ├── frontend/               # BabylonJS 3D visualization frontend
 │   │   ├── index.html          # Main application page
 │   │   ├── css/
@@ -56,8 +58,7 @@ wp-embeddings/
 │   ├── downloaded/             # Raw .tar.gz chunk files per namespace
 │   ├── extracted/              # Extracted NDJSON files (temporary)
 │   └── *.db                    # SQLite databases (enwiki_namespace_0.db, etc.)
-├── wme_sdk/                    # Wikimedia Enterprise API SDK (shared)
-└── pyproject.toml              # Root configuration (deprecated)
+└── wme_sdk/                    # Wikimedia Enterprise API SDK (read only)
 ```
 
 ## Application Responsibilities
@@ -82,12 +83,15 @@ wp-embeddings/
 - **`wme_sdk/`**: Wikimedia Enterprise API SDK (avoid making changes)
 - **`data/`**: Shared directory for all data files (databases, downloads, extracts)
 
-## Build, Test, and Development Commands
+## Build, Test, and Development Commands for the `dataprep` application
+Run these in the `dataprep` directory
+
 | Command                       | Description                                                     |
 |-------------------------------|-----------------------------------------------------------------|
 | `uv sync`                     | Install/upgrade all dependencies into the virtual environment.  |
 | `python -m command <options>` | Run the interactive or one‑off CLI (e.g. `status`, `download`). |
 | `pytest -q`                   | Execute the test suite.                                         |
+| `uv run black .`              | Reformat code with Black (if needed).                           |
 | `uv run black .`              | Reformat code with Black (if needed).                           |
 
 ## Coding Style & Naming Conventions
