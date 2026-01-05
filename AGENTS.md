@@ -15,7 +15,7 @@ wp-embeddings/
 │   ├── download_chunks.py       # Download and extract Wikipedia content
 │   ├── graph_cluster_tree.py    # Generate 2D cluster visualization
 │   ├── index_pages.py           # Compute embeddings on page content
-│   ├── languages.py            # Language mapping utilities
+│   ├── languages.py             # Language mapping utilities
 │   ├── migrate_to_duck_db.py    # Database migration utilities
 │   ├── progress_utils.py       # Progress bar helpers
 │   ├── test_*.py               # PyTest unit/integration tests
@@ -26,34 +26,45 @@ wp-embeddings/
 │   ├── backend/                # FastAPI backend
 │   │   ├── api/                # API route handlers
 │   │   │   ├── __init__.py
-│   │   │   ├── pages.py        # Page-related endpoints
-│   │   │   ├── clusters.py     # Cluster tree endpoints
-│   │   │   └── search.py       # Search functionality
-│   │   ├── app/                # FastAPI app path
-│   │   │   └── main.py         # FastAPI application entry point
+│   │   │   ├── pages.py        # Page-related endpoints (GET pages in cluster, page details)
+│   │   │   ├── clusters.py     # Cluster tree endpoints (GET root, node, children, siblings, parent)
+│   │   │   └── search.py       # Search functionality (placeholder)
+│   │   ├── app/                # FastAPI app configuration
+│   │   │   ├── __init__.py
+│   │   │   └── main.py         # FastAPI application entry point with CORS, lifespan management
 │   │   ├── models/             # Pydantic models for API
 │   │   │   ├── __init__.py
-│   │   │   ├── page.py
-│   │   │   └── cluster.py
+│   │   │   ├── page.py         # PageResponse, PageDetailResponse models
+│   │   │   └── cluster.py      # ClusterNodeResponse model
 │   │   ├── services/           # Business logic layer
 │   │   │   ├── __init__.py
-│   │   │   ├── cluster_service.py
-│   │   │   ├── database_service.py
-│   │   │   ├── service_model.py
-│   │   │   └── service_setup.py
+│   │   │   ├── cluster_service.py # Core cluster operations and database access
+│   │   │   ├── database_service.py # Database connection management
+│   │   │   ├── service_model.py  # Service provider pattern implementation
+│   │   │   └── service_setup.py # Service initialization and dependency injection
 │   │   └── test/               # Pytest tests
-│   ├── frontend/               # BabylonJS 3D visualization frontend
-│   │   ├── index.html          # Main application page
-│   │   ├── css/
-│   │   │   └── styles.css
-│   │   ├── js/
-│   │   │   ├── app.js          # Main application logic
-│   │   │   ├── babylon-scene.js # 3D visualization with BabylonJS
-│   │   │   └── api-client.js  # API communication
-│   │   └── assets/             # Static assets (images, icons, etc.)
-│   ├── test_clusters_service.py # Web application tests
-│   ├── test_pages_service.py
-│   └── pyproject.toml          # Web application dependencies
+│   │       ├── __init__.py
+│   │       ├── test_clusters_service.py # Cluster service unit tests
+│   │       └── test_pages_service.py    # Page service unit tests
+│   ├── frontend/               # SolidJS + BabylonJS 3D visualization frontend
+│   │   ├── index.html          # Main application page with canvas element
+│   │   ├── src/
+│   │   │   ├── index.tsx       # SolidJS application entry point
+│   │   │   ├── App.tsx         # Main application component
+│   │   │   ├── Comp.tsx        # Component template
+│   │   │   ├── index.css       # Global CSS styles
+│   │   │   ├── babylon/        # BabylonJS 3D visualization
+│   │   │   │   └── scene.ts    # BabylonJS scene initialization and rendering
+│   │   │   └── ui/             # UI components
+│   │   │       ├── Overlay.tsx  # UI overlay with buttons and controls
+│   │   │       └── Overlay.css  # UI overlay styles
+│   │   ├── package.json        # Frontend dependencies and scripts
+│   │   ├── tsconfig.json       # TypeScript configuration
+│   │   ├── vite.config.ts      # Vite build configuration
+│   │   └── tailwind.config.js  # Tailwind CSS configuration
+│   ├── .python-version         # Python version specification
+│   ├── pyproject.toml          # Web application dependencies
+│   └── uv.lock                 # UV dependency lock file
 ├── data/                       # Shared data directory
 │   ├── downloaded/             # Raw .tar.gz chunk files per namespace
 │   ├── extracted/              # Extracted NDJSON files (temporary)
@@ -79,6 +90,23 @@ wp-embeddings/
 - Serves static frontend assets
 - Implements pagination and performance optimizations
 
+### Web Application Backend (`web/backend/`)
+- **FastAPI REST API**: Provides endpoints for cluster tree navigation and page data
+- **Cluster Service**: Business logic for cluster operations (get root, node, children, siblings, parent)
+- **Page Service**: Business logic for page operations (get pages in cluster, page details)
+- **Database Service**: Manages SQLite database connections and queries
+- **Service Provider Pattern**: Dependency injection system for service management
+- **CORS Configuration**: Enables frontend-backend communication
+- **Lifespan Management**: Handles service initialization and cleanup
+
+### Web Application Frontend (`web/frontend/`)
+- **SolidJS Framework**: Reactive UI components with TypeScript
+- **BabylonJS Integration**: 3D visualization engine for cluster tree rendering
+- **Vite Build System**: Modern frontend tooling with hot module replacement
+- **Tailwind CSS**: Utility-first CSS framework for styling
+- **Kobalte UI**: Accessible UI component library
+- **Responsive Design**: Adapts to different screen sizes
+
 ### Shared Components
 - **`wme_sdk/`**: Wikimedia Enterprise API SDK (avoid making changes)
 - **`data/`**: Shared directory for all data files (databases, downloads, extracts)
@@ -92,12 +120,31 @@ Run these in the `dataprep` directory
 | `python -m command <options>` | Run the interactive or one‑off CLI (e.g. `status`, `download`). |
 | `pytest -q`                   | Execute the test suite.                                         |
 | `uv run black .`              | Reformat code with Black (if needed).                           |
-| `uv run black .`              | Reformat code with Black (if needed).                           |
+| `uv run ruff check`           | Run Ruff linter for code quality checks.                        |
+
+## Technology Stack
+
+### Backend
+- **Framework**: FastAPI (Python 3.13+)
+- **Database**: SQLite (via existing dataprep databases)
+- **API Design**: RESTful endpoints with Pydantic models
+- **Dependency Management**: UV with virtual environments
+- **Testing**: Pytest with async support
+- **Code Quality**: Black (formatting), Ruff (linting), Flake8
+
+### Frontend
+- **Framework**: SolidJS (reactive UI library)
+- **Language**: TypeScript
+- **3D Engine**: BabylonJS (WebGL-based 3D rendering)
+- **Build Tool**: Vite (fast development server and bundler)
+- **Styling**: Tailwind CSS (utility-first framework)
+- **UI Components**: Kobalte (accessible component library)
+- **Package Management**: npm
 
 ## Coding Style & Naming Conventions
 
 * **Indentation** – 4 spaces, no tabs.
-* **Line length** – 88 characters (Black default).
+* **Line length** – 88 characters (Black default) for Python, 120 for frontend.
 * **File names** – snake_case for modules, `CamelCase` for classes.
 * **Functions/variables** – lower_case_with_underscores.
 * **Formatting/Linting** – Black for formatting, ruff for linting (`uv run ruff check`).
@@ -109,11 +156,20 @@ Run these in the `dataprep` directory
 - CLI commands are accessible via `python -m command`
 - Database operations should use the `database.py` helper methods
 
-**Web Application:**
-- API endpoints should be in `web/backend/api/`
-- Business logic should be in `web/backend/services/`
-- Data models should be in `web/backend/models/`
-- Frontend code should be in `web/frontend/`
+**Web Application Backend:**
+- API endpoints should be in `web/backend/api/` with FastAPI routers
+- Business logic should be in `web/backend/services/` using service provider pattern
+- Data models should be in `web/backend/models/` as Pydantic models
+- Database access should use `web/backend/services/database_service.py`
+- Service initialization should be handled in `web/backend/services/service_setup.py`
+
+**Web Application Frontend:**
+- SolidJS components should be in `web/frontend/src/` with `.tsx` extension
+- BabylonJS 3D code should be in `web/frontend/src/babylon/`
+- UI components should be in `web/frontend/src/ui/`
+- API communication should be implemented as separate service modules
+- Use Tailwind CSS for styling via utility classes
+- Follow SolidJS reactive patterns for state management
 
 ## Testing Guidelines
 
@@ -129,10 +185,19 @@ Run these in the `dataprep` directory
 - Test data processing, ML transformations, and CLI commands
 - Run with: `cd dataprep && uv run pytest`
 
-**Web Application Tests:**
-- Located in `web/test_*.py`
+**Web Application Backend Tests:**
+- Located in `web/backend/test/`
 - Test API endpoints, services, and business logic
-- Run with: `cd web && uv run pytest`
+- Run with: `cd web/backend && uv run pytest`
+- Key test files:
+  - `test_clusters_service.py`: Tests cluster service functionality
+  - `test_pages_service.py`: Tests page service functionality
+
+**Web Application Frontend Tests:**
+- Located in `web/frontend/`
+- Test SolidJS components and BabylonJS integration
+- Run with: `cd web/frontend && npm test` (when configured)
+- Use Vite's test runner or Jest for component testing
 
 **Agent Note:** No testing is required for code inside `wme_sdk`. Tests for that package are intentionally excluded from CI.
 
@@ -155,9 +220,42 @@ Run these in the `dataprep` directory
 * **CI checks** – All tests and linting must pass before merging.
 * **Scope** – Clearly indicate which application(s) are affected by your changes.
 
+## API Documentation & Development Workflow
+
+### API Documentation
+- FastAPI automatically generates interactive API documentation
+- Access Swagger UI at `/docs` when running the backend
+- Access ReDoc at `/redoc` for alternative documentation format
+- API endpoints are organized by functionality:
+  - `/api/clusters/*`: Cluster tree navigation endpoints
+  - `/api/pages/*`: Page data retrieval endpoints
+  - `/api/search/*`: Search functionality (placeholder)
+
+### Development Workflow
+
+**Backend Development:**
+1. Navigate to `web/backend/`
+2. Install dependencies: `uv sync`
+3. Run development server: `uv run fastapi dev app/main.py`
+4. Access API docs at `http://localhost:8000/docs`
+
+**Frontend Development:**
+1. Navigate to `web/frontend/`
+2. Install dependencies: `npm install`
+3. Run development server: `npm run dev`
+4. Access frontend at `http://localhost:3000`
+
+**Full Stack Development:**
+1. Run backend in one terminal: `cd web/backend && uv run uvicorn app.main:app --reload`
+2. Run frontend in another terminal: `cd web/frontend && npm run dev`
+3. Configure CORS in backend to allow frontend communication
+4. Use proxy configuration in Vite if needed for API calls
+
 ## Security & Configuration Tips (optional)
 * Store API credentials in a `.env` file – never commit it.
 * Review third‑party SDK changes in `wme_sdk/` for licensing compliance.
+* Configure CORS settings appropriately for production deployment.
+* Use environment variables for sensitive configuration (database paths, API keys).
 
 ## Web Application (3D Cluster Visualization)
 
@@ -170,6 +268,22 @@ The web application provides an interactive 3D visualization of Wikipedia page c
 * **Search Functionality**: Find specific pages or clusters
 * **Performance Optimization**: Efficient handling of large datasets with pagination and lazy loading
 
+### Current Implementation Status
+
+**Backend (FastAPI)**: ✅ Fully implemented with:
+- REST API endpoints for cluster tree navigation
+- Page data retrieval with pagination
+- CORS configuration for frontend communication
+- Service-based architecture with dependency injection
+- Comprehensive error handling and logging
+
+**Frontend (SolidJS + BabylonJS)**: ⏳ Partially implemented with:
+- BabylonJS scene initialization and basic 3D rendering
+- SolidJS component structure with TypeScript
+- Vite build system with Tailwind CSS
+- Basic UI overlay with Kobalte components
+- Responsive design foundation
+
 ## Build, Test, and Development Commands (Extended)
 | Command                       | Description                                                     |
 |-------------------------------|-----------------------------------------------------------------|
@@ -177,27 +291,62 @@ The web application provides an interactive 3D visualization of Wikipedia page c
 | `python -m command <options>` | Run the interactive or one‑off CLI (e.g. `status`, `download`). |
 | `pytest -q`                   | Execute the test suite.                                         |
 | `uv run black .`              | Reformat code with Black (if needed).                           |
-| `uv run fastapi dev web/backend/main.py` | Run FastAPI development server           |
+| `cd web/backend && uv run fastapi dev app/main.py` | Run FastAPI development server           |
+| `cd web/frontend && npm run dev` | Run Vite development server with hot reload        |
 | `cd web/frontend && npm run build` | Build production frontend assets        |
 | `cd web/frontend && npm run preview` | Preview built frontend locally         |
+| `cd web/backend && uv run uvicorn app.main:app --reload` | Run FastAPI with auto-reload for development |
 
 ## Web App Deployment
 | Command                       | Description                                                     |
 |-------------------------------|-----------------------------------------------------------------|
-| `cd web/backend && python -m uvicorn main:app --host 0.0.0.0 --port 8000` | Deploy backend API |
-| `npm run build && npm run deploy` | Build and deploy frontend (when configured) |
+| `cd web/backend && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000` | Deploy backend API |
+| `cd web/frontend && npm run build` | Build production frontend assets |
+| `cd web/frontend && npm run preview` | Preview built frontend locally |
 
 ## Project TODO List
 
-### Phase 1: Backend Development
-- [ ] Set up FastAPI project structure in `web/backend/`
-- [ ] Create database service wrapper for existing database.py functions
-- [ ] Implement Pydantic models for API responses
-- [ ] Build cluster tree API endpoints (get tree structure, node details)
-- [ ] Build page API endpoints (get pages in cluster, page details)
-- [ ] Implement search functionality API endpoints
-- [ ] Add CORS configuration for frontend communication
-- [ ] Test all API endpoints with existing SQLite data
+### Phase 1: Backend Development ✅ (COMPLETED)
+- [x] Set up FastAPI project structure in `web/backend/`
+- [x] Create database service wrapper for existing database.py functions
+- [x] Implement Pydantic models for API responses
+- [x] Build cluster tree API endpoints (get tree structure, node details)
+- [x] Build page API endpoints (get pages in cluster, page details)
+- [ ] Implement search functionality API endpoints (placeholder exists)
+- [x] Add CORS configuration for frontend communication
+- [x] Test all API endpoints with existing SQLite data
+
+### Phase 2: Frontend Development ⏳ (IN PROGRESS)
+- [x] Set up HTML/CSS/JS structure in `web/frontend/`
+- [x] Integrate BabylonJS for 3D visualization
+- [ ] Create API client for frontend-backend communication
+- [x] Implement cluster tree visualization (3D nodes and connections)
+- [ ] Add namespace selection interface
+- [ ] Implement search UI and functionality
+- [ ] Add cluster node selection and page listing
+- [ ] Optimize rendering for large cluster datasets
+=======
+## Project TODO List
+
+### Phase 1: Backend Development ✅ (COMPLETED)
+- [x] Set up FastAPI project structure in `web/backend/`
+- [x] Create database service wrapper for existing database.py functions
+- [x] Implement Pydantic models for API responses
+- [x] Build cluster tree API endpoints (get tree structure, node details)
+- [x] Build page API endpoints (get pages in cluster, page details)
+- [ ] Implement search functionality API endpoints (placeholder exists)
+- [x] Add CORS configuration for frontend communication
+- [x] Test all API endpoints with existing SQLite data
+
+### Phase 2: Frontend Development ⏳ (IN PROGRESS)
+- [x] Set up HTML/CSS/JS structure in `web/frontend/`
+- [x] Integrate BabylonJS for 3D visualization
+- [ ] Create API client for frontend-backend communication
+- [x] Implement cluster tree visualization (3D nodes and connections)
+- [ ] Add namespace selection interface
+- [ ] Implement search UI and functionality
+- [ ] Add cluster node selection and page listing
+- [ ] Optimize rendering for large cluster datasets
 
 ### Phase 2: Frontend Development
 - [ ] Set up HTML/CSS/JS structure in `web/frontend/`

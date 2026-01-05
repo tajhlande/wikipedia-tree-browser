@@ -27,7 +27,6 @@ wheels/
 # work directories and files
 data/downloaded
 data/extracted
-*.json
 *.ndjson
 enwiki_namespace_0_chunk_0_line_1.txt
 .wp_transform_history
