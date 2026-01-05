@@ -32,7 +32,7 @@ class TestLanguageMaps:
 
     def test_load_languages_success(self, expected_languages):
         """Test successful loading of language data."""
-        lang_dict = load_languages_from_csv()
+        lang_dict = load_languages_from_csv("../data/languages.csv")
 
         # Test count
         assert len(lang_dict) == len(expected_languages), \
@@ -76,7 +76,7 @@ class TestLanguageMaps:
             load_languages_from_csv(str(empty_fields_csv))
 
     def test_namespace_map(self):
-        lang_dict = load_languages_from_csv()
+        lang_dict = load_languages_from_csv("../data/languages.csv")
         namespace_dict = make_namespace_to_language_index(lang_dict)
         assert namespace_dict["enwiki_namespace_0"] == "English"
         assert namespace_dict["dewiki_namespace_0"] == "German"

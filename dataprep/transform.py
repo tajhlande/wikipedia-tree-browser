@@ -36,6 +36,8 @@ from database import (
     get_cluster_tree_max_node_id,
     get_page_reduced_vectors,
     numpy_to_bytes,
+    bytes_to_numpy,
+    get_cluster_tree_nodes_missing_centroids
 )
 from progress_utils import ProgressTracker
 
@@ -439,6 +441,15 @@ def _recursive_cluster_node(
         silhouette_avg = fast_silhouette_score(page_vectors, cluster_labels, metric='cosine')
         logger.debug("Node %s silhouette score: %s", node_id, silhouette_avg)
 
+        # Update node centroid
+        logger.debug("Updating centroid for node %d", node_id)
+        centroid = kmeans.cluster_centers_.mean(axis=0)
+        centroid_blob = numpy_to_bytes(centroid)
+        sqlconn.execute(
+            "UPDATE cluster_tree SET centroid = ? WHERE node_id = ?",
+            (centroid_blob, node_id)
+        )
+
         if silhouette_avg < min_silhouette_threshold:
             logger.debug("Node %s has poor clustering quality (silhouette=%s < %s), stopping recursion",
                          node_id, silhouette_avg, min_silhouette_threshold)
@@ -446,15 +457,6 @@ def _recursive_cluster_node(
     except Exception as e:
         logger.warning("Could not calculate silhouette score for node %s: %s", node_id, e)
         silhouette_avg = 0.0
-
-    # Update node centroid
-    logger.debug("Updating centroid for node %d", node_id)
-    centroid = kmeans.cluster_centers_.mean(axis=0)
-    centroid_blob = numpy_to_bytes(centroid)
-    sqlconn.execute(
-        "UPDATE cluster_tree SET centroid = ? WHERE node_id = ?",
-        (centroid_blob, node_id)
-    )
 
     # Process each child cluster
     child_nodes_processed = 0
@@ -525,3 +527,129 @@ def _recursive_cluster_node(
 
     # Return total nodes processed (1 for this node + all child nodes)
     return descendant_nodes_processed
+
+
+def compute_missing_centroids(
+    sqlconn: sqlite3.Connection,
+    namespace: str,
+    tracker: Optional[ProgressTracker] = None,
+) -> int:
+    """
+    Find all cluster_tree nodes missing centroids and compute them as the mean of reduced vectors.
+
+    This function tests the assumption that nodes missing centroids are leaf nodes (nodes with no children).
+    If this assumption is violated, the function will fail.
+
+    Args:
+        sqlconn: SQLite database connection
+        namespace: Namespace to process
+        tracker: Optional progress tracker
+
+    Returns:
+        Number of centroids computed
+    """
+    logger.info("Starting computation of missing centroids for namespace %s", namespace)
+
+    # Get all cluster tree nodes missing centroids
+    nodes_missing_centroids = get_cluster_tree_nodes_missing_centroids(sqlconn, namespace)
+
+    if not nodes_missing_centroids:
+        logger.info("No cluster tree nodes missing centroids found in namespace %s", namespace)
+        return 0
+    if tracker:
+        tracker.set_total(len(nodes_missing_centroids))
+
+    logger.info("Found %d cluster tree nodes missing centroids in namespace %s",
+                len(nodes_missing_centroids), namespace)
+
+    # Get all cluster tree nodes to determine which ones have children
+    # We need to check if our assumption holds: nodes missing centroids should be leaf nodes
+    all_nodes_sql = """
+        SELECT node_id, parent_id, child_count
+        FROM cluster_tree
+        WHERE namespace = ?
+    """
+    cursor = sqlconn.execute(all_nodes_sql, (namespace,))
+    all_nodes = cursor.fetchall()
+
+    # Create a set of node_ids that have children (non-leaf nodes)
+    nodes_with_children = set()
+    for node in all_nodes:
+        if node[2] > 0:  # child_count > 0
+            nodes_with_children.add(node[0])
+
+    # Test our assumption: nodes missing centroids should be leaf nodes
+    for node in nodes_missing_centroids:
+        if node.node_id in nodes_with_children:
+            error_msg = (f"Assumption violated: Node {node.node_id} is missing a centroid but has children. "
+                         f"This function only works for leaf nodes (nodes with no children).")
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+    logger.info("Assumption validated: All nodes missing centroids are leaf nodes")
+
+    # OPTIMIZED: Load ALL page vectors for ALL missing centroid nodes in a single query
+    logger.debug("Loading all page vectors for nodes missing centroids")
+    all_vectors_sql = """
+        SELECT pv.page_id, pv.reduced_vector, pv.cluster_node_id
+        FROM page_vector pv
+        JOIN cluster_tree ct ON pv.namespace = ct.namespace AND pv.cluster_node_id = ct.node_id
+        WHERE pv.namespace = ? AND ct.centroid IS NULL AND pv.reduced_vector IS NOT NULL
+    """
+    cursor = sqlconn.execute(all_vectors_sql, (namespace,))
+
+    # Group vectors by node_id
+    from collections import defaultdict
+    node_vectors = defaultdict(list)
+    node_page_counts = defaultdict(int)
+
+    for page_id, vector_blob, node_id in cursor.fetchall():
+        vector = bytes_to_numpy(vector_blob)
+        node_vectors[node_id].append(vector)
+        node_page_counts[node_id] += 1
+
+    logger.debug("Loaded vectors for %d nodes", len(node_vectors))
+
+    # Compute centroids for all nodes at once
+    centroid_updates = []
+    centroids_computed = 0
+
+    # Create a set of node_ids that we actually found vectors for
+    nodes_with_vectors = set(node_vectors.keys())
+
+    for node in nodes_missing_centroids:
+        if node.node_id in nodes_with_vectors:
+            vectors = node_vectors[node.node_id]
+            if vectors:  # Should always be true, but be safe
+                # Compute centroid as the mean of all vectors
+                centroid = np.array(vectors).mean(axis=0)
+                centroid_blob = numpy_to_bytes(centroid)
+                centroid_updates.append((centroid_blob, namespace, node.node_id))
+                # logger.debug("Computed centroid for node %d with %d pages",
+                #            node.node_id, node_page_counts[node.node_id])
+                centroids_computed += 1
+            else:
+                logger.warning("Node %d has no pages with reduced vectors", node.node_id)
+        else:
+            logger.warning("Node %d has no pages with reduced vectors", node.node_id)
+
+        # Update progress tracker
+        if tracker:
+            tracker.update(1)
+
+    # Execute all updates in a single batch
+    logger.debug("Batch updating centroids for %d nodes", len(centroid_updates))
+    if centroid_updates:
+        cursor = sqlconn.cursor()
+        cursor.executemany(
+            "UPDATE cluster_tree SET centroid = ? WHERE namespace = ? AND node_id = ?",
+            centroid_updates
+        )
+        logger.debug("Executed batch update for %d nodes", len(centroid_updates))
+
+    sqlconn.commit()
+
+    logger.info("Completed computation of %d missing centroids for namespace %s",
+                centroids_computed, namespace)
+
+    return centroids_computed

@@ -22,7 +22,7 @@ from database import (
 )
 from progress_utils import ProgressTracker
 from wme_sdk.auth.auth_client import AuthClient
-from wme_sdk.api.api_client import Client, Request, Filter
+from wme_sdk.api.api_client import Client, Request
 
 # Load environment variables from .env file
 load_dotenv()

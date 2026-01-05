@@ -64,7 +64,7 @@ def test_adverse_topic_summary():
     """
 
     namespace = "enwiki_namespace_0"
-    sqlconn = get_sql_conn(namespace)
+    sqlconn = get_sql_conn(namespace, "../data")
     cluster_id = 3
     parent_id = get_cluster_parent_id(sqlconn, namespace, cluster_id)
     assert parent_id is not None
@@ -82,7 +82,8 @@ def test_adverse_topic_summary():
 
     cnt = ClusterNodeTopics(node_id=3, depth=3, parent_id=2,
                             first_label="first", final_label="final", is_leaf=True)
-    page_topics = [PageContent(page_id=page.page_id, title=page.title, abstract=page.abstract or "") for page in page_list]
+    page_topics = [PageContent(page_id=page.page_id, title=page.title, abstract=page.abstract or "")
+                   for page in page_list]
     n_id = 5
     neighbor_nodes = [ClusterNodeTopics(node_id=(n_id := n_id + 1), depth=3, parent_id=2,
                                         first_label="first", final_label="final", is_leaf=True

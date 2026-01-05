@@ -89,7 +89,7 @@ namespace_dict: Dict[str, str] = dict()
 _dict_init_lock = Lock()
 
 
-def get_language_for_namespace(namespace: str) -> str:
+def get_language_for_namespace(namespace: str, language_file: str = "../data/languages.csv") -> str:
     """
     Given a namespace, get the name of the corresponding language for it.
     Loads the language data from a CSV file, and uses global dict variables to cache it.
@@ -101,6 +101,6 @@ def get_language_for_namespace(namespace: str) -> str:
     with _dict_init_lock:
         if not namespace_dict:
             if not lang_dict:
-                lang_dict = load_languages_from_csv()
+                lang_dict = load_languages_from_csv(language_file)
             namespace_dict = make_namespace_to_language_index(lang_dict)
     return namespace_dict[namespace]

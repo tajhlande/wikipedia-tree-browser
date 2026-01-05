@@ -907,3 +907,84 @@ def get_all_cluster_nodes_for_topic_labeling(sqlconn: sqlite3.Connection,
             pass
         logger.error(f"Failed to get cluster nodes for namespace `{namespace}`: {e}")
         raise
+
+
+def get_cluster_tree_nodes_missing_centroids(sqlconn: sqlite3.Connection, namespace: str) -> list[ClusterTreeNode]:
+    """
+    Get cluster tree nodes that are missing centroids (centroid IS NULL).
+
+    :param: sqlconn   The Sqlite3 connection to use
+    :param: namespace  The namespace for the cluster tree
+    :return: A list of cluster tree nodes missing centroids
+    """
+    sql = """
+        SELECT node_id, parent_id, depth, centroid, doc_count, sample_doc_ids
+        FROM cluster_tree
+        WHERE namespace = ?
+        AND centroid IS NULL
+        ORDER BY node_id ASC;
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace,))
+
+        result = []
+        for row in cursor.fetchall():
+            node = ClusterTreeNode(
+                namespace=namespace,
+                node_id=row[0],
+                parent_id=row[1],
+                depth=row[2],
+                centroid=None,  # We know it's NULL from the query
+                doc_count=row[4],
+                sample_doc_ids=json.loads(row[5]) if row[5] else None
+            )
+            result.append(node)
+        return result
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.error(f"Failed to get cluster tree nodes missing centroids for namespace `{namespace}`: {e}")
+        raise
+
+
+def get_reduced_vectors_for_cluster_node(sqlconn: sqlite3.Connection, namespace: str, node_id: int
+                                         ) -> list[tuple[int, NDArray]]:
+    """
+    Get reduced vectors for all pages in a specific cluster node.
+
+    :param: sqlconn   The Sqlite3 connection to use
+    :param: namespace  The namespace for the cluster tree
+    :param: node_id    The cluster node ID
+    :return: A list of tuples containing (page_id, reduced_vector) for pages in the cluster
+    """
+    sql = """
+        SELECT page_id, reduced_vector
+        FROM page_vector
+        WHERE namespace = ?
+        AND cluster_node_id = ?
+        AND reduced_vector IS NOT NULL
+        ORDER BY page_id ASC;
+    """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace, node_id))
+
+        result = []
+        for row in cursor.fetchall():
+            page_id = row[0]
+            vector_blob = row[1]
+            vector = bytes_to_numpy(vector_blob)
+            result.append((page_id, vector))
+        return result
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.error(f"Failed to get reduced vectors for cluster node {node_id} in namespace `{namespace}`: {e}")
+        raise

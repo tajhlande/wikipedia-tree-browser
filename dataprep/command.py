@@ -41,7 +41,7 @@ from index_pages import (
 from languages import get_language_for_namespace
 from progress_utils import ProgressTracker
 from topic_discovery import TopicDiscovery
-from transform import run_pca, run_umap_per_cluster, run_recursive_clustering
+from transform import run_pca, run_umap_per_cluster, run_recursive_clustering, compute_missing_centroids
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -1433,6 +1433,48 @@ class StatusCommand(Command):
             return Result.FAILURE, f"{X} Failed to get status: {e}"
 
 
+class ComputeMissingCentroidsCommand(Command):
+    """Compute missing centroids for cluster tree nodes."""
+
+    def __init__(self):
+        super().__init__(
+            name="compute-missing-centroids",
+            description="Compute missing centroids for cluster tree nodes that are missing them",
+            expected_args=[REQUIRED_NAMESPACE_ARGUMENT]
+        )
+
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+        try:
+            namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
+            sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
+            ensure_tables(sqlconn)
+
+            logger.info("Computing missing centroids for namespace: %s", namespace)
+
+            with ProgressTracker(
+                description="Computing missing centroids",
+                unit="centroids"
+            ) as tracker:
+                centroids_computed = compute_missing_centroids(
+                    sqlconn=sqlconn,
+                    namespace=namespace,
+                    tracker=tracker
+                )
+
+            if centroids_computed == 0:
+                return Result.SUCCESS, f"{CHECK} No missing centroids found in namespace {namespace}"
+            else:
+                return (
+                    Result.SUCCESS,
+                    f"{CHECK} Computed {centroids_computed} missing centroid{'s' if centroids_computed != 1 else ''} "
+                    f"for namespace {namespace}"
+                )
+
+        except Exception as e:
+            logger.exception(f"Failed to compute missing centroids: {e}")
+            return Result.FAILURE, f"{X} Failed to compute missing centroids: {e}"
+
+
 COMMAND_NAME_ARGUMENT = Argument(name="command", type="string", required=False,
                                  description="Get help on the specific named command")
 
@@ -1488,6 +1530,7 @@ class CommandInterpreter:
         self.parser.register_command(ProjectCommand())
         self.parser.register_command(TopicsCommand())
         self.parser.register_command(StatusCommand())
+        self.parser.register_command(ComputeMissingCentroidsCommand())
         self.parser.register_command(HelpCommand(self.parser))
 
     def run_interactive(self):
