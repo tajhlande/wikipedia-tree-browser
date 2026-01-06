@@ -579,11 +579,9 @@ def get_cluster_tree_nodes_needing_projection(
     select_sql = f"""
         SELECT pv.cluster_node_id, pv.page_id, pv.reduced_vector
         FROM page_vector pv
-        JOIN cluster_tree ct ON pv.namespace = ct.namespace AND pv.cluster_node_id = ct.node_id
         WHERE pv.three_d_vector IS NULL
         AND pv.cluster_node_id IS NOT NULL
         AND pv.namespace = :namespace
-        AND ct.namespace = :namespace
         ORDER BY pv.cluster_node_id ASC
         {'LIMIT :limit' if limit else ''}
         """

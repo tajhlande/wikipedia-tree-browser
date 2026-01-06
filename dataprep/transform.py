@@ -172,7 +172,7 @@ def run_pca_per_cluster(
     #     "Running PCA per cluster node (n_components=%s, limit=%s)", n_components, limit
     # )
     # Determine distinct cluster tree nodes that need projection
-    logger.info("Fetching page vectors needing projection")
+    # logger.info("Fetching page vectors needing projection")
     reduced_page_vectors = get_cluster_tree_nodes_needing_projection(sqlconn, namespace, limit)
 
     total_vectors = len(reduced_page_vectors)
@@ -234,10 +234,10 @@ def run_pca_per_cluster(
         # logger.info(f"updates repacking time: {t1 - t0:.4f}s")
 
         while len(all_updates) >= batch_size:
-            batch = all_updates[:batch_size]
+            db_batch = all_updates[:batch_size]
             # logger.debug("Writing batch of %d to database", len(batch))
-            update_three_d_vectors_in_batch(namespace, batch, sqlconn)
-            all_updates = all_updates[len(batch):]
+            update_three_d_vectors_in_batch(namespace, db_batch, sqlconn)
+            all_updates = all_updates[len(db_batch):]
 
         # Update progress tracker
         tracker.update(len(batch)) if tracker else None
@@ -246,10 +246,10 @@ def run_pca_per_cluster(
     # Store all 3-D vectors in batch for better performance
     if all_updates:
         while len(all_updates) > 0:
-            batch = all_updates[:batch_size]
+            db_batch = all_updates[:batch_size]
             # logger.debug("Writing batch of %d to database", len(batch))
-            update_three_d_vectors_in_batch(namespace, batch, sqlconn)
-            all_updates = all_updates[len(batch):]
+            update_three_d_vectors_in_batch(namespace, db_batch, sqlconn)
+            all_updates = all_updates[len(db_batch):]
 
     # Update centroid in cluster_tree.
     # centroid = three_space_vectors.mean(axis=0).tolist()
