@@ -21,13 +21,11 @@ from typing import Iterable, Optional
 
 import sqlite3
 import numpy as np
-from sklearn.metrics import silhouette_score
 from numpy.typing import NDArray
 
 from classes import ClusterTreeNode
 from database import (
     get_cluster_tree_nodes_needing_projection,
-    get_reduced_vectors_for_cluster_node,
     update_cluster_tree_assignments,
     update_reduced_vectors_in_batch,
     update_three_d_vectors_in_batch,
@@ -50,6 +48,8 @@ numba_logger.setLevel(logging.WARNING)
 logger.info("Initializing scikit-learn...")
 from sklearn.decomposition import IncrementalPCA  # noqa E402
 from sklearn.cluster import MiniBatchKMeans  # noqa E402
+from sklearn.metrics import silhouette_score  # noqa E402
+from sklearn.decomposition import PCA  # noqa E402
 import umap.umap_ as umap  # noqa E402
 
 logger = logging.getLogger(__name__)
@@ -155,70 +155,83 @@ def run_pca(
     return batch_counter, total_vectors
 
 
-def run_umap_per_cluster(
+def run_pca_per_cluster(
     sqlconn: sqlite3.Connection,
     namespace: str,
     n_components: int = 3,
-    batch_size: int = 100,
+    batch_size: int = 15000,
     limit: Optional[int] = None,
     tracker: Optional[ProgressTracker] = None,
 ) -> int:
-    """Apply UMAP within each cluster tree node and store 3-D vectors using thread pool.
+    """Apply PCA within each cluster tree node and store 3-D vectors.
 
     ``limit`` caps the number of cluster nodes processed (useful for quick tests).
     Returns the number of cluster nodes actually processed.
     """
     # logger.info(
-    #     "Running UMAP per cluster node (n_components=%s, limit=%s)", n_components, limit
+    #     "Running PCA per cluster node (n_components=%s, limit=%s)", n_components, limit
     # )
     # Determine distinct cluster tree nodes that need projection
-    node_ids_and_sizes = get_cluster_tree_nodes_needing_projection(sqlconn, namespace, limit)
+    logger.info("Fetching page vectors needing projection")
+    reduced_page_vectors = get_cluster_tree_nodes_needing_projection(sqlconn, namespace, limit)
 
-    total_vectors = sum([node[1] for node in node_ids_and_sizes])
+    total_vectors = len(reduced_page_vectors)
+
+    # logger.info("Grouping page vectors by clusters")
+    cluster_map: dict[int, list[tuple[int, Optional[NDArray]]]] = dict()
+    for page_vector in reduced_page_vectors:
+        if page_vector[0] not in cluster_map:
+            cluster_map[page_vector[0]] = []
+        cluster_map[page_vector[0]].append((page_vector[1], page_vector[2]))
+
     tracker.set_total(total_vectors) if tracker else None
 
     # Accumulate updates across all clusters for better batch performance
     all_updates = []
     processed = 0
 
-    for node_id, node_size in node_ids_and_sizes:
-        # Gather all reduced vectors for this cluster node.
-        page_id_and_reduced_vectors = get_reduced_vectors_for_cluster_node(sqlconn, namespace, node_id)
+    for _, batch in cluster_map.items():
 
-        page_ids = [r[0] for r in page_id_and_reduced_vectors]
-        vectors = np.vstack(
-            [np.frombuffer(r[1], dtype=np.float32) for r in page_id_and_reduced_vectors]
-        )
+        page_ids = [r[0] for r in batch]
+        # vectors = np.vstack(
+        #     [np.frombuffer(r[1], dtype=np.float32) for r in page_id_and_reduced_vectors]
+        # )
+        vectors = np.vstack([vec for _, vec in batch if vec is not None])
 
-        # Optimized UMAP processing based on cluster size
-        if len(page_ids) <= 5:
-            # For very small clusters (2-5 points), use a simple approach
-            # Handle the case where we have fewer features than target dimensions
-            if vectors.shape[1] < n_components:
-                # If we have fewer features than target dimensions, pad with zeros
-                three_space_vectors = np.zeros((len(page_ids), n_components), dtype=np.float32)
-                # Copy the available features
-                three_space_vectors[:, :vectors.shape[1]] = vectors[:, :n_components]
-            else:
-                # Otherwise use PCA - it's much faster than UMAP for tiny clusters
-                try:
-                    from sklearn.decomposition import PCA
-                    pca = PCA(n_components=n_components)
-                    three_space_vectors = pca.fit_transform(vectors)
-                except ValueError as e:
-                    # Fallback to zero-padding if PCA fails (shouldn't happen, but be safe)
-                    logger.warning(f"PCA failed for cluster with {len(page_ids)} pages: {e}. Using zero-padding.")
-                    three_space_vectors = np.zeros((len(page_ids), n_components), dtype=np.float32)
-                    three_space_vectors[:, :vectors.shape[1]] = vectors[:, :n_components]
+        # Apply PCA to reduce to target dimensionality
+        # Handle the case where we have fewer features than target dimensions
+        if vectors.shape[1] < n_components:
+            # If we have fewer features than target dimensions, pad with zeros
+            three_space_vectors = np.zeros((len(page_ids), n_components), dtype=np.float32)
+            # Copy the available features
+            three_space_vectors[:, :vectors.shape[1]] = vectors[:, :n_components]
         else:
-            # For larger clusters, use UMAP with optimized parameters
-            three_space_vectors = _optimized_umap_projection(vectors, n_components, len(page_ids))
+            # Use PCA for small clusters
+            try:
+                # t0 = time.perf_counter()
+                pca = PCA(n_components=n_components)
+                # t1 = time.perf_counter()
+                three_space_vectors = pca.fit_transform(vectors)
+                # t2 = time.perf_counter()
+                # logger.info(f"PCA time: {t2 - t0:.4f}s for {len(vectors)} vectors
+                # (Object create: {t1 - t0:.4f}, fit_transform: {t2-t1:.4f})")
+            except ValueError:  # as e:
+                # Fallback to zero-padding if PCA fails (shouldn't happen, but be safe)
+                # logger.warning(f"PCA failed for cluster with {len(page_ids)} pages: {e}. Using zero-padding.")
+                three_space_vectors = np.zeros((len(page_ids), n_components), dtype=np.float32)
+                three_space_vectors[:, :vectors.shape[1]] = vectors[:, :n_components]
 
+        # t0 = time.perf_counter()
         three_space_vectors = three_space_vectors.astype(np.float32)
+        # t1 = time.perf_counter()
+        # logger.info(f"vector astype float32 time: {t1 - t0:.4f}s")
 
         # Accumulate updates for batch processing
+        # t0 = time.perf_counter()
         updates = [(pid, vec) for pid, vec in zip(page_ids, three_space_vectors)]
         all_updates.extend(updates)
+        # t1 = time.perf_counter()
+        # logger.info(f"updates repacking time: {t1 - t0:.4f}s")
 
         while len(all_updates) >= batch_size:
             batch = all_updates[:batch_size]
@@ -227,7 +240,7 @@ def run_umap_per_cluster(
             all_updates = all_updates[len(batch):]
 
         # Update progress tracker
-        tracker.update(node_size) if tracker else None
+        tracker.update(len(batch)) if tracker else None
         processed += 1
 
     # Store all 3-D vectors in batch for better performance
@@ -242,8 +255,98 @@ def run_umap_per_cluster(
     # centroid = three_space_vectors.mean(axis=0).tolist()
 
     sqlconn.commit()
-    # logger.info("UMAP mapping completed for %s cluster nodes.", processed)
+    # logger.info("PCA mapping completed for %s cluster nodes.", processed)
     return processed
+
+
+# def run_umap_per_cluster(
+#     sqlconn: sqlite3.Connection,
+#     namespace: str,
+#     n_components: int = 3,
+#     batch_size: int = 1000,
+#     limit: Optional[int] = None,
+#     tracker: Optional[ProgressTracker] = None,
+# ) -> int:
+#     """Apply UMAP within each cluster tree node and store 3-D vectors using thread pool.
+
+#     ``limit`` caps the number of cluster nodes processed (useful for quick tests).
+#     Returns the number of cluster nodes actually processed.
+#     """
+#     # logger.info(
+#     #     "Running UMAP per cluster node (n_components=%s, limit=%s)", n_components, limit
+#     # )
+#     # Determine distinct cluster tree nodes that need projection
+#     node_ids_and_sizes = get_cluster_tree_nodes_needing_projection(sqlconn, namespace, limit)
+
+#     total_vectors = sum([node[1] for node in node_ids_and_sizes])
+#     tracker.set_total(total_vectors) if tracker else None
+
+#     # Accumulate updates across all clusters for better batch performance
+#     all_updates = []
+#     processed = 0
+
+#     for node_id, node_size in node_ids_and_sizes:
+#         # Gather all reduced vectors for this cluster node.
+#         page_id_and_reduced_vectors = get_reduced_vectors_for_cluster_node(sqlconn, namespace, node_id)
+
+#         page_ids = [r[0] for r in page_id_and_reduced_vectors]
+#         vectors = np.vstack(
+#             [np.frombuffer(r[1], dtype=np.float32) for r in page_id_and_reduced_vectors]
+#         )
+
+#         # Optimized UMAP processing based on cluster size
+#         if len(page_ids) <= 5:
+#             # For very small clusters (2-5 points), use a simple approach
+#             # Handle the case where we have fewer features than target dimensions
+#             if vectors.shape[1] < n_components:
+#                 # If we have fewer features than target dimensions, pad with zeros
+#                 three_space_vectors = np.zeros((len(page_ids), n_components), dtype=np.float32)
+#                 # Copy the available features
+#                 three_space_vectors[:, :vectors.shape[1]] = vectors[:, :n_components]
+#             else:
+#                 # Otherwise use PCA - it's much faster than UMAP for tiny clusters
+#                 try:
+#                     pca = PCA(n_components=n_components, random_state=42)
+#                     three_space_vectors = pca.fit_transform(vectors)
+#                 except ValueError as e:
+#                     # Fallback to zero-padding if PCA fails (shouldn't happen, but be safe)
+#                     logger.warning(f"PCA failed for cluster with {len(page_ids)} pages: {e}. Using zero-padding.")
+#                     three_space_vectors = np.zeros((len(page_ids), n_components), dtype=np.float32)
+#                     three_space_vectors[:, :vectors.shape[1]] = vectors[:, :n_components]
+#         else:
+#             # For larger clusters, use UMAP with optimized parameters
+#             three_space_vectors = _optimized_umap_projection(vectors, n_components, len(page_ids))
+
+#         three_space_vectors = three_space_vectors.astype(np.float32)
+
+#         # Accumulate updates for batch processing
+#         updates = [(pid, vec) for pid, vec in zip(page_ids, three_space_vectors)]
+#         all_updates.extend(updates)
+
+#         while len(all_updates) >= batch_size:
+#             batch = all_updates[:batch_size]
+#             # logger.debug("Writing batch of %d to database", len(batch))
+#             update_three_d_vectors_in_batch(namespace, batch, sqlconn)
+#             all_updates = all_updates[len(batch):]
+
+#         # Update progress tracker
+#         tracker.update(node_size) if tracker else None
+#         processed += 1
+
+#     # Store all 3-D vectors in batch for better performance
+#     if all_updates:
+#         while len(all_updates) > 0:
+#             batch = all_updates[:batch_size]
+#             # logger.debug("Writing batch of %d to database", len(batch))
+#             update_three_d_vectors_in_batch(namespace, batch, sqlconn)
+#             all_updates = all_updates[len(batch):]
+
+#     # Update centroid in cluster_tree.
+#     # centroid = three_space_vectors.mean(axis=0).tolist()
+
+#     sqlconn.commit()
+#     # logger.info("UMAP mapping completed for %s cluster nodes.", processed)
+#     return processed
 
 
 def _optimized_umap_projection(vectors: NDArray, n_components: int = 3, cluster_size: int = 50) -> NDArray:
@@ -268,8 +371,9 @@ def _optimized_umap_projection(vectors: NDArray, n_components: int = 3, cluster_
         random_state=42,
         min_dist=0.0,
         metric='cosine',
-        init='random',
+        init='spectral',
         verbose=False,
+        low_memory=True,
         n_jobs=1  # Single thread avoids parallel overhead
     )
 

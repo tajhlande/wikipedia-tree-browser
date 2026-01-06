@@ -41,7 +41,12 @@ from index_pages import (
 from languages import get_language_for_namespace
 from progress_utils import ProgressTracker
 from topic_discovery import TopicDiscovery
-from transform import run_pca, run_umap_per_cluster, run_recursive_clustering, compute_missing_centroids
+from transform import (
+    run_pca,
+    run_pca_per_cluster,
+    run_recursive_clustering,
+    compute_missing_centroids
+)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -1298,7 +1303,7 @@ class ProjectCommand(Command):
             ensure_tables(sqlconn)
 
             with ProgressTracker(description="Projecting into 3-space", unit="vectors") as tracker:
-                processed_count = run_umap_per_cluster(sqlconn, namespace, n_components=3, limit=limit, tracker=tracker)
+                processed_count = run_pca_per_cluster(sqlconn, namespace, n_components=3, limit=limit, tracker=tracker)
 
             return (
                 Result.SUCCESS,

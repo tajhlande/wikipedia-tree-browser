@@ -105,6 +105,8 @@ def ensure_tables(sqlconn: sqlite3.Connection):
         )
 
         # performance pragmas
+        sqlconn.execute("PRAGMA journal_mode=WAL;")
+        sqlconn.execute("PRAGMA synchronous=NORMAL;")
 
     except sqlite3.Error as e:
         logger.error(f"Failed to create tables: {e}")
@@ -217,9 +219,10 @@ def three_d_vector_to_text(vector: Optional[NDArray]) -> Optional[str]:
                         processed_vector.append(0.0)
                 else:
                     processed_vector.append(0.0)
-            return json.dumps(processed_vector)
+            return f"[{processed_vector[0]:.8f}, {processed_vector[1]:.8f}, {processed_vector[2]:.8f}]"
+            # json.dumps(processed_vector)
         except (ValueError, TypeError):
-            return json.dumps([0.0, 0.0, 0.0])  # Fallback to zero vector
+            return "[0.0, 0.0, 0.0]"  # Fallback to zero vector
     else:
         # Handle numpy array input
         try:
@@ -228,7 +231,8 @@ def three_d_vector_to_text(vector: Optional[NDArray]) -> Optional[str]:
                 logger.warning(f"Vector contains NaN or infinite values: {vector}")
                 # Replace NaN/infinite with 0
                 vector = np.where(np.isfinite(vector), vector, 0.0)
-            return json.dumps(vector.astype(np.float32).tolist())
+            return f"[{vector[0]:.8f}, {vector[2]:.8f}, {vector[2]:.8f}]"
+            # json.dumps(vector.astype(np.float32).tolist())
         except (ValueError, TypeError):
             logger.warning(f"Failed to convert vector to text: {vector}")
             return json.dumps([0.0, 0.0, 0.0])  # Fallback to zero vector
@@ -566,28 +570,27 @@ def get_cluster_tree_nodes_needing_projection(
     sqlconn: sqlite3.Connection,
     namespace: str,
     limit: Optional[int],
-) -> list[tuple[int, int]]:
+) -> list[tuple[int, int, Optional[NDArray]]]:
     """Get cluster tree nodes that need 3D projection.
 
-    Returns list of tuples (node_id, page_count) for nodes that have pages
+    Returns list of tuples (node_id, page_id, reduced_vector) for nodes that have pages
     without 3D vectors assigned.
     """
     select_sql = f"""
-        SELECT pv.cluster_node_id, COUNT(pv.page_id) as page_count
+        SELECT pv.cluster_node_id, pv.page_id, pv.reduced_vector
         FROM page_vector pv
         JOIN cluster_tree ct ON pv.namespace = ct.namespace AND pv.cluster_node_id = ct.node_id
         WHERE pv.three_d_vector IS NULL
         AND pv.cluster_node_id IS NOT NULL
         AND pv.namespace = :namespace
         AND ct.namespace = :namespace
-        GROUP BY pv.cluster_node_id
         ORDER BY pv.cluster_node_id ASC
         {'LIMIT :limit' if limit else ''}
         """
     cursor = sqlconn.execute(select_sql,
                              {'namespace': namespace, 'limit': limit} if limit else {'namespace': namespace})
     rows = cursor.fetchall()
-    return [(row[0], row[1]) for row in rows]
+    return [(row[0], row[1], bytes_to_numpy(row[2])) for row in rows]
 
 
 # ---------------------------------------------------------------------------
