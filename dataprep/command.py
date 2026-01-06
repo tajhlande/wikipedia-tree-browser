@@ -1280,12 +1280,12 @@ class TopicsCommand(Command):
 
 
 class ProjectCommand(Command):
-    """Project reduced vector clusters into 3-space."""
+    """Project reduced vector cluster tree nodes into 3-space."""
 
     def __init__(self):
         super().__init__(
             name="project",
-            description="Project reduced vector clusters into 3-space.",
+            description="Project reduced vector cluster tree nodes into 3-space.",
             expected_args=[REQUIRED_NAMESPACE_ARGUMENT, OPTIONAL_CLUSTER_LIMIT_ARGUMENT]
         )
 
@@ -1303,10 +1303,10 @@ class ProjectCommand(Command):
             return (
                 Result.SUCCESS,
                 f"{CHECK} Projected reduced page embeddings in {namespace} in {processed_count} "
-                f"cluster{'' if processed_count == 1 else 's'} into 3-space using UMAP."
+                f"cluster node{'' if processed_count == 1 else 's'} into 3-space using UMAP."
             )
         except Exception as e:
-            logger.exception(f"Failed to cluster embeddings: {e}")
+            logger.exception(f"Failed to project embeddings: {e}")
             return Result.FAILURE, f"{X} Failed to project reduced page embeddings into 3-space: {e}"
 
 

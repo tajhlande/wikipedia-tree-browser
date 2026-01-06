@@ -438,6 +438,74 @@ def update_three_d_vector_for_page(
         raise
 
 
+def update_three_d_vectors_in_batch(
+    namespace: str,
+    vector_updates: list[tuple[int, NDArray]],
+    sqlconn: sqlite3.Connection
+) -> None:
+    """Batch update three_d_vectors for multiple pages.
+
+    Args:
+        namespace: The namespace for the pages
+        vector_updates: List of tuples (page_id, vector) where vector is NDArray or list
+        sqlconn: SQLite connection
+        batch_size: Number of updates to process in each batch
+    """
+    if not vector_updates:
+        logger.debug("No vector updates to process")
+        return
+
+    logger.debug(f"Processing {len(vector_updates)} vector updates")
+
+    # Prepare parameters for batch update
+    params = []
+    for page_id, vector in vector_updates:
+        try:
+            # Handle both numpy arrays and lists
+            if isinstance(vector, list):
+                vector_array = np.array(vector, dtype=np.float32)
+            else:
+                vector_array = vector
+
+            vector_text = three_d_vector_to_text(vector_array)
+            if vector_text is None:
+                logger.warning(f"Vector text is None for page {page_id}, using fallback")
+                vector_text = "[0.0, 0.0, 0.0]"  # Fallback to zero vector
+
+            params.append((vector_text, namespace, page_id))
+        except Exception as e:
+            logger.error(f"Failed to process vector for page {page_id}: {e}")
+            raise
+
+    if not params:
+        logger.debug("No valid parameters after processing")
+        return
+
+    update_page_vector_sql = (
+        """
+        UPDATE page_vector
+        SET three_d_vector = ?
+        WHERE namespace = ? AND page_id = ?;
+        """
+    )
+
+    try:
+        cursor = sqlconn.cursor()
+        cursor.executemany(update_page_vector_sql, params)
+        sqlconn.commit()
+        logger.debug(f"Successfully processed {len(params)} vector updates")
+    except Exception as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(
+                f"Failed to roll back sql transaction while handling another error: {e1}"
+            )
+            pass
+        logger.exception(f"Unexpected error updating three_d_vectors in batch: {e}")
+        raise
+
+
 def get_page_ids_needing_embedding_for_chunk(
     chunk_name: str,
     sqlconn: sqlite3.Connection,
@@ -492,6 +560,34 @@ def get_reduced_vectors_for_cluster(
     cursor = sqlconn.execute(select_sql, {'namespace': namespace, 'cluster_id': cluster_id})
     rows = cursor.fetchall()
     return rows
+
+
+def get_cluster_tree_nodes_needing_projection(
+    sqlconn: sqlite3.Connection,
+    namespace: str,
+    limit: Optional[int],
+) -> list[tuple[int, int]]:
+    """Get cluster tree nodes that need 3D projection.
+
+    Returns list of tuples (node_id, page_count) for nodes that have pages
+    without 3D vectors assigned.
+    """
+    select_sql = f"""
+        SELECT pv.cluster_node_id, COUNT(pv.page_id) as page_count
+        FROM page_vector pv
+        JOIN cluster_tree ct ON pv.namespace = ct.namespace AND pv.cluster_node_id = ct.node_id
+        WHERE pv.three_d_vector IS NULL
+        AND pv.cluster_node_id IS NOT NULL
+        AND pv.namespace = :namespace
+        AND ct.namespace = :namespace
+        GROUP BY pv.cluster_node_id
+        ORDER BY pv.cluster_node_id ASC
+        {'LIMIT :limit' if limit else ''}
+        """
+    cursor = sqlconn.execute(select_sql,
+                             {'namespace': namespace, 'limit': limit} if limit else {'namespace': namespace})
+    rows = cursor.fetchall()
+    return [(row[0], row[1]) for row in rows]
 
 
 # ---------------------------------------------------------------------------
