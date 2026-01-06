@@ -1,3 +1,27 @@
+# WP Embeddings Visualization - Frontend
+
+A 3D visualization tool for exploring hierarchical Wikipedia embeddings clusters.
+
+## Project Status
+
+### Phase 1: API Client & Data Layer ✅ COMPLETED
+
+The first phase of implementation has been completed, providing the foundational API client and data management layer for the application.
+
+**Implemented Components:**
+- ✅ TypeScript type definitions for API responses and application state
+- ✅ Comprehensive API client with error handling and caching
+- ✅ SolidJS-based data store with reactive state management
+- ✅ Demonstration component showcasing Phase 1 functionality
+- ✅ Unit tests for core functionality
+
+**Key Features:**
+- Robust API communication with comprehensive error handling
+- Namespace caching with configurable TTL
+- Reactive state management using SolidJS stores
+- Type-safe data structures throughout the codebase
+- Convenience methods for common operations
+
 ## Usage
 
 Those templates dependencies are maintained via [pnpm](https://pnpm.io) via `pnpm up -Lri`.
@@ -29,8 +53,107 @@ It correctly bundles Solid in production mode and optimizes the build for the be
 The build is minified and the filenames include the hashes.<br>
 Your app is ready to be deployed!
 
+## Architecture Overview
+
+### Phase 1 Components
+
+**1. API Client (`src/services/apiClient.ts`)**
+- Handles all backend API communication
+- Implements namespace caching (5-minute TTL)
+- Provides comprehensive error handling
+- Includes convenience methods like `loadNodeView`
+
+**2. Data Store (`src/stores/dataStore.ts`)**
+- Manages application state using SolidJS stores
+- Implements caching for nodes, pages, and namespaces
+- Provides navigation methods (`navigateToNode`, `navigateToParent`, etc.)
+- Handles loading states and error management
+
+**3. Type Definitions (`src/types/index.ts`)**
+- Centralized TypeScript interfaces for API responses
+- Application state types and constants
+- Color schemes and mesh settings configuration
+
+**4. Demonstration Component (`src/demo/phase1Demo.tsx`)**
+- Interactive showcase of Phase 1 functionality
+- Tests API client, data store, and type definitions
+- Provides visual feedback on implementation status
+
+## Implementation Details
+
+### API Client
+
+The API client provides a robust interface to the backend with:
+
+- **Base URL Configuration**: Defaults to `http://localhost:8000/api` but configurable
+- **Error Handling**: Comprehensive try-catch blocks with detailed logging
+- **Caching**: Namespace caching with configurable TTL
+- **Methods**: All backend endpoints implemented with proper typing
+- **Convenience**: `loadNodeView` method loads node, children, and parent in parallel
+
+### Data Store
+
+The data store implements reactive state management with:
+
+- **SolidJS Stores**: Efficient reactive state updates
+- **Caching Strategy**: Separate caches for different data types
+- **Navigation**: Methods for navigating the cluster hierarchy
+- **State Management**: Loading states, error handling, and view management
+- **Singleton Pattern**: Global access to application state
+
+### Type Safety
+
+Strong TypeScript typing ensures data consistency:
+
+- **API Responses**: Properly typed interfaces for all endpoints
+- **Application State**: Type-safe state management
+- **Constants**: Centralized configuration for colors and settings
+- **Type Guards**: Runtime validation of data structures
+
+## Testing
+
+### Unit Tests
+
+Comprehensive unit tests are provided in `src/test/phase1.test.ts`:
+
+- API client initialization and method availability
+- Data store state management and caching
+- Type definition validation
+- Error handling scenarios
+
+### Demonstration Component
+
+The `Phase1Demo` component provides interactive testing:
+
+- Visual feedback on implementation status
+- Interactive buttons to re-run tests
+- Real-time validation of functionality
+- Error highlighting for failed tests
+
+## Next Steps
+
+### Phase 2: Namespace Selection & Initial State
+
+- Create namespace selection component
+- Implement namespace loading and selection logic
+- Add loading states and error handling
+- Update App component for conditional rendering
+
+### Phase 3: 3D Visualization Core
+
+- Enhance Babylon.js scene for node rendering
+- Implement node and link managers
+- Add camera controls and positioning
+- Implement lighting and materials
+
 ## Deployment
 
 You can deploy the `dist` folder to any static host provider (netlify, surge, now, etc.)
+
+## Documentation
+
+- **Implementation Plan**: See `IMPLEMENTATION_PLAN.md`
+- **Requirements**: See `REQUIREMENTS.md`
+- **Phase 1 Summary**: See `PHASE1_IMPLEMENTATION_SUMMARY.md`
 
 ## This project was created with the [Solid CLI](https://github.com/solidjs-community/solid-cli)
