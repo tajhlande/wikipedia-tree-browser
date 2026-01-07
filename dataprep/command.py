@@ -788,7 +788,7 @@ class EmbedPagesCommand(Command):
                     sql = """
                         SELECT DISTINCT pl.namespace, pl.chunk_name
                         FROM page_log pl
-                        LEFT JOIN page_vector pv ON pl.page_id = pv.page_id
+                        LEFT JOIN page_vector pv ON pl.namespace = pv.namespace AND pl.page_id = pv.page_id
                         WHERE pl.namespace = ? AND pv.embedding_vector IS NULL
                         ORDER BY pl.chunk_name ASC;
                     """
@@ -798,7 +798,7 @@ class EmbedPagesCommand(Command):
                     sql = """
                         SELECT DISTINCT pl.namespace, pl.chunk_name
                         FROM page_log pl
-                        LEFT JOIN page_vector pv ON pl.page_id = pv.page_id
+                        LEFT JOIN page_vector pv ON pl.namespace = pv.namespace AND pl.page_id = pv.page_id
                         WHERE pv.embedding_vector IS NULL
                         ORDER BY pl.namespace ASC, pl.chunk_name ASC;
                     """
