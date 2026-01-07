@@ -45,7 +45,8 @@ from transform import (
     run_pca,
     run_pca_per_cluster,
     run_recursive_clustering,
-    compute_missing_centroids
+    compute_missing_centroids,
+    project_centroid_vectors
 )
 
 logging.basicConfig(
@@ -787,7 +788,7 @@ class EmbedPagesCommand(Command):
                         WHERE pl.namespace = ? AND pv.embedding_vector IS NULL
                         ORDER BY pl.chunk_name ASC;
                     """
-                    cursor = sqlconn.execute(sql, (namespace))
+                    cursor = sqlconn.execute(sql, (namespace, ))
                 else:
                     sql = """
                         SELECT DISTINCT pl.namespace, pl.chunk_name
@@ -1480,6 +1481,48 @@ class ComputeMissingCentroidsCommand(Command):
             return Result.FAILURE, f"{X} Failed to compute missing centroids: {e}"
 
 
+class ProjectCentroidsCommand(Command):
+    """Compute 3D vectors for centroids of cluster tree nodes."""
+
+    def __init__(self):
+        super().__init__(
+            name="project-centroids",
+            description="Compute 3D vectors for centroids of cluster tree nodes using PCA",
+            expected_args=[REQUIRED_NAMESPACE_ARGUMENT]
+        )
+
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+        try:
+            namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
+            sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
+            ensure_tables(sqlconn)
+
+            logger.info("Computing 3D vectors for centroids in namespace: %s", namespace)
+
+            with ProgressTracker(
+                description="Computing centroid 3D vectors",
+                unit="centroids"
+            ) as tracker:
+                centroids_processed = project_centroid_vectors(
+                    sqlconn=sqlconn,
+                    namespace=namespace,
+                    tracker=tracker
+                )
+
+            if centroids_processed == 0:
+                return Result.SUCCESS, f"{CHECK} No centroids needing 3D vectors found in namespace {namespace}"
+            else:
+                return (
+                    Result.SUCCESS,
+                    f"{CHECK} Computed 3D vectors for {centroids_processed} centroid{'s' if centroids_processed != 1 else ''} "
+                    f"in namespace {namespace}"
+                )
+
+        except Exception as e:
+            logger.exception(f"Failed to compute centroid 3D vectors: {e}")
+            return Result.FAILURE, f"{X} Failed to compute centroid 3D vectors: {e}"
+
+
 COMMAND_NAME_ARGUMENT = Argument(name="command", type="string", required=False,
                                  description="Get help on the specific named command")
 
@@ -1536,6 +1579,7 @@ class CommandInterpreter:
         self.parser.register_command(TopicsCommand())
         self.parser.register_command(StatusCommand())
         self.parser.register_command(ComputeMissingCentroidsCommand())
+        self.parser.register_command(ProjectCentroidsCommand())
         self.parser.register_command(HelpCommand(self.parser))
 
     def run_interactive(self):

@@ -35,7 +35,9 @@ from database import (
     get_page_reduced_vectors,
     numpy_to_bytes,
     bytes_to_numpy,
-    get_cluster_tree_nodes_missing_centroids
+    get_cluster_tree_nodes_missing_centroids,
+    get_all_cluster_tree_nodes_with_centroids,
+    update_cluster_tree_centroid_three_d_vectors_in_batch,
 )
 from progress_utils import ProgressTracker
 
@@ -777,3 +779,110 @@ def compute_missing_centroids(
                 centroids_computed, namespace)
 
     return centroids_computed
+
+
+def project_centroid_vectors(
+    sqlconn: sqlite3.Connection,
+    namespace: str,
+    n_components: int = 3,
+    batch_size: int = 10000,
+    tracker: Optional[ProgressTracker] = None,
+) -> int:
+    """Compute 3D vectors for centroids of all cluster tree nodes using PCA.
+
+    Each node's child nodes should all be computed in one group, via PCA.
+
+    Args:
+        sqlconn: SQLite database connection
+        namespace: Namespace to process
+        n_components: Target dimensionality (default 3 for 3D space)
+        batch_size: Batch size for database updates
+        tracker: Optional progress tracker
+
+    Returns:
+        Number of centroids processed
+    """
+
+    logger.info("Computing 3D vectors for centroids in namespace %s", namespace)
+
+    # Get all cluster tree nodes with their centroids
+    nodes_with_centroids = get_all_cluster_tree_nodes_with_centroids(sqlconn, namespace)
+
+    if not nodes_with_centroids:
+        logger.info("No cluster tree nodes with centroids found in namespace %s", namespace)
+        return 0
+
+    # Group nodes by parent_id for processing child nodes together
+    parent_to_children = {}
+    for node_id, parent_id, centroid_vector, centroid_three_d_text in nodes_with_centroids:
+        if parent_id not in parent_to_children:
+            parent_to_children[parent_id] = []
+        parent_to_children[parent_id].append((node_id, centroid_vector, centroid_three_d_text))
+
+    logger.debug("Found %d parent groups to process", len(parent_to_children))
+
+    # Process each parent group
+    all_updates = []
+    processed_count = 0
+
+    if tracker:
+        tracker.set_total(len(nodes_with_centroids))
+
+    for parent_id, children in parent_to_children.items():
+        # Skip root node (parent_id is None)
+        if parent_id is None:
+            continue
+
+        # Get only nodes that don't already have 3D vectors
+        nodes_needing_processing = [
+            (node_id, centroid_vector)
+            for node_id, centroid_vector, centroid_three_d_text in children
+            if centroid_three_d_text is None
+        ]
+
+        if not nodes_needing_processing:
+            logger.debug("All children of parent %d already have 3D vectors", parent_id)
+            continue
+
+        # Extract centroid vectors for PCA
+        node_ids = [node_id for node_id, _ in nodes_needing_processing]
+        centroid_vectors = np.array([centroid_vector for _, centroid_vector in nodes_needing_processing])
+
+        logger.debug("Processing %d child nodes of parent %d", len(node_ids), parent_id)
+
+        # Apply PCA to reduce to target dimensionality
+        try:
+            pca = PCA(n_components=n_components)
+            three_space_vectors = pca.fit_transform(centroid_vectors)
+            three_space_vectors = three_space_vectors.astype(np.float32)
+
+            # Prepare updates
+            updates = [(node_id, vec) for node_id, vec in zip(node_ids, three_space_vectors)]
+            all_updates.extend(updates)
+            processed_count += len(updates)
+
+            logger.debug("Computed 3D vectors for %d child nodes of parent %d", len(updates), parent_id)
+
+        except ValueError as e:
+            logger.warning(f"PCA failed for parent group {parent_id} with {len(node_ids)} nodes: {e}. Using zero-padding.")
+            # Fallback to zero vectors if PCA fails
+            zero_vectors = np.zeros((len(node_ids), n_components), dtype=np.float32)
+            updates = [(node_id, vec) for node_id, vec in zip(node_ids, zero_vectors)]
+            all_updates.extend(updates)
+            processed_count += len(updates)
+
+        # Update progress tracker
+        if tracker:
+            tracker.update(len(nodes_needing_processing))
+
+    # Update database in batches
+    if all_updates:
+        logger.debug("Updating %d centroid 3D vectors in database", len(all_updates))
+        update_cluster_tree_centroid_three_d_vectors_in_batch(
+            namespace, all_updates, sqlconn, batch_size
+        )
+
+    logger.info("Completed computation of 3D vectors for %d centroids in namespace %s",
+                processed_count, namespace)
+
+    return processed_count

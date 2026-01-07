@@ -77,6 +77,7 @@ def ensure_tables(sqlconn: sqlite3.Connection):
             parent_id BIGINT,
             depth SMALLINT NOT NULL,
             centroid BLOB,
+            centroid_three_d TEXT,
             doc_count INT NOT NULL,
             top_terms TEXT,
             sample_doc_ids TEXT,
@@ -1084,4 +1085,114 @@ def get_reduced_vectors_for_cluster_node(sqlconn: sqlite3.Connection, namespace:
             logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
             pass
         logger.error(f"Failed to get reduced vectors for cluster node {node_id} in namespace `{namespace}`: {e}")
+        raise
+
+
+def get_all_cluster_tree_nodes_with_centroids(
+    sqlconn: sqlite3.Connection,
+    namespace: str
+) -> list[tuple[int, int, Optional[NDArray], Optional[str]]]:
+    """
+    Get all cluster tree nodes with their centroids and existing 3D vectors.
+
+    Returns list of tuples (node_id, parent_id, centroid_vector, centroid_three_d_vector_text)
+    """
+    sql = """
+        SELECT node_id, parent_id, centroid, centroid_three_d
+        FROM cluster_tree
+        WHERE namespace = ?
+        AND centroid IS NOT NULL
+        ORDER BY node_id ASC
+        """
+    try:
+        cursor = sqlconn.cursor()
+        cursor.execute(sql, (namespace,))
+
+        result = []
+        for row in cursor.fetchall():
+            node_id = row[0]
+            parent_id = row[1]
+            centroid_blob = row[2]
+            centroid_three_d_text = row[3]
+
+            centroid_vector = bytes_to_numpy(centroid_blob)
+            result.append((node_id, parent_id, centroid_vector, centroid_three_d_text))
+        return result
+    except sqlite3.Error as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(f"Failed to roll back sql transaction while handling another error: {e1}")
+            pass
+        logger.error(f"Failed to get cluster tree nodes with centroids for namespace `{namespace}`: {e}")
+        raise
+
+
+def update_cluster_tree_centroid_three_d_vectors_in_batch(
+    namespace: str,
+    vector_updates: list[tuple[int, NDArray]],
+    sqlconn: sqlite3.Connection,
+    batch_size: int = 10000
+) -> None:
+    """Batch update centroid 3D vectors for multiple cluster tree nodes.
+
+    Args:
+        namespace: The namespace for the cluster tree nodes
+        vector_updates: List of tuples (node_id, vector) where vector is NDArray or list
+        sqlconn: SQLite connection
+        batch_size: Number of updates to process in each batch
+    """
+    if not vector_updates:
+        logger.debug("No centroid vector updates to process")
+        return
+
+    logger.debug(f"Processing {len(vector_updates)} centroid vector updates")
+
+    # Prepare parameters for batch update
+    params = []
+    for node_id, vector in vector_updates:
+        try:
+            # Handle both numpy arrays and lists
+            if isinstance(vector, list):
+                vector_array = np.array(vector, dtype=np.float32)
+            else:
+                vector_array = vector
+
+            vector_text = three_d_vector_to_text(vector_array)
+            if vector_text is None:
+                logger.warning(f"Vector text is None for node {node_id}, using fallback")
+                vector_text = "[0.0, 0.0, 0.0]"  # Fallback to zero vector
+
+            params.append((vector_text, namespace, node_id))
+        except Exception as e:
+            logger.error(f"Failed to process vector for node {node_id}: {e}")
+            raise
+
+    if not params:
+        logger.debug("No valid parameters after processing")
+        return
+
+    update_sql = """
+        UPDATE cluster_tree
+        SET centroid_three_d = ?
+        WHERE namespace = ? AND node_id = ?;
+    """
+
+    try:
+        cursor = sqlconn.cursor()
+        # Process in batches
+        for i in range(0, len(params), batch_size):
+            batch = params[i: i + batch_size]
+            cursor.executemany(update_sql, batch)
+            sqlconn.commit()
+            logger.debug(f"Successfully processed batch of {len(batch)} centroid vector updates")
+    except Exception as e:
+        try:
+            sqlconn.rollback()
+        except Exception as e1:
+            logger.error(
+                f"Failed to roll back sql transaction while handling another error: {e1}"
+            )
+            pass
+        logger.exception(f"Unexpected error updating centroid three_d_vectors in batch: {e}")
         raise
