@@ -1514,7 +1514,8 @@ class ProjectCentroidsCommand(Command):
             else:
                 return (
                     Result.SUCCESS,
-                    f"{CHECK} Computed 3D vectors for {centroids_processed} centroid{'s' if centroids_processed != 1 else ''} "
+                    f"{CHECK} Computed 3D vectors for {centroids_processed} "
+                    f"centroid{'s' if centroids_processed != 1 else ''} "
                     f"in namespace {namespace}"
                 )
 

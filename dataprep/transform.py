@@ -864,7 +864,8 @@ def project_centroid_vectors(
             logger.debug("Computed 3D vectors for %d child nodes of parent %d", len(updates), parent_id)
 
         except ValueError as e:
-            logger.warning(f"PCA failed for parent group {parent_id} with {len(node_ids)} nodes: {e}. Using zero-padding.")
+            logger.warning(f"PCA failed for parent group {parent_id} with {len(node_ids)} nodes: "
+                           f"{e}. Using zero-padding.")
             # Fallback to zero vectors if PCA fails
             zero_vectors = np.zeros((len(node_ids), n_components), dtype=np.float32)
             updates = [(node_id, vec) for node_id, vec in zip(node_ids, zero_vectors)]
