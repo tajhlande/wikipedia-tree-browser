@@ -4,10 +4,9 @@
 export type Vector3D = [number, number, number];
 
 export interface Namespace {
-  id: string;
   name: string;
   display_name: string;
-  description?: string;
+  language: string;
 }
 
 export interface ClusterNode {

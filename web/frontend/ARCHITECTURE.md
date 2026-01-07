@@ -14,6 +14,7 @@ This document describes the architectural decisions and implementation choices m
 - [Testing Strategy](#testing-strategy)
 - [Performance Considerations](#performance-considerations)
 - [Future-Proofing Decisions](#future-proofing-decisions)
+- [Phase 2 Architecture Decisions](#phase-2-architecture-decisions)
 
 ## Design Philosophy
 
@@ -598,15 +599,265 @@ export interface ApiResponse<T> {
 // Clear dependencies between modules
 ```
 
+## Phase 2 Architecture Decisions
+
+### Component-Based UI Architecture
+
+**Decision**: Implement namespace selection as a component-based UI rather than a single monolithic component.
+
+**Rationale**:
+- Better separation of concerns between container and presentation components
+- More reusable components (NamespaceCard, LoadingSpinner, etc.)
+- Easier to test individual components in isolation
+- Better maintainability and scalability
+- Follows established React/SolidJS component patterns
+
+**Implementation**:
+```typescript
+// Container component handles state and logic
+<NamespaceSelector />
+  └─ <NamespaceCard /> (presentation component)
+  └─ <LoadingSpinner /> (reusable component)
+  └─ <ErrorDisplay /> (reusable component)
+```
+
+### Conditional Rendering Pattern
+
+**Decision**: Use SolidJS Show component for conditional rendering instead of ternary operators.
+
+**Rationale**:
+- More declarative and readable code
+- Better integration with SolidJS reactivity
+- Easier to manage complex conditional logic
+- Consistent with SolidJS best practices
+- Better performance with fine-grained reactivity
+
+**Implementation**:
+```typescript
+<Show when={dataStore.state.currentView === 'namespace_selection'}>
+  <NamespaceSelector />
+</Show>
+
+<Show when={loading()}>
+  <LoadingSpinner />
+</Show>
+```
+
+### Search and Filter Strategy
+
+**Decision**: Implement client-side search filtering rather than server-side filtering.
+
+**Rationale**:
+- Faster response time for user interactions
+- Reduces API calls during search
+- Better user experience with instant feedback
+- Simpler implementation for initial load
+- Can be optimized later if dataset grows too large
+
+**Implementation**:
+```typescript
+const filteredNamespaces = () => {
+  const query = searchQuery().toLowerCase();
+  return namespaces().filter(namespace =>
+    namespace.id.includes(query) ||
+    namespace.name.includes(query) ||
+    namespace.display_name?.includes(query)
+  );
+};
+```
+
+### Loading State Management
+
+**Decision**: Implement comprehensive loading states at multiple levels.
+
+**Rationale**:
+- Better user experience during API calls
+- Visual feedback prevents user confusion
+- Multiple loading states (component, page, overlay)
+- Consistent loading patterns across application
+- Prevents duplicate API calls during loading
+
+**Implementation**:
+```typescript
+const [loading, setLoading] = createSignal(false);
+const [globalLoading, setGlobalLoading] = createSignal(false);
+
+// Component-level loading
+<Show when={loading()}>
+  <LoadingSpinner message="Loading namespaces..." />
+</Show>
+
+// Global loading overlay
+<Show when={globalLoading()}>
+  <LoadingOverlay message="Processing..." />
+</Show>
+```
+
+### Error Handling UI Pattern
+
+**Decision**: Implement consistent error display pattern with retry functionality.
+
+**Rationale**:
+- Consistent user experience across all errors
+- Easy recovery with retry buttons
+- Clear error messages for debugging
+- Visual distinction between errors and normal states
+- Prevents application crashes from API failures
+
+**Implementation**:
+```typescript
+<Show when={error()}>
+  <ErrorDisplay 
+    message={error()}
+    onRetry={loadNamespaces}
+  />
+</Show>
+```
+
+### Responsive Grid Layout
+
+**Decision**: Use CSS Grid for namespace layout with responsive breakpoints.
+
+**Rationale**:
+- Better responsiveness across device sizes
+- Consistent spacing and alignment
+- Easier to maintain than flexbox for grids
+- Better performance with large numbers of items
+- Follows modern CSS best practices
+
+**Implementation**:
+```typescript
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+  {/* Namespace cards */}
+</div>
+```
+
+### Component Composition
+
+**Decision**: Favor component composition over inheritance.
+
+**Rationale**:
+- More flexible and reusable components
+- Easier to test individual components
+- Better TypeScript type inference
+- Follows React/SolidJS best practices
+- Prevents complex inheritance hierarchies
+
+**Implementation**:
+```typescript
+// Instead of extending components
+<NamespaceSelector>
+  <NamespaceCard onSelect={handleSelect} />
+  <LoadingSpinner />
+</NamespaceSelector>
+```
+
+### State Management Scope
+
+**Decision**: Use local component state for UI state, global state for application state.
+
+**Rationale**:
+- Clear separation between UI and application state
+- Better performance with local state
+- Easier to manage component-specific state
+- Prevents global state bloat
+- Follows SolidJS reactivity principles
+
+**Implementation**:
+```typescript
+// Local UI state
+const [searchQuery, setSearchQuery] = createSignal('');
+const [loading, setLoading] = createSignal(false);
+
+// Global application state
+dataStore.setCurrentView('namespace_selection');
+dataStore.setCurrentNamespace(namespace.id);
+```
+
+### Accessibility First Design
+
+**Decision**: Implement accessibility features from the beginning.
+
+**Rationale**:
+- Better user experience for all users
+- Compliance with WCAG standards
+- Easier to add later than to retrofit
+- Improves SEO and searchability
+- Follows inclusive design principles
+
+**Implementation**:
+```typescript
+// Keyboard navigation
+<div tabIndex={0} onKeyDown={handleKeyDown}>
+  {/* Content */}
+</div>
+
+// ARIA attributes
+<div role="status" aria-live="polite">
+  {/* Loading status */}
+</div>
+
+// Semantic HTML
+<button onClick={onRetry} aria-label="Retry loading">
+  Retry
+</button>
+```
+
+### Progressive Enhancement
+
+**Decision**: Implement progressive enhancement for UI features.
+
+**Rationale**:
+- Better compatibility across browsers
+- Graceful degradation when features aren't supported
+- Better performance on older devices
+- More resilient to JavaScript errors
+- Improves accessibility
+
+**Implementation**:
+```typescript
+// Basic functionality first
+<input type="text" onInput={handleSearch} />
+
+// Enhanced functionality
+<Show when={isAdvancedBrowser()}>
+  <SearchSuggestions />
+</Show>
+```
+
+### Type-Safe Component Props
+
+**Decision**: Use TypeScript interfaces for all component props.
+
+**Rationale**:
+- Better developer experience with autocompletion
+- Compile-time validation of prop types
+- Self-documenting components
+- Prevents runtime errors from incorrect props
+- Easier refactoring and maintenance
+
+**Implementation**:
+```typescript
+interface NamespaceCardProps {
+  namespace: Namespace;
+  onSelect: (namespace: Namespace) => void;
+}
+
+export const NamespaceCard: Component<NamespaceCardProps> = (props) => {
+  // Type-safe implementation
+}
+```
+
 ## Conclusion
 
-The architectural decisions made during Phase 1 implementation prioritize:
+The architectural decisions made during Phase 1 and Phase 2 implementation prioritize:
 
-1. **Modularity and Separation of Concerns**: Clear boundaries between API communication, state management, and rendering
+1. **Modularity and Separation of Concerns**: Clear boundaries between API communication, state management, and UI components
 2. **Type Safety**: Comprehensive TypeScript typing for better developer experience and runtime reliability
 3. **Performance**: Parallel data loading, caching, and efficient state management
 4. **Maintainability**: Modular architecture, clear documentation, and consistent patterns
 5. **Extensibility**: Configurable components and extensible type system
 6. **Developer Experience**: Good error handling, logging, and interactive testing
+7. **User Experience**: Responsive design, accessibility, and progressive enhancement
 
-These decisions create a solid foundation for the WP Embeddings Visualization application that will support the requirements of Phase 2 and beyond while maintaining good performance and developer productivity.
+These decisions create a solid foundation for the WP Embeddings Visualization application that will support the requirements of Phase 3 and beyond while maintaining good performance and developer productivity.

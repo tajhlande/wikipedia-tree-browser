@@ -359,7 +359,7 @@ class DatabaseService(ClusterService):
         namespaces = []
 
         # Check for database files in the current directory
-        db_files = list(Path(".").glob("*.db"))
+        db_files = list(Path("../../data").glob("*.db"))
         for db_file in db_files:
             # Extract namespace from filename (e.g., "enwiki_namespace_0.db")
             namespace = db_file.stem

@@ -1,11 +1,11 @@
 import { API_BASE_URL } from '../types';
-import type { 
-  Namespace, 
-  ClusterNode, 
+import type {
+  Namespace,
+  ClusterNode,
   Page,
   ApiResponse,
   PaginatedResponse,
-  Vector3D 
+  Vector3D
 } from '../types';
 
 /**
@@ -28,7 +28,7 @@ export class ApiClient {
   private async fetchWithErrorHandling<T>(url: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
     try {
       console.log(`[API] ${options.method || 'GET'} ${url}`);
-      
+
       const response = await fetch(url, {
         ...options,
         headers: {
@@ -46,7 +46,7 @@ export class ApiClient {
 
       const data = await response.json();
       console.log(`[API] Response:`, data);
-      
+
       return {
         success: true,
         data: data.data || data,
@@ -54,7 +54,7 @@ export class ApiClient {
       };
     } catch (error) {
       console.error(`[API] Error in ${options.method || 'GET'} ${url}:`, error);
-      
+
       return {
         success: false,
         data: null as unknown as T,
@@ -77,14 +77,39 @@ export class ApiClient {
       };
     }
 
-    const result = await this.fetchWithErrorHandling<Namespace[]>(`${this.baseUrl}/search/namespaces`);
-    
-    if (result.success && result.data) {
-      this.namespaceCache = result.data;
-      this.lastCacheTime = Date.now();
-    }
+    try {
+      const result = await this.fetchWithErrorHandling<any[]>(`${this.baseUrl}/search/namespaces`);
 
-    return result;
+      if (result.success && result.data) {
+        // Transform backend response to Namespace format
+        const namespacesArray = Array.isArray(result.data) ? result.data : result.data.namespaces;
+        const transformedNamespaces = namespacesArray.map(item => ({
+          name: item.namespace,
+          display_name: `${item.language} Wikipedia`,
+          language: item.language
+        }));
+        
+        this.namespaceCache = transformedNamespaces;
+        this.lastCacheTime = Date.now();
+        
+        // Return transformed data
+        return {
+          success: true,
+          data: transformedNamespaces,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Failed to load namespaces:', error);
+      return {
+        success: false,
+        data: [],
+        error: 'Failed to load namespaces. The backend may need to be restarted or the endpoint may not be available.',
+        timestamp: new Date().toISOString(),
+      };
+    }
   }
 
   /**
@@ -92,7 +117,7 @@ export class ApiClient {
    */
   async getRootNode(namespace: string): Promise<ApiResponse<ClusterNode>> {
     return this.fetchWithErrorHandling<ClusterNode>(
-      `${this.baseUrl}/clusters/namespace/${namespace}/root_node`
+      `${this.baseUrl}/namespace/${namespace}/root_node`
     );
   }
 
@@ -101,7 +126,7 @@ export class ApiClient {
    */
   async getClusterNode(namespace: string, nodeId: number): Promise<ApiResponse<ClusterNode>> {
     return this.fetchWithErrorHandling<ClusterNode>(
-      `${this.baseUrl}/clusters/namespace/${namespace}/node_id/${nodeId}`
+      `${this.baseUrl}/namespace/${namespace}/node_id/${nodeId}`
     );
   }
 
@@ -110,7 +135,7 @@ export class ApiClient {
    */
   async getClusterNodeChildren(namespace: string, nodeId: number): Promise<ApiResponse<ClusterNode[]>> {
     return this.fetchWithErrorHandling<ClusterNode[]>(
-      `${this.baseUrl}/clusters/namespace/${namespace}/node_id/${nodeId}/children`
+      `${this.baseUrl}/namespace/${namespace}/node_id/${nodeId}/children`
     );
   }
 
@@ -119,7 +144,7 @@ export class ApiClient {
    */
   async getClusterNodeParent(namespace: string, nodeId: number): Promise<ApiResponse<ClusterNode | null>> {
     return this.fetchWithErrorHandling<ClusterNode | null>(
-      `${this.baseUrl}/clusters/namespace/${namespace}/node_id/${nodeId}/parent`
+      `${this.baseUrl}/namespace/${namespace}/node_id/${nodeId}/parent`
     );
   }
 
@@ -128,7 +153,7 @@ export class ApiClient {
    */
   async getClusterNodeSiblings(namespace: string, nodeId: number): Promise<ApiResponse<ClusterNode[]>> {
     return this.fetchWithErrorHandling<ClusterNode[]>(
-      `${this.baseUrl}/clusters/namespace/${namespace}/node_id/${nodeId}/siblings`
+      `${this.baseUrl}/namespace/${namespace}/node_id/${nodeId}/siblings`
     );
   }
 
@@ -136,16 +161,16 @@ export class ApiClient {
    * Get pages in a cluster
    */
   async getPagesInCluster(
-    namespace: string, 
+    namespace: string,
     nodeId: number,
-    page: number = 1,
-    pageSize: number = 10
-  ): Promise<ApiResponse<PaginatedResponse<Page>>> {
-    const url = new URL(`${this.baseUrl}/pages/namespace/${namespace}/node_id/${nodeId}`);
-    url.searchParams.append('page', page.toString());
-    url.searchParams.append('page_size', pageSize.toString());
-    
-    return this.fetchWithErrorHandling<PaginatedResponse<Page>>(url.toString());
+    limit: number = 50,
+    offset: number = 0
+  ): Promise<ApiResponse<Page[]>> {
+    const url = new URL(`${this.baseUrl}/namespace/${namespace}/node_id/${nodeId}`);
+    url.searchParams.append('limit', limit.toString());
+    url.searchParams.append('offset', offset.toString());
+
+    return this.fetchWithErrorHandling<Page[]>(url.toString());
   }
 
   /**
@@ -153,7 +178,7 @@ export class ApiClient {
    */
   async getPageDetails(namespace: string, pageId: number): Promise<ApiResponse<Page>> {
     return this.fetchWithErrorHandling<Page>(
-      `${this.baseUrl}/pages/namespace/${namespace}/page_id/${pageId}`
+      `${this.baseUrl}/namespace/${namespace}/page_id/${pageId}`
     );
   }
 

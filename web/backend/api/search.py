@@ -2,11 +2,16 @@
 Search functionality API endpoints for Wikipedia Embeddings
 """
 
+import logging
 from fastapi import APIRouter, HTTPException
 from services.database_service import DatabaseService
 
+from util.languages import get_language_for_namespace
+
 router = APIRouter()
 db_service = DatabaseService()
+
+logger = logging.getLogger(__file__)
 
 
 # @router.get("/pages", response_model=List[PageResponse])
@@ -43,9 +48,20 @@ db_service = DatabaseService()
 async def get_available_namespaces():
     """Get list of available namespaces"""
     try:
+        logger.debug("Called /namespaces")
         namespaces = db_service.get_available_namespaces()
-        return {"namespaces": namespaces}
+        namespace_info_list = []
+        for namespace in namespaces:
+            language = get_language_for_namespace(namespace)
+            namespace_info_list.append({
+                "namespace": namespace,
+                "language": language
+            })
+
+        logger.debug("Returning %s", str(namespace_info_list))
+        return namespace_info_list
     except Exception as e:
+        logger.exception("Exception while retrieving namespaces")
         raise HTTPException(
             status_code=500, detail=f"Error retrieving namespaces: {str(e)}"
         )

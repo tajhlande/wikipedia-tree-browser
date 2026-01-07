@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # API routes
-from api import pages, clusters
+from api import pages, clusters, search
 
 # Injected service management
 from services.service_setup import init_services, shutdown_services
@@ -53,7 +53,7 @@ app.add_middleware(
 # Include API routers
 app.include_router(pages.router, prefix="/api/pages", tags=["pages"])
 app.include_router(clusters.router, prefix="/api/clusters", tags=["clusters"])
-# app.include_router(search.router, prefix="/api/search", tags=["search"])
+app.include_router(search.router, prefix="/api/search", tags=["search"])
 
 
 @app.get("/")

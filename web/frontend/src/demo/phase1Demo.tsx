@@ -104,10 +104,9 @@ const Phase1Demo: Component = () => {
       
       // Test namespace caching
       const testNamespace = {
-        id: 'enwiki',
         name: 'enwiki',
         display_name: 'English Wikipedia',
-        description: 'English Wikipedia namespace',
+        language: 'English',
       };
       
       dataStore.cacheNamespace(testNamespace);

@@ -73,7 +73,7 @@ export const createDataStore = () => {
    */
   const cacheNamespace = (namespace: Namespace) => {
     setNamespaceCache(prev => {
-      const existingIndex = prev.findIndex(n => n.id === namespace.id);
+      const existingIndex = prev.findIndex(n => n.name === namespace.name);
       if (existingIndex >= 0) {
         return [...prev.slice(0, existingIndex), namespace, ...prev.slice(existingIndex + 1)];
       }
@@ -89,10 +89,10 @@ export const createDataStore = () => {
   };
 
   /**
-   * Get cached namespace by ID
+   * Get cached namespace by name
    */
-  const getCachedNamespace = (namespaceId: string): Namespace | undefined => {
-    return namespaceCache.find(n => n.id === namespaceId);
+  const getCachedNamespace = (namespaceName: string): Namespace | undefined => {
+    return namespaceCache.find(n => n.name === namespaceName);
   };
 
   /**

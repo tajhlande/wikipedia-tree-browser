@@ -22,5 +22,9 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
     },
+    // Ensure SolidJS plugin is used for tests
+    deps: {
+      inline: [/solid-js/],
+    },
   }
 });

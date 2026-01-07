@@ -120,10 +120,9 @@ describe('Phase 1: API Client & Data Layer', () => {
 
       // Test namespace caching
       const testNamespace = {
-        id: 'enwiki',
-        name: 'enwiki',
+        name: 'enwiki_namespace_0',
         display_name: 'English Wikipedia',
-        description: 'English Wikipedia namespace',
+        language: 'English',
       };
 
       dataStore.cacheNamespace(testNamespace);
@@ -150,10 +149,9 @@ const mockNamespaceResponse = {
   success: true,
   data: [
     {
-      id: 'enwiki',
-      name: 'enwiki',
+      name: 'enwiki_namespace_0',
       display_name: 'English Wikipedia',
-      description: 'English Wikipedia namespace',
+      language: 'English',
     },
   ],
   timestamp: new Date().toISOString(),
@@ -163,9 +161,9 @@ const mockRootNodeResponse = {
   success: true,
   data: {
     id: 1,
-    namespace: 'enwiki',
-    label: 'Root',
-    final_label: 'Root',
+    namespace: 'enwiki_namespace_0',
+    label: 'English Wikipedia',
+    final_label: 'English Wikipedia',
     depth: 0,
     is_leaf: false,
     centroid: [0, 0, 0],
