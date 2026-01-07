@@ -50,10 +50,10 @@ from transform import (
 )
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # Environment variables we will look for and set for commands
 DATA_STORAGE_DIRNAME_VAR = "DATA_STORAGE_DIRNAME"
@@ -718,6 +718,8 @@ class EmbedPagesCommand(Command):
             ensure_tables(sqlconn)
 
             # Setup embedding function
+
+            logger.info("Setting up embedding function")
             embedding_function = get_embedding_function(
                 model_name=self.embedding_model_name,
                 openai_compatible_url=self.embedding_model_api_url,
@@ -726,6 +728,7 @@ class EmbedPagesCommand(Command):
 
             if chunk_name:
                 # Process specific chunk
+                logger.info("Getting page IDs for chunk %s", chunk_name)
                 page_ids = get_page_ids_needing_embedding_for_chunk(chunk_name, sqlconn, namespace=namespace)
 
                 if limit:
@@ -753,7 +756,7 @@ class EmbedPagesCommand(Command):
                 if not page_ids:
                     return Result.FAILURE, f"{X} No pages needing embeddings in chunk {chunk_name}"
 
-                # logger.info("Processing %d embeddings for named chunk %s...", len(page_ids), chunk_name)
+                logger.info("Processing %d embeddings for named chunk %s...", len(page_ids), chunk_name)
 
                 # Compute embeddings
                 with ProgressTracker(
@@ -775,12 +778,13 @@ class EmbedPagesCommand(Command):
 
             else:
                 # Process all chunks
-                logger.debug(
+                logger.info(
                     "Processing %sembeddings for next available chunk...",
                     f"up to {limit} " if limit else "",
                 )
 
                 if namespace:
+                    logger.info("Fetching chunk names for namespace %s", namespace)
                     sql = """
                         SELECT DISTINCT pl.namespace, pl.chunk_name
                         FROM page_log pl
@@ -790,6 +794,7 @@ class EmbedPagesCommand(Command):
                     """
                     cursor = sqlconn.execute(sql, (namespace, ))
                 else:
+                    logger.info("Fetching chunk names", namespace)
                     sql = """
                         SELECT DISTINCT pl.namespace, pl.chunk_name
                         FROM page_log pl
@@ -846,6 +851,7 @@ class EmbedPagesCommand(Command):
 
                         if pages_to_process > 0:
                             # Pass the limit to the compute function
+                            logger.info("Computing embeddings for chunk %s", chunk_name)
                             with ProgressTracker(
                                 f"Computing embeddings for chunk {chunk_name}",
                                 total=pages_to_process,
