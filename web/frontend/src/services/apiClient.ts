@@ -82,16 +82,16 @@ export class ApiClient {
 
       if (result.success && result.data) {
         // Transform backend response to Namespace format
-        const namespacesArray = Array.isArray(result.data) ? result.data : result.data.namespaces;
+        const namespacesArray = result.data;
         const transformedNamespaces = namespacesArray.map(item => ({
           name: item.namespace,
           display_name: `${item.language} Wikipedia`,
           language: item.language
         }));
-        
+
         this.namespaceCache = transformedNamespaces;
         this.lastCacheTime = Date.now();
-        
+
         // Return transformed data
         return {
           success: true,
