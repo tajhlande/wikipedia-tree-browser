@@ -818,6 +818,7 @@ class EmbedPagesCommand(Command):
                             break
 
                         # Get pages needing embeddings for this chunk
+                        logger.info("Getting pages needing embedding for chunk %s", chunk_name)
                         page_ids = get_page_ids_needing_embedding_for_chunk(
                             chunk_name=chunk_name, sqlconn=sqlconn, namespace=chunk_namespace,
                         )
