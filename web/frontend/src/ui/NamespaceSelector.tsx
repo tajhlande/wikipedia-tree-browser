@@ -60,8 +60,17 @@ export const NamespaceSelector = () => {
       const rootNodeResult = await dataStore.loadRootNode(namespace.name);
 
       if (rootNodeResult) {
-        // Navigate to the root node view
-        await dataStore.navigateToNode(namespace.name, rootNodeResult.id);
+        // Validate root node has a valid ID
+        if (!rootNodeResult.id) {
+          throw new Error('Root node ID is undefined or invalid');
+        }
+
+        console.log(`[NAV] Navigating to root node ${rootNodeResult.id} for namespace ${namespace.name}`);
+        
+        // Set the root node as current node and switch to node view
+        dataStore.setCurrentNode(rootNodeResult);
+        dataStore.setCurrentNamespace(namespace.name);
+        dataStore.setCurrentView('node_view');
       }
     } catch (error) {
       console.error('Failed to navigate to namespace:', error);

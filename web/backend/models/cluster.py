@@ -10,11 +10,12 @@ class ClusterNodeResponse(BaseModel):
     """Response model for cluster node information"""
 
     node_id: int = Field(..., description="Unique cluster node identifier")
+    namespace: str = Field(..., description="Wikipedia namespace")
     parent_id: Optional[int] = Field(None, description="Parent node ID")
     depth: int = Field(..., description="Depth in the cluster tree")
     doc_count: int = Field(..., description="Number of documents in this cluster")
     child_count: int = Field(..., description="Number of child nodes")
-    topic_label: Optional[str] = Field(None, description="Final topic label")
+    final_label: Optional[str] = Field(None, description="Final topic label")
 
 
 class ClusterSearchResult(BaseModel):

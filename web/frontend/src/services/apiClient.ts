@@ -117,7 +117,7 @@ export class ApiClient {
    */
   async getRootNode(namespace: string): Promise<ApiResponse<ClusterNode>> {
     return this.fetchWithErrorHandling<ClusterNode>(
-      `${this.baseUrl}/namespace/${namespace}/root_node`
+      `${this.baseUrl}/clusters/namespace/${namespace}/root_node`
     );
   }
 
@@ -126,7 +126,7 @@ export class ApiClient {
    */
   async getClusterNode(namespace: string, nodeId: number): Promise<ApiResponse<ClusterNode>> {
     return this.fetchWithErrorHandling<ClusterNode>(
-      `${this.baseUrl}/namespace/${namespace}/node_id/${nodeId}`
+      `${this.baseUrl}/clusters/namespace/${namespace}/node_id/${nodeId}`
     );
   }
 
@@ -135,7 +135,7 @@ export class ApiClient {
    */
   async getClusterNodeChildren(namespace: string, nodeId: number): Promise<ApiResponse<ClusterNode[]>> {
     return this.fetchWithErrorHandling<ClusterNode[]>(
-      `${this.baseUrl}/namespace/${namespace}/node_id/${nodeId}/children`
+      `${this.baseUrl}/clusters/namespace/${namespace}/node_id/${nodeId}/children`
     );
   }
 
@@ -144,7 +144,7 @@ export class ApiClient {
    */
   async getClusterNodeParent(namespace: string, nodeId: number): Promise<ApiResponse<ClusterNode | null>> {
     return this.fetchWithErrorHandling<ClusterNode | null>(
-      `${this.baseUrl}/namespace/${namespace}/node_id/${nodeId}/parent`
+      `${this.baseUrl}/clusters/namespace/${namespace}/node_id/${nodeId}/parent`
     );
   }
 
@@ -153,7 +153,7 @@ export class ApiClient {
    */
   async getClusterNodeSiblings(namespace: string, nodeId: number): Promise<ApiResponse<ClusterNode[]>> {
     return this.fetchWithErrorHandling<ClusterNode[]>(
-      `${this.baseUrl}/namespace/${namespace}/node_id/${nodeId}/siblings`
+      `${this.baseUrl}/clusters/namespace/${namespace}/node_id/${nodeId}/siblings`
     );
   }
 
@@ -166,7 +166,7 @@ export class ApiClient {
     limit: number = 50,
     offset: number = 0
   ): Promise<ApiResponse<Page[]>> {
-    const url = new URL(`${this.baseUrl}/namespace/${namespace}/node_id/${nodeId}`);
+    const url = new URL(`${this.baseUrl}/pages/namespace/${namespace}/node_id/${nodeId}`);
     url.searchParams.append('limit', limit.toString());
     url.searchParams.append('offset', offset.toString());
 
@@ -178,7 +178,7 @@ export class ApiClient {
    */
   async getPageDetails(namespace: string, pageId: number): Promise<ApiResponse<Page>> {
     return this.fetchWithErrorHandling<Page>(
-      `${this.baseUrl}/namespace/${namespace}/page_id/${pageId}`
+      `${this.baseUrl}/pages/namespace/${namespace}/page_id/${pageId}`
     );
   }
 

@@ -4,6 +4,7 @@ Provides a clean interface between FastAPI endpoints and existing database.py fu
 """
 
 import logging
+import json
 import os
 import sqlite3
 from dataclasses import fields
@@ -91,7 +92,7 @@ def _row_to_pydantic(row: sqlite3.Row, cls: Type[T]) -> T:
 class DatabaseService(ClusterService):
     """Service class for database operations"""
 
-    def __init__(self, db_directory: str = ""):
+    def __init__(self, db_directory: str = "../../data"):
         self.db_directory = db_directory
         self.logger = logging.getLogger(self.__class__.__name__)
 
@@ -219,7 +220,7 @@ class DatabaseService(ClusterService):
         """Get a specific cluster node"""
         sqlconn = self._get_connection(namespace)
         select_sql = """
-            SELECT node_id, parent_id, depth, doc_count, child_count, COALESCE(final_label, first_label) as topic_label
+            SELECT node_id, namespace, parent_id, depth, doc_count, child_count, final_label, centroid_three_d
             FROM cluster_tree
             WHERE namespace = ? AND node_id = ?
         """
@@ -233,7 +234,7 @@ class DatabaseService(ClusterService):
         row = cursor.fetchone()
         if not row:
             return None
-        return _row_to_pydantic(row, ClusterNodeResponse)
+        return self._map_cluster_row_to_response(row, namespace)
 
     def get_cluster_node_children(
         self, namespace: str, node_id: int
@@ -241,7 +242,7 @@ class DatabaseService(ClusterService):
         """Get child nodes of a specific cluster node"""
         sqlconn = self._get_connection(namespace)
         select_sql = """
-            SELECT node_id, parent_id, depth, doc_count, child_count, COALESCE(final_label, first_label) as topic_label
+            SELECT node_id, namespace, parent_id, depth, doc_count, child_count, final_label, centroid_three_d
             FROM cluster_tree
             WHERE namespace = ? AND parent_id = ?
             ORDER BY node_id ASC
@@ -254,7 +255,7 @@ class DatabaseService(ClusterService):
             ),
         )
         rows = cursor.fetchall()
-        return [_row_to_pydantic(row, ClusterNodeResponse) for row in rows]
+        return [self._map_cluster_row_to_response(row, namespace) for row in rows]
 
     def get_cluster_node_siblings(
         self, namespace, node_id: int
@@ -262,8 +263,8 @@ class DatabaseService(ClusterService):
         """Get sibling nodes of a specific cluster node"""
         sqlconn = self._get_connection(namespace)
         select_sql = """
-            SELECT p.node_id, p.parent_id, p.depth, p.doc_count, p.child_count,
-                   COALESCE(p.final_label, p.first_label) AS topic_label
+            SELECT p.node_id, p.namespace, p.parent_id, p.depth, p.doc_count, p.child_count,
+                   p.final_label, p.centroid_three_d
             FROM cluster_tree AS p
             JOIN cluster_tree AS n ON n.namespace = p.namespace AND n.node_id = ?
             WHERE p.namespace = ?
@@ -279,16 +280,16 @@ class DatabaseService(ClusterService):
             ),
         )
         rows = cursor.fetchall()
-        return [_row_to_pydantic(row, ClusterNodeResponse) for row in rows]
+        return [self._map_cluster_row_to_response(row, namespace) for row in rows]
 
     def get_cluster_node_parent(
         self, namespace, node_id: int
     ) -> Optional[ClusterNodeResponse]:
-        """Get sibling nodes of a specific cluster node"""
+        """Get parent node of a specific cluster node"""
         sqlconn = self._get_connection(namespace)
         select_sql = """
-            SELECT p.node_id, p.parent_id, p.depth, p.doc_count, p.child_count,
-                   COALESCE(p.final_label, p.first_label) AS topic_label
+            SELECT p.node_id, p.namespace, p.parent_id, p.depth, p.doc_count, p.child_count,
+                   p.final_label, p.centroid_three_d
             FROM cluster_tree AS p
             JOIN cluster_tree AS n ON n.namespace = p.namespace AND n.node_id = ?
             WHERE p.namespace = ?
@@ -305,13 +306,46 @@ class DatabaseService(ClusterService):
         row = cursor.fetchone()
         if not row:
             return None
-        return _row_to_pydantic(row, ClusterNodeResponse)
+        return self._map_cluster_row_to_response(row, namespace)
+
+    def _map_cluster_row_to_response(
+            self,
+            row: sqlite3.Row,
+            namespace: Optional[str] = None) -> ClusterNodeResponse:
+        """Map database row to ClusterNodeResponse with proper field mapping and defaults"""
+        # Convert row to dict for easier manipulation
+        row_dict = {k: row[k] for k in row.keys()}
+
+        # Handle centroid_three_d - it might be JSON string or None
+        if 'centroid_three_d' in row_dict and row_dict['centroid_three_d']:
+            try:
+                centroid = json.loads(row_dict['centroid_three_d'])
+                if isinstance(centroid, list) and len(centroid) == 3:
+                    row_dict['centroid_3d'] = centroid
+            except (json.JSONDecodeError, ValueError):
+                # If JSON parsing fails, set to None
+                row_dict['centroid_3d'] = None
+        else:
+            row_dict['centroid_3d'] = None
+
+        # Ensure all required fields are present with defaults
+        required_fields = {
+            'node_id': row_dict.get('node_id'),
+            'namespace': row_dict.get('namespace') or namespace,
+            'parent_id': row_dict.get('parent_id'),
+            'depth': row_dict.get('depth', 0),
+            'doc_count': row_dict.get('doc_count', 0),
+            'child_count': row_dict.get('child_count', 0),
+            'final_label': row_dict.get('final_label') or row_dict.get('first_label')
+        }
+
+        return ClusterNodeResponse(**required_fields)
 
     def get_root_node(self, namespace: str) -> Optional[ClusterNodeResponse]:
-        """Get root nodes of the cluster tree"""
+        """Get the root node for a namespace"""
         sqlconn = self._get_connection(namespace)
         select_sql = """
-            SELECT node_id, parent_id, depth, doc_count, child_count, COALESCE(final_label, first_label) as topic_label
+            SELECT node_id, namespace, parent_id, depth, doc_count, child_count, final_label, centroid_three_d
             FROM cluster_tree
             WHERE namespace = ? AND parent_id IS NULL
         """
@@ -319,7 +353,7 @@ class DatabaseService(ClusterService):
         row = cursor.fetchone()
         if not row:
             return None
-        return _row_to_pydantic(row, ClusterNodeResponse)
+        return self._map_cluster_row_to_response(row, namespace)
 
     # # Search methods
     # def search_clusters(self, namespace: str, query: str, limit: int = 10) -> List[Dict[str, Any]]:

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Fix Test</title>
+    <script>
+        // Test the corrected API endpoints
+        const testEndpoints = [
+            '/api/search/namespaces',
+            '/api/clusters/namespace/enwiki_namespace_0/root_node',
+            '/api/clusters/namespace/enwiki_namespace_0/node_id/1',
+            '/api/clusters/namespace/enwiki_namespace_0/node_id/1/children',
+            '/api/clusters/namespace/enwiki_namespace_0/node_id/1/parent',
+            '/api/clusters/namespace/enwiki_namespace_0/node_id/1/siblings',
+            '/api/pages/namespace/enwiki_namespace_0/node_id/1',
+            '/api/pages/namespace/enwiki_namespace_0/page_id/123'
+        ];
+
+        function testEndpoints() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<h2>Testing API Endpoints...</h2>';
+            
+            testEndpoints.forEach(endpoint => {
+                const url = `http://localhost:8000${endpoint}`;
+                const p = document.createElement('p');
+                p.textContent = `Testing: ${url}`;
+                resultsDiv.appendChild(p);
+                
+                fetch(url)
+                    .then(response => {
+                        const statusP = document.createElement('p');
+                        statusP.textContent = `✅ ${endpoint} - Status: ${response.status}`;
+                        if (response.status === 200) {
+                            statusP.style.color = 'green';
+                        } else {
+                            statusP.style.color = 'orange';
+                        }
+                        resultsDiv.appendChild(statusP);
+                    })
+                    .catch(error => {
+                        const errorP = document.createElement('p');
+                        errorP.textContent = `❌ ${endpoint} - Error: ${error.message}`;
+                        errorP.style.color = 'red';
+                        resultsDiv.appendChild(errorP);
+                    });
+            });
+        }
+    </script>
+</head>
+<body>
+    <h1>API Endpoint Fix Verification</h1>
+    <p>This page tests the corrected API endpoints to ensure they match the backend structure.</p>
+    
+    <button onclick="testEndpoints()">Test All Endpoints</button>
+    
+    <div id="results" style="margin-top: 20px;"></div>
+    
+    <h3>Expected Results:</h3>
+    <ul>
+        <li>✅ /api/search/namespaces - Should return 200</li>
+        <li>✅ /api/clusters/namespace/... - Should return 200 or 404 (if data exists)</li>
+        <li>✅ /api/pages/namespace/... - Should return 200 or 404 (if data exists)</li>
+    </ul>
+    
+    <h3>Previously Broken Endpoints (Now Fixed):</h3>
+    <ul>
+        <li>❌ /api/namespace/... (missing /clusters or /pages prefix)</li>
+    </ul>
+</body>
+</html>

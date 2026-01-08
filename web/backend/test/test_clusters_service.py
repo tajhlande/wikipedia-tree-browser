@@ -31,11 +31,12 @@ class TestClusterAPIUnit:
         """Create a sample cluster node for testing"""
         return ClusterNodeResponse(
             node_id=1,
+            namespace="enwiki_namespace_0",
             parent_id=None,
             depth=0,
             doc_count=100,
             child_count=5,
-            topic_label="Root Topic",
+            final_label="Root Topic",
         )
 
     @pytest.fixture
@@ -44,19 +45,21 @@ class TestClusterAPIUnit:
         return [
             ClusterNodeResponse(
                 node_id=2,
+            namespace="enwiki_namespace_0",
                 parent_id=1,
                 depth=1,
                 doc_count=50,
                 child_count=2,
-                topic_label="Child Topic 1",
+                final_label="Child Topic 1",
             ),
             ClusterNodeResponse(
                 node_id=3,
+            namespace="enwiki_namespace_0",
                 parent_id=1,
                 depth=1,
                 doc_count=30,
                 child_count=1,
-                topic_label="Child Topic 2",
+                final_label="Child Topic 2",
             ),
         ]
 
@@ -66,19 +69,21 @@ class TestClusterAPIUnit:
         return [
             ClusterNodeResponse(
                 node_id=4,
+            namespace="enwiki_namespace_0",
                 parent_id=1,
                 depth=1,
                 doc_count=20,
                 child_count=0,
-                topic_label="Sibling Topic 1",
+                final_label="Sibling Topic 1",
             ),
             ClusterNodeResponse(
                 node_id=5,
+            namespace="enwiki_namespace_0",
                 parent_id=1,
                 depth=1,
                 doc_count=25,
                 child_count=0,
-                topic_label="Sibling Topic 2",
+                final_label="Sibling Topic 2",
             ),
         ]
 
@@ -87,11 +92,12 @@ class TestClusterAPIUnit:
         """Create a sample parent node for testing"""
         return ClusterNodeResponse(
             node_id=0,
+            namespace="enwiki_namespace_0",
             parent_id=None,
             depth=-1,
             doc_count=200,
             child_count=1,
-            topic_label="Parent Topic",
+            final_label="Parent Topic",
         )
 
     @patch("api.clusters.service_provider")
@@ -112,11 +118,12 @@ class TestClusterAPIUnit:
         assert response.status_code == 200, "Status code was not 200"
         assert response.json() == {
             "node_id": 1,
+            "namespace": "enwiki_namespace_0",
             "parent_id": None,
             "depth": 0,
             "doc_count": 100,
             "child_count": 5,
-            "topic_label": "Root Topic",
+            "final_label": "Root Topic",
         }
         mock_cluster_service.get_root_node.assert_called_once_with("enwiki_namespace_0")
 
@@ -178,11 +185,12 @@ class TestClusterAPIUnit:
         assert response.status_code == 200, "Status code was not 200"
         assert response.json() == {
             "node_id": 1,
+            "namespace": "enwiki_namespace_0",
             "parent_id": None,
             "depth": 0,
             "doc_count": 100,
             "child_count": 5,
-            "topic_label": "Root Topic",
+            "final_label": "Root Topic",
         }
         mock_cluster_service.get_cluster_node.assert_called_once_with(
             "enwiki_namespace_0", 1
@@ -251,19 +259,21 @@ class TestClusterAPIUnit:
         assert response.json() == [
             {
                 "node_id": 2,
+            "namespace": "enwiki_namespace_0",
                 "parent_id": 1,
                 "depth": 1,
                 "doc_count": 50,
                 "child_count": 2,
-                "topic_label": "Child Topic 1",
+                "final_label": "Child Topic 1",
             },
             {
                 "node_id": 3,
+            "namespace": "enwiki_namespace_0",
                 "parent_id": 1,
                 "depth": 1,
                 "doc_count": 30,
                 "child_count": 1,
-                "topic_label": "Child Topic 2",
+                "final_label": "Child Topic 2",
             },
         ]
         mock_cluster_service.get_cluster_node_children.assert_called_once_with(
@@ -318,19 +328,21 @@ class TestClusterAPIUnit:
         assert response.json() == [
             {
                 "node_id": 4,
+            "namespace": "enwiki_namespace_0",
                 "parent_id": 1,
                 "depth": 1,
                 "doc_count": 20,
                 "child_count": 0,
-                "topic_label": "Sibling Topic 1",
+                "final_label": "Sibling Topic 1",
             },
             {
                 "node_id": 5,
+            "namespace": "enwiki_namespace_0",
                 "parent_id": 1,
                 "depth": 1,
                 "doc_count": 25,
                 "child_count": 0,
-                "topic_label": "Sibling Topic 2",
+                "final_label": "Sibling Topic 2",
             },
         ]
         mock_cluster_service.get_cluster_node_siblings.assert_called_once_with(
@@ -382,11 +394,12 @@ class TestClusterAPIUnit:
         assert response.status_code == 200, "Status code was not 200"
         assert response.json() == {
             "node_id": 0,
+            "namespace": "enwiki_namespace_0",
             "parent_id": None,
             "depth": -1,
             "doc_count": 200,
             "child_count": 1,
-            "topic_label": "Parent Topic",
+            "final_label": "Parent Topic",
         }
         mock_cluster_service.get_cluster_node_parent.assert_called_once_with(
             "enwiki_namespace_0", 1

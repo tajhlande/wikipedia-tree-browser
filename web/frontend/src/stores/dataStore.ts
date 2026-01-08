@@ -14,6 +14,26 @@ import { apiClient } from '../services/apiClient';
  * Manages application state and data caching
  */
 export const createDataStore = () => {
+  
+  /**
+   * Map backend cluster node response to frontend ClusterNode model
+   */
+  const _mapBackendNodeToFrontend = (backendNode: any, namespace: string): ClusterNode => {
+    return {
+      id: backendNode.node_id || 0,
+      namespace: backendNode.namespace || namespace,
+      label: backendNode.final_label || backendNode.first_label || `Node ${backendNode.node_id}`,
+      final_label: backendNode.final_label || backendNode.first_label || `Node ${backendNode.node_id}`,
+      depth: backendNode.depth || 0,
+      is_leaf: backendNode.child_count === 0, // Leaf if no children
+      centroid: backendNode.centroid_3d || [0, 0, 0], // Default to origin
+      size: backendNode.doc_count || 0,
+      parent_id: backendNode.parent_id || null,
+      created_at: new Date().toISOString(), // Use current time as fallback
+      updated_at: new Date().toISOString()  // Use current time as fallback
+    };
+  };
+  
   const [state, setState] = createStore<AppState>({
     currentView: 'namespace_selection',
     currentNamespace: null,
@@ -178,8 +198,19 @@ export const createDataStore = () => {
         throw new Error(result.error || 'Failed to load root node');
       }
 
-      cacheNode(cacheKey, result.data);
-      return result.data;
+      // Map backend response to frontend model
+      const mappedNode = _mapBackendNodeToFrontend(result.data, namespace);
+      
+      // Validate mapped node has a valid ID
+      if (!mappedNode.id) {
+        console.error('[DATA] Mapped root node missing ID:', mappedNode);
+        throw new Error('Root node data is incomplete - missing ID after mapping');
+      }
+
+      console.log(`[DATA] Loaded and mapped root node ${mappedNode.id} for namespace ${namespace}`);
+      
+      cacheNode(cacheKey, mappedNode);
+      return mappedNode;
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error loading root node');
       throw error;
