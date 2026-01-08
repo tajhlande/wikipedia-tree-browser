@@ -216,3 +216,9 @@ A: No.
 
 Q: Should I include documentation with each implementation phase?
 A: Documentation of the application architecture and importnat implementation decisions should be added to `README.md`.
+
+# Important rules
+
+* DO NOT MAKE SCHEMA CHANGES TO THE DATABASE.  The database structure is a requirement as-is.
+* If a problem could be fixed either in the backend or in the frontend, prefer the front-end, unless the backend has an actual bug to fix where
+the expected behavior is not happening.
