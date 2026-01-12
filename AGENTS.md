@@ -319,9 +319,9 @@ The web application provides an interactive 3D visualization of Wikipedia page c
 ### Phase 2: Frontend Development ⏳ (IN PROGRESS)
 - [x] Set up HTML/CSS/JS structure in `web/frontend/`
 - [x] Integrate BabylonJS for 3D visualization
-- [ ] Create API client for frontend-backend communication
+- [x] Create API client for frontend-backend communication
 - [x] Implement cluster tree visualization (3D nodes and connections)
-- [ ] Add namespace selection interface
+- [x] Add namespace selection interface
 - [ ] Implement search UI and functionality
 - [ ] Add cluster node selection and page listing
 - [ ] Optimize rendering for large cluster datasets
