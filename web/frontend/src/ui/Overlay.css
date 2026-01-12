@@ -1,5 +1,5 @@
-/* Button styles for Kobalte Button components */
-.kobalte-button {
+/* Button styles for Kobalte Button components - removed along with test buttons */
+/* .kobalte-button {
   all: unset;
   display: inline-flex;
   align-items: center;
@@ -30,7 +30,7 @@
 .kobalte-button[data-disabled] {
   opacity: 0.5;
   cursor: not-allowed;
-}
+} */
 
 .select__trigger {
   display: inline-flex;

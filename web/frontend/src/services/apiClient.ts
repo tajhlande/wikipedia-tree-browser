@@ -44,12 +44,37 @@ export class ApiClient {
         );
       }
 
-      const data = await response.json();
-      console.log(`[API] Response:`, data);
+      let data;
+      try {
+        data = await response.json();
+        console.log(`[API] Response for ${url}:`, data);
+      } catch (jsonError) {
+        console.error(`[API] Failed to parse JSON response for ${url}:`, jsonError);
+        return {
+          success: false,
+          data: null as unknown as T,
+          error: `Failed to parse JSON response: ${jsonError instanceof Error ? jsonError.message : 'Unknown error'}`,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      // Handle null responses (e.g., when parent doesn't exist)
+      let responseData;
+      if (data === null) {
+        console.log(`[API] Null response received for ${url} - this is expected for root node parent`);
+        responseData = null;
+      } else if (data !== null && data !== undefined && data.data !== undefined) {
+        responseData = data.data;
+      } else if (data !== null && data !== undefined) {
+        responseData = data;
+      } else {
+        console.log(`[API] Empty response received for ${url}`);
+        responseData = null;
+      }
 
       return {
         success: true,
-        data: data.data || data,
+        data: responseData,
         timestamp: new Date().toISOString(),
       };
     } catch (error) {

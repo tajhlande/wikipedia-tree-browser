@@ -781,6 +781,77 @@ def compute_missing_centroids(
     return centroids_computed
 
 
+def _get_geometric_distribution_for_small_clusters(num_children: int, n_components: int = 3) -> NDArray:
+    """Generate predefined geometric distributions for small clusters.
+    
+    For clusters with fewer than 6 children, use standard geometric distributions
+    instead of PCA to avoid [0, 0, 0] vectors.
+    
+    Args:
+        num_children: Number of child nodes
+        n_components: Target dimensionality (default 3)
+        
+    Returns:
+        Array of normalized unit vectors in the specified geometric distribution
+    """
+    if num_children == 1:
+        # Single child: point along positive y-axis
+        return np.array([[0.0, 1.0, 0.0]], dtype=np.float32)
+    
+    elif num_children == 2:
+        # Two children: opposite points along y-axis
+        return np.array([
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0]
+        ], dtype=np.float32)
+    
+    elif num_children == 3:
+        # Three children: coplanar vectors with 120° between them
+        angle = 2 * np.pi / 3  # 120 degrees in radians
+        return np.array([
+            [np.sin(0), np.cos(0), 0.0],
+            [np.sin(angle), np.cos(angle), 0.0],
+            [np.sin(2*angle), np.cos(2*angle), 0.0]
+        ], dtype=np.float32)
+    
+    elif num_children == 4:
+        # Four children: normalized tetrahedral vertex distribution
+        # Using vertices of a regular tetrahedron inscribed in unit sphere
+        return np.array([
+            [1.0, 1.0, 1.0],
+            [1.0, -1.0, -1.0],
+            [-1.0, 1.0, -1.0],
+            [-1.0, -1.0, 1.0]
+        ], dtype=np.float32) / np.sqrt(3)
+    
+    elif num_children == 5:
+        # Five children: points on a sphere with roughly equal spacing
+        # Using vertices of a triangular bipyramid
+        golden_ratio = (1 + np.sqrt(5)) / 2
+        return np.array([
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, -1.0],
+            [np.cos(2*np.pi/5), np.sin(2*np.pi/5), 0.0],
+            [np.cos(4*np.pi/5), np.sin(4*np.pi/5), 0.0],
+            [np.cos(6*np.pi/5), np.sin(6*np.pi/5), 0.0]
+        ], dtype=np.float32)
+    
+    elif num_children == 6:
+        # Six children: points on a sphere with octahedral symmetry
+        return np.array([
+            [1.0, 0.0, 0.0],
+            [-1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, -1.0]
+        ], dtype=np.float32)
+    
+    else:
+        # For more than 6 children, return None to indicate PCA should be used
+        return np.array([])
+
+
 def project_centroid_vectors(
     sqlconn: sqlite3.Connection,
     namespace: str,
@@ -790,7 +861,8 @@ def project_centroid_vectors(
 ) -> int:
     """Compute 3D vectors for centroids of all cluster tree nodes using PCA.
 
-    Each node's child nodes should all be computed in one group, via PCA.
+    For clusters with fewer than 6 children, use predefined geometric distributions
+    instead of PCA to avoid [0, 0, 0] vectors. Only the root node should have [0, 0, 0].
 
     Args:
         sqlconn: SQLite database connection
@@ -814,12 +886,20 @@ def project_centroid_vectors(
 
     # Group nodes by parent_id for processing child nodes together
     parent_to_children = {}
+    root_node = None  # Store root node separately
+    
     for node_id, parent_id, centroid_vector, centroid_three_d_text in nodes_with_centroids:
-        if parent_id not in parent_to_children:
-            parent_to_children[parent_id] = []
-        parent_to_children[parent_id].append((node_id, centroid_vector, centroid_three_d_text))
+        if parent_id is None:
+            # This is the root node
+            root_node = (node_id, parent_id, centroid_vector, centroid_three_d_text)
+        else:
+            if parent_id not in parent_to_children:
+                parent_to_children[parent_id] = []
+            parent_to_children[parent_id].append((node_id, centroid_vector, centroid_three_d_text))
 
     logger.debug("Found %d parent groups to process", len(parent_to_children))
+    if root_node:
+        logger.debug("Found root node: %s", root_node[0])
 
     # Process each parent group
     all_updates = []
@@ -828,10 +908,20 @@ def project_centroid_vectors(
     if tracker:
         tracker.set_total(len(nodes_with_centroids))
 
+    # Handle root node first - it should get [0, 0, 0]
+    if root_node is not None:
+        root_node_id, _, _, centroid_three_d_text = root_node
+        logger.debug(f"Processing root node {root_node_id}, centroid_three_d: {centroid_three_d_text}")
+        if centroid_three_d_text is None:
+            # Root node should have [0, 0, 0] vector
+            root_vector = np.array([0.0, 0.0, 0.0], dtype=np.float32)
+            all_updates.append((root_node_id, root_vector))
+            processed_count += 1
+            logger.debug("Set root node %d to [0, 0, 0]", root_node_id)
+        else:
+            logger.debug(f"Root node {root_node_id} already has 3D vector: {centroid_three_d_text}")
+
     for parent_id, children in parent_to_children.items():
-        # Skip root node (parent_id is None)
-        if parent_id is None:
-            continue
 
         # Get only nodes that don't already have 3D vectors
         nodes_needing_processing = [
@@ -844,33 +934,104 @@ def project_centroid_vectors(
             logger.debug("All children of parent %d already have 3D vectors", parent_id)
             continue
 
-        # Extract centroid vectors for PCA
+        # Extract centroid vectors for processing
         node_ids = [node_id for node_id, _ in nodes_needing_processing]
         centroid_vectors = np.array([centroid_vector for _, centroid_vector in nodes_needing_processing])
 
         logger.debug("Processing %d child nodes of parent %d", len(node_ids), parent_id)
 
-        # Apply PCA to reduce to target dimensionality
-        try:
-            pca = PCA(n_components=n_components)
-            three_space_vectors = pca.fit_transform(centroid_vectors)
-            three_space_vectors = three_space_vectors.astype(np.float32)
+        # Use geometric distribution for small clusters (<= 6 children)
+        # Use PCA for larger clusters (> 6 children)
+        if len(node_ids) <= 6:
+            # Use predefined geometric distribution
+            try:
+                geometric_vectors = _get_geometric_distribution_for_small_clusters(len(node_ids), n_components)
+                if geometric_vectors.size > 0:  # Valid geometric distribution found
+                    three_space_vectors = geometric_vectors.astype(np.float32)
+                    
+                    # Prepare updates
+                    updates = [(node_id, vec) for node_id, vec in zip(node_ids, three_space_vectors)]
+                    all_updates.extend(updates)
+                    processed_count += len(updates)
+                    
+                    logger.debug("Used geometric distribution for %d child nodes of parent %d", 
+                               len(updates), parent_id)
+                else:
+                    # Fallback to PCA if geometric distribution not available
+                    raise ValueError("No geometric distribution available")
+                    
+            except Exception as e:
+                logger.warning(f"Geometric distribution failed for parent group {parent_id} with {len(node_ids)} nodes: {e}. Falling back to PCA.")
+                # Fallback to PCA with logarithmic normalization
+                try:
+                    pca = PCA(n_components=n_components)
+                    three_space_vectors = pca.fit_transform(centroid_vectors)
+                    
+                    # Apply the same logarithmic normalization as for large clusters
+                    norms = np.linalg.norm(three_space_vectors, axis=1)
+                    scaled_norms = np.where(
+                        norms >= 1.0,
+                        1.0 + np.log(norms),
+                        1.0  # Ensure minimum of 1.0
+                    )
+                    normalized_vectors = three_space_vectors / np.maximum(norms[:, np.newaxis], 1e-8)
+                    three_space_vectors = normalized_vectors * scaled_norms[:, np.newaxis]
+                    three_space_vectors = three_space_vectors.astype(np.float32)
+                    
+                    # Prepare updates
+                    updates = [(node_id, vec) for node_id, vec in zip(node_ids, three_space_vectors)]
+                    all_updates.extend(updates)
+                    processed_count += len(updates)
+                    
+                    logger.debug("Fell back to PCA with log-normalization for %d child nodes of parent %d", len(updates), parent_id)
+                    
+                except ValueError as e2:
+                    logger.warning(f"PCA also failed for parent group {parent_id}: {e2}. Using zero-padding.")
+                    # Final fallback to zero vectors
+                    zero_vectors = np.zeros((len(node_ids), n_components), dtype=np.float32)
+                    updates = [(node_id, vec) for node_id, vec in zip(node_ids, zero_vectors)]
+                    all_updates.extend(updates)
+                    processed_count += len(updates)
+        
+        else:
+            # Use PCA for larger clusters (> 6 children)
+            try:
+                pca = PCA(n_components=n_components)
+                three_space_vectors = pca.fit_transform(centroid_vectors)
+                
+                # Normalize PCA vectors with logarithmic scaling to preserve variation
+                # while ensuring reasonable lengths for visualization
+                norms = np.linalg.norm(three_space_vectors, axis=1)
+                
+                # Apply logarithmic scaling: log(norm) where norm >= 1, ensure minimum of 1.0 for norms < 1
+                # This ensures NO vectors are shorter than unit length
+                scaled_norms = np.where(
+                    norms >= 1.0,
+                    1.0 + np.log(norms),  # Logarithmic scaling for norms >= 1
+                    1.0  # Ensure minimum of 1.0 for norms < 1
+                )
+                
+                # Normalize vectors and apply scaled lengths
+                normalized_vectors = three_space_vectors / np.maximum(norms[:, np.newaxis], 1e-8)
+                three_space_vectors = normalized_vectors * scaled_norms[:, np.newaxis]
+                
+                three_space_vectors = three_space_vectors.astype(np.float32)
 
-            # Prepare updates
-            updates = [(node_id, vec) for node_id, vec in zip(node_ids, three_space_vectors)]
-            all_updates.extend(updates)
-            processed_count += len(updates)
+                # Prepare updates
+                updates = [(node_id, vec) for node_id, vec in zip(node_ids, three_space_vectors)]
+                all_updates.extend(updates)
+                processed_count += len(updates)
 
-            logger.debug("Computed 3D vectors for %d child nodes of parent %d", len(updates), parent_id)
+                logger.debug("Used PCA with log-normalization for %d child nodes of parent %d", len(updates), parent_id)
 
-        except ValueError as e:
-            logger.warning(f"PCA failed for parent group {parent_id} with {len(node_ids)} nodes: "
-                           f"{e}. Using zero-padding.")
-            # Fallback to zero vectors if PCA fails
-            zero_vectors = np.zeros((len(node_ids), n_components), dtype=np.float32)
-            updates = [(node_id, vec) for node_id, vec in zip(node_ids, zero_vectors)]
-            all_updates.extend(updates)
-            processed_count += len(updates)
+            except ValueError as e:
+                logger.warning(f"PCA failed for parent group {parent_id} with {len(node_ids)} nodes: "
+                               f"{e}. Using zero-padding.")
+                # Fallback to zero vectors if PCA fails
+                zero_vectors = np.zeros((len(node_ids), n_components), dtype=np.float32)
+                updates = [(node_id, vec) for node_id, vec in zip(node_ids, zero_vectors)]
+                all_updates.extend(updates)
+                processed_count += len(updates)
 
         # Update progress tracker
         if tracker:

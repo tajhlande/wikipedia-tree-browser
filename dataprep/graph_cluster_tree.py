@@ -29,7 +29,7 @@ e.g. on Mac:
 
 namespace = "enwiki_namespace_0"
 
-sqlconn = get_sql_conn(namespace)
+sqlconn = get_sql_conn(namespace, "../data")
 rows = get_cluster_final_topics(sqlconn, namespace)
 
 colors = [

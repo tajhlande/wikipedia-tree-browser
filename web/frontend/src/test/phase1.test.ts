@@ -94,15 +94,15 @@ describe('Phase 1: API Client & Data Layer', () => {
       expect(dataStore.state.currentView).toBe('node_view');
 
       // Test setting namespace
-      dataStore.setCurrentNamespace('enwiki');
-      expect(dataStore.state.currentNamespace).toBe('enwiki');
+      dataStore.setCurrentNamespace('enwiki_namespace_0');
+      expect(dataStore.state.currentNamespace).toBe('enwiki_namespace_0');
     });
 
     it('should handle caching correctly', () => {
       // Test node caching
       const testNode: ClusterNode = {
         id: 1,
-        namespace: 'enwiki',
+        namespace: 'enwiki_namespace_0',
         label: 'Test Node',
         final_label: 'Test Node',
         depth: 0,
@@ -126,7 +126,7 @@ describe('Phase 1: API Client & Data Layer', () => {
       };
 
       dataStore.cacheNamespace(testNamespace);
-      const cachedNamespace = dataStore.getCachedNamespace('enwiki');
+      const cachedNamespace = dataStore.getCachedNamespace('enwiki_namespace_0');
       expect(cachedNamespace).toEqual(testNamespace);
     });
   });

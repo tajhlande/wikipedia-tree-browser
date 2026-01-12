@@ -1,12 +1,6 @@
 @import "tailwindcss";
 
-/* Debug styles to verify CSS is loading */
-.debug-button {
-  background-color: red !important;
-  color: white !important;
-  padding: 8px 16px !important;
-  border-radius: 4px !important;
-}
+/* Debug button styles removed along with the button */
 
 html, body {
   width: 100%;

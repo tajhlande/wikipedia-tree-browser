@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 // Simple utility function to test
 const filterNamespaces = (namespaces: any[], query: string) => {
   if (!query) return namespaces;
-  
+
   const lowerQuery = query.toLowerCase();
   return namespaces.filter(namespace =>
     namespace.name.toLowerCase().includes(lowerQuery) ||
@@ -14,10 +14,10 @@ const filterNamespaces = (namespaces: any[], query: string) => {
 };
 
 describe('Namespace Utility Functions', () => {
-  
+
   const mockNamespaces = [
     {
-      name: 'enwiki',
+      name: 'enwiki_namespace_0',
       display_name: 'English Wikipedia',
       language: 'English'
     },
@@ -34,15 +34,15 @@ describe('Namespace Utility Functions', () => {
   });
 
   it('should filter namespaces by name', () => {
-    const result = filterNamespaces(mockNamespaces, 'enwiki');
+    const result = filterNamespaces(mockNamespaces, 'enwiki_namespace_0');
     expect(result.length).toBe(1);
-    expect(result[0].name).toBe('enwiki');
+    expect(result[0].name).toBe('enwiki_namespace_0');
   });
 
   it('should filter namespaces by display name', () => {
     const result = filterNamespaces(mockNamespaces, 'english');
     expect(result.length).toBe(1);
-    expect(result[0].name).toBe('enwiki');
+    expect(result[0].name).toBe('enwiki_namespace_0');
   });
 
   it('should filter namespaces by language', () => {

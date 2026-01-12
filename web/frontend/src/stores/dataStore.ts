@@ -19,6 +19,26 @@ export const createDataStore = () => {
    * Map backend cluster node response to frontend ClusterNode model
    */
   const _mapBackendNodeToFrontend = (backendNode: any, namespace: string): ClusterNode => {
+    // Validate and normalize centroid data
+    let centroid: Vector3D = [0, 0, 0]; // Default to origin
+    
+    if (backendNode.centroid_3d !== undefined && backendNode.centroid_3d !== null) {
+      if (Array.isArray(backendNode.centroid_3d) && backendNode.centroid_3d.length === 3) {
+        // Validate that all values are valid numbers
+        const [x, y, z] = backendNode.centroid_3d;
+        if (typeof x === 'number' && typeof y === 'number' && typeof z === 'number' &&
+            isFinite(x) && isFinite(y) && isFinite(z)) {
+          centroid = [x, y, z];
+        } else {
+          console.warn(`[DATA] Invalid centroid values for node ${backendNode.node_id}:`, backendNode.centroid_3d);
+        }
+      } else {
+        console.warn(`[DATA] Malformed centroid for node ${backendNode.node_id}:`, backendNode.centroid_3d);
+      }
+    } else if (backendNode.centroid_3d === null) {
+      console.warn(`[DATA] Node ${backendNode.node_id} has null centroid_3d`);
+    }
+    
     return {
       id: backendNode.node_id || 0,
       namespace: backendNode.namespace || namespace,
@@ -26,7 +46,7 @@ export const createDataStore = () => {
       final_label: backendNode.final_label || backendNode.first_label || `Node ${backendNode.node_id}`,
       depth: backendNode.depth || 0,
       is_leaf: backendNode.child_count === 0, // Leaf if no children
-      centroid: backendNode.centroid_3d || [0, 0, 0], // Default to origin
+      centroid: centroid,
       size: backendNode.doc_count || 0,
       parent_id: backendNode.parent_id || null,
       created_at: new Date().toISOString(), // Use current time as fallback
@@ -241,21 +261,32 @@ export const createDataStore = () => {
         throw new Error(children.error || 'Failed to load children');
       }
 
-      if (!parent.success) {
-        throw new Error(parent.error || 'Failed to load parent');
+      if (!parent.success || parent.data === null) {
+        // It's okay for root node to have no parent
+        if (parent.error && !parent.error.includes('no parent') && !parent.error.includes('not found')) {
+          console.warn(`[DATA] Parent load warning: ${parent.error}`);
+        }
+        // Set parent to null if not found (expected for root node)
+        parent.data = null;
+        console.log(`[DATA] No parent found for node ${nodeId} - this is expected for root nodes`);
       }
 
-      // Cache the loaded data
-      cacheNode(`node_${namespace}_${nodeId}`, currentNode.data);
-      cacheNode(`children_${namespace}_${nodeId}`, children.data || []);
-      if (parent.data) {
-        cacheNode(`node_${namespace}_${parent.data.id}`, parent.data);
+      // Map backend data to frontend models
+      const mappedCurrentNode = _mapBackendNodeToFrontend(currentNode.data, namespace);
+      const mappedChildren = children.data ? children.data.map(child => _mapBackendNodeToFrontend(child, namespace)) : [];
+      const mappedParent = parent.data ? _mapBackendNodeToFrontend(parent.data, namespace) : null;
+
+      // Cache the mapped data
+      cacheNode(`node_${namespace}_${nodeId}`, mappedCurrentNode);
+      cacheNode(`children_${namespace}_${nodeId}`, mappedChildren);
+      if (mappedParent) {
+        cacheNode(`node_${namespace}_${mappedParent.id}`, mappedParent);
       }
 
       return {
-        currentNode: currentNode.data,
-        children: children.data || [],
-        parent: parent.data || null,
+        currentNode: mappedCurrentNode,
+        children: mappedChildren,
+        parent: mappedParent,
       };
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error loading node view');

@@ -295,7 +295,16 @@ The backend provides the following key endpoints:
    - Test performance scenarios
    - Test edge cases
 
-**Estimated Time:** 3-4 days
+4. **Babylon.js Integration Testing (Future Phase)**
+   - Set up proper jsdom environment with canvas support
+   - Mock Babylon.js engine for isolated testing
+   - Create browser-based test environment
+   - Implement visual regression testing
+   - Add performance benchmarking tests
+   - Test 3D rendering edge cases
+   - Verify camera and interaction behavior
+
+**Estimated Time:** 3-4 days (core testing) + 2-3 days (Babylon.js integration testing - future phase)
 
 ## Technical Implementation Details
 
@@ -432,10 +441,11 @@ const MESH_SETTINGS = {
 | 5. Performance Optimization | 2-3 days | Medium | ⏳ PENDING |
 | 6. Visual Polish | 2-3 days | Medium | ⏳ PENDING |
 | 7. Testing & QA | 3-4 days | High | ⏳ PENDING |
+| 8. Babylon.js Integration Testing (Future) | 2-3 days | Medium | 🔮 FUTURE |
 
-**Total Estimated Time:** 15-20 days
-**Time Completed:** 2 days (13-20% of total estimate)
-**Time Remaining:** 13-18 days
+**Total Estimated Time:** 17-23 days
+**Time Completed:** 2 days (12-13% of total estimate)
+**Time Remaining:** 15-21 days
 
 ## Project Status
 
@@ -456,8 +466,9 @@ const MESH_SETTINGS = {
 - ⏳ **Phase 5: Performance Optimization** - 0% Complete
 - ⏳ **Phase 6: Visual Polish** - 0% Complete
 - ⏳ **Phase 7: Testing & QA** - 0% Complete
+- 🔮 **Phase 8: Babylon.js Integration Testing** - 0% Complete (Future)
 
-**Overall Progress:** 29% Complete (2/7 phases)
+**Overall Progress:** 25% Complete (2/8 phases)
 
 ### Quality Metrics
 

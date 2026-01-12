@@ -232,7 +232,7 @@ def three_d_vector_to_text(vector: Optional[NDArray]) -> Optional[str]:
                 logger.warning(f"Vector contains NaN or infinite values: {vector}")
                 # Replace NaN/infinite with 0
                 vector = np.where(np.isfinite(vector), vector, 0.0)
-            return f"[{vector[0]:.8f}, {vector[2]:.8f}, {vector[2]:.8f}]"
+            return f"[{vector[0]:.8f}, {vector[1]:.8f}, {vector[2]:.8f}]"
             # json.dumps(vector.astype(np.float32).tolist())
         except (ValueError, TypeError):
             logger.warning(f"Failed to convert vector to text: {vector}")

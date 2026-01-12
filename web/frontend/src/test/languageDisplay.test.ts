@@ -4,7 +4,7 @@ import type { Namespace } from '../types';
 
 // Mock namespace with language
 const namespaceWithLanguage: Namespace = {
-  name: 'enwiki',
+  name: 'enwiki_namespace_0',
   display_name: 'English Wikipedia',
   language: 'English'
 };
@@ -19,16 +19,16 @@ const namespaceWithoutLanguage: Namespace = {
 // Test the display logic that would be used in NamespaceCard
 describe('Language Display Logic', () => {
   it('should display language + Wikipedia when language is available', () => {
-    const displayText = namespaceWithLanguage.language 
-      ? `${namespaceWithLanguage.language} Wikipedia` 
+    const displayText = namespaceWithLanguage.language
+      ? `${namespaceWithLanguage.language} Wikipedia`
       : namespaceWithLanguage.display_name || namespaceWithLanguage.name;
-    
+
     expect(displayText).toBe('English Wikipedia');
   });
 
   it('should always display display_name since language is now required', () => {
     const displayText = namespaceWithoutLanguage.display_name;
-    
+
     expect(displayText).toBe('German Wikipedia');
   });
 
@@ -38,15 +38,15 @@ describe('Language Display Logic', () => {
       display_name: 'French Wikipedia',
       language: 'French'
     };
-    
+
     const displayText = namespaceWithDisplayName.display_name;
-    
+
     expect(displayText).toBe('French Wikipedia');
   });
 
   it('should use display_name for description since it already contains language info', () => {
     const descriptionText = namespaceWithLanguage.display_name;
-    
+
     expect(descriptionText).toBe('English Wikipedia');
   });
 
@@ -56,9 +56,9 @@ describe('Language Display Logic', () => {
       display_name: 'Spanish Wikipedia',
       language: 'Spanish'
     };
-    
+
     const descriptionText = namespaceWithLanguageInfo.display_name;
-    
+
     expect(descriptionText).toBe('Spanish Wikipedia');
   });
 });

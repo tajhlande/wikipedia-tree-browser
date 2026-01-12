@@ -336,7 +336,8 @@ class DatabaseService(ClusterService):
             'depth': row_dict.get('depth', 0),
             'doc_count': row_dict.get('doc_count', 0),
             'child_count': row_dict.get('child_count', 0),
-            'final_label': row_dict.get('final_label') or row_dict.get('first_label')
+            'final_label': row_dict.get('final_label') or row_dict.get('first_label'),
+            'centroid_3d': row_dict.get('centroid_3d')
         }
 
         return ClusterNodeResponse(**required_fields)

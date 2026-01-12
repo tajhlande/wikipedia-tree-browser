@@ -1,9 +1,14 @@
 import type { Component } from 'solid-js';
 import { onMount, Show } from "solid-js";
 import { initScene } from "./babylon/scene";
-import Overlay from "./ui/Overlay";
 import Phase1Demo from "./demo/phase1Demo";
+import { Phase3Demo } from "./demo/phase3Demo";
 import NamespaceSelector from "./ui/NamespaceSelector";
+import { NavigationControls } from "./ui/NavigationControls";
+import { NodeInfoOverlay } from "./ui/NodeInfoOverlay";
+import { NodeViewLoading } from "./ui/NodeViewLoading";
+import { ErrorOverlay } from "./ui/ErrorOverlay";
+import { PerformanceMonitor } from "./ui/PerformanceMonitor";
 import { dataStore } from './stores/dataStore';
 
 const App: Component = () => {
@@ -21,11 +26,24 @@ const App: Component = () => {
         <NamespaceSelector />
       </Show>
       
-      {/* Overlay UI - always visible */}
-      <Overlay />
+      {/* Overlay UI - removed as requested (contained debug, kobalte, and tailwind test buttons) */}
       
-      {/* Phase 1 Demo - for development */}
-      <Phase1Demo />
+      {/* Navigation Controls - shown in node view */}
+      <NavigationControls />
+      
+      {/* Node Information Overlay - shown in node view */}
+      <NodeInfoOverlay />
+      
+      {/* Node View Loading Indicator */}
+      <NodeViewLoading />
+      
+      {/* Error Overlay */}
+      <ErrorOverlay />
+      
+      {/* Performance Monitor */}
+      <PerformanceMonitor />
+      
+
     </>
   );
 };

@@ -95,8 +95,12 @@ def get_language_for_namespace(namespace: str, language_file: str = "../../data/
     Loads the language data from a CSV file, and uses global dict variables to cache it.
     """
     global namespace_dict, lang_dict
-    if namespace_dict:
-        return namespace_dict[namespace]
+    try:
+        if namespace_dict:
+            return namespace_dict[namespace]
+    except KeyError as e:
+        logger.error("Invalid namespace for language lookup: %s", namespace)
+        raise e
 
     with _dict_init_lock:
         if not namespace_dict:

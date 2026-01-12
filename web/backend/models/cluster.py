@@ -16,6 +16,7 @@ class ClusterNodeResponse(BaseModel):
     doc_count: int = Field(..., description="Number of documents in this cluster")
     child_count: int = Field(..., description="Number of child nodes")
     final_label: Optional[str] = Field(None, description="Final topic label")
+    centroid_3d: Optional[List[float]] = Field(None, description="3D centroid coordinates")
 
 
 class ClusterSearchResult(BaseModel):

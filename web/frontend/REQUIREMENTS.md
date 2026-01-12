@@ -32,6 +32,18 @@ Nodes should be colored by:
 are 11 levels of depth in the English Wikipedia graph, so a range of colors up to 12 should suffice. It is ok if colors
 repeat, as long as colors at neighboring depths (say depth 4 and depth 5) are not the same or are not distinguishable.
 
+### Node Billboard Labels
+
+Each node should have a billboard label displaying its topic or title:
+* **Billboard Behavior**: Labels should always face the camera (billboard mode)
+* **Positioning**: Billboard labels should be centered vertically and horizontally, colinear with the link vector, positioned past the child node by a 0.4 unit margin
+* **Width**: Billboard width should be double the original size (3.0 units wide)
+* **Dynamic Sizing**: Billboards should have consistent width with height that expands to accommodate multi-line text
+* **Completeness**: Billboard text should not be clipped or truncated
+* **Rendering Consistency**: Text should be rendered in its natural aspect ratio without vertical or horizontal distortion
+* **Root Node Handling**: Root nodes should use default positioning (above the node) since they have no parent
+* **Text Appearance**: Light gray text (#CCCCCC) on transparent background with bold Arial font
+
 Along the top, there should be overlay text that shows the current topic, the current Wiki namespace & name,
 and the current depth.
 
