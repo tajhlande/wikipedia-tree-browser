@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Billboard Hover Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        #testResults { margin-top: 20px; padding: 10px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Billboard Hover Functionality Test</h1>
+    
+    <h2>Test Steps:</h2>
+    <ol>
+        <li>Open the application in your browser</li>
+        <li>Navigate to a node view (select a namespace and load some nodes)</li>
+        <li>Open the browser's developer console (F12 or Ctrl+Shift+I)</li>
+        <li>Hover your mouse over the billboard labels (text labels next to nodes)</li>
+        <li>Look for console messages starting with "[INTERACT]"</li>
+    </ol>
+    
+    <h2>Expected Behavior:</h2>
+    <ul>
+        <li>When you hover over a billboard, you should see console messages like:</li>
+        <li><code>[INTERACT] Pointer move event, picked mesh: billboard_123</code></li>
+        <li><code>[INTERACT] Hovering over billboard 123: Node Label</code></li>
+        <li>A panel should appear in the bottom-left corner showing node information</li>
+    </ul>
+    
+    <h2>Troubleshooting:</h2>
+    <ul>
+        <li>If you don't see any [INTERACT] messages, the pointer events aren't being captured</li>
+        <li>If you see pointer events but no hover messages, the billboard might not be pickable</li>
+        <li>If you see hover messages but no UI panel, check the BillboardInfoOverlay component</li>
+    </ul>
+    
+    <div id="testResults">
+        <h3>Debugging Information:</h3>
+        <p>Check the following in your code:</p>
+        <ol>
+            <li>Billboards should have <code>isPickable = true</code></li>
+            <li>Billboards should have proper naming: <code>billboard_${node.id}</code></li>
+            <li>Interaction manager should be initialized and receiving pointer events</li>
+            <li>Nodes should be registered with the interaction manager</li>
+        </ol>
+    </div>
+    
+    <script>
+        // Simple test to verify the page loads
+        console.log('Billboard hover test page loaded');
+        document.getElementById('testResults').innerHTML += '<p class="success">✓ Test page loaded successfully</p>';
+    </script>
+</body>
+</html>

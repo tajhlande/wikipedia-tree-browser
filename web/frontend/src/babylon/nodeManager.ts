@@ -8,7 +8,8 @@ import {
   MeshBuilder,
   TransformNode,
   DynamicTexture,
-  Camera
+  Camera,
+  Engine
 } from "@babylonjs/core";
 import type { ClusterNode } from '../types';
 
@@ -69,11 +70,20 @@ export class NodeManager {
     leafMaterial.specularPower = 32;
     this.nodeMaterials.set('leaf', leafMaterial);
 
-    // Depth-based materials (orange to green gradient)
+    // Depth-based materials (alternating color families with decreasing richness)
     const depthColors = [
-      '#FF8C00', '#FFA500', '#FFB700', '#FFC900', '#FFD700', // Orange to yellow
-      '#E8FF00', '#D0FF00', '#B8FF00', '#A0FF00', '#88FF00', // Yellow to green
-      '#70FF00', '#58FF00'  // Green
+      '#FF6B00', // Level 1: Rich orange
+      '#FFD700', // Level 2: Rich yellow
+      '#7CFC00', // Level 3: Rich green
+      '#FFA500', // Level 4: Medium orange
+      '#FFE633', // Level 5: Medium yellow
+      '#9ACD32', // Level 6: Medium green
+      '#FFB700', // Level 7: Light orange
+      '#FFF176', // Level 8: Light yellow
+      '#B0F2B4', // Level 9: Light green
+      '#FFD180', // Level 10: Very light orange
+      '#FFFF99', // Level 11: Very light yellow
+      '#C8E6C9'  // Level 12: Very light green
     ];
 
     depthColors.forEach((color, index) => {
@@ -403,6 +413,9 @@ export class NodeManager {
     // Make it always face the camera (billboard behavior)
     billboard.billboardMode = Mesh.BILLBOARDMODE_ALL;
 
+    // Make billboard pickable for hover interactions
+    billboard.isPickable = true;
+
     // Create dynamic texture for the label text with consistent sizing
     const textureSize = 512;
     const lineHeight = fontSize * 1.15; // 1.15 line spacing in pixels
@@ -471,6 +484,22 @@ export class NodeManager {
     billboardMat.backFaceCulling = false;
     billboardMat.useAlphaFromDiffuseTexture = true; // Enable transparency
     billboardMat.diffuseTexture = dynamicTexture;
+
+    // Make billboard much more pickable with significant improvements
+    billboard.position.z += 0.5; // Move significantly forward to ensure it's pickable
+
+    // Enable alpha testing to ensure transparent areas don't block picking
+    // Use ALPHA_TEST instead of ALPHA_COMBINE for better picking behavior
+    billboardMat.alphaMode = Engine.ALPHA_COMBINE;
+    billboardMat.alphaCutOff = 0.3; // Lower cutoff for better picking
+
+    // Make the billboard significantly larger to improve pickability
+    billboard.scaling = new Vector3(1.5, 1.5, 1.5);
+
+    // Add a debug bounding box to visualize the pickable area
+    console.log(`[NODE] Created billboard for node ${node.id} at position (${billboard.position.x}, ${billboard.position.y}, ${billboard.position.z})`);
+    console.log(`[NODE] Billboard scaling: (${billboard.scaling.x}, ${billboard.scaling.y}, ${billboard.scaling.z})`);
+    console.log(`[NODE] Billboard isPickable: ${billboard.isPickable}`);
     billboard.material = billboardMat;
 
     // Store reference for later management

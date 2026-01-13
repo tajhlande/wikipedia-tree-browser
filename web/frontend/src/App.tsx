@@ -6,6 +6,7 @@ import { Phase3Demo } from "./demo/phase3Demo";
 import NamespaceSelector from "./ui/NamespaceSelector";
 import { NavigationControls } from "./ui/NavigationControls";
 import { NodeInfoOverlay } from "./ui/NodeInfoOverlay";
+import { BillboardInfoOverlay } from "./ui/BillboardInfoOverlay";
 import { NodeViewLoading } from "./ui/NodeViewLoading";
 import { ErrorOverlay } from "./ui/ErrorOverlay";
 import { PerformanceMonitor } from "./ui/PerformanceMonitor";
@@ -33,6 +34,9 @@ const App: Component = () => {
       
       {/* Node Information Overlay - shown in node view */}
       <NodeInfoOverlay />
+      
+      {/* Billboard Information Overlay - shown when hovering over billboard labels */}
+      <BillboardInfoOverlay />
       
       {/* Node View Loading Indicator */}
       <NodeViewLoading />
