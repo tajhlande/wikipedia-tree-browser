@@ -43,15 +43,15 @@ export class InteractionManager {
           // Only pick meshes that are pickable and match our naming pattern
           return mesh.isPickable && (mesh.name.startsWith('node_') || mesh.name.startsWith('billboard_'));
         });
-        
+
         const mesh = pickResult?.pickedMesh;
-        
-        console.log(`[INTERACT] Pointer move event, picked mesh: ${mesh ? mesh.name : 'null'}`);
-        if (mesh) {
-          console.log(`[INTERACT] Picked mesh details - name: ${mesh.name}, isPickable: ${mesh.isPickable}, position: (${mesh.position.x}, ${mesh.position.y}, ${mesh.position.z})`);
-          console.log(`[INTERACT] Pick result - hit: ${pickResult?.hit}, distance: ${pickResult?.distance}`);
-        }
-        
+
+        // console.debug(`[INTERACT] Pointer move event, picked mesh: ${mesh ? mesh.name : 'null'}`);
+        // if (mesh) {
+        //   console.debug(`[INTERACT] Picked mesh details - name: ${mesh.name}, isPickable: ${mesh.isPickable}, position: (${mesh.position.x}, ${mesh.position.y}, ${mesh.position.z})`);
+        //   console.debug(`[INTERACT] Pick result - hit: ${pickResult?.hit}, distance: ${pickResult?.distance}`);
+        // }
+
         if (mesh) {
           this.handleNodeHover(mesh);
         } else {
@@ -68,7 +68,7 @@ export class InteractionManager {
           // Only pick meshes that are pickable and match our naming pattern
           return mesh.isPickable && (mesh.name.startsWith('node_') || mesh.name.startsWith('billboard_'));
         });
-        
+
         const mesh = pickResult?.pickedMesh;
         if (mesh) {
           this.handleNodeClick(mesh);
@@ -109,7 +109,7 @@ export class InteractionManager {
    */
   private handleNodeHover(mesh: Mesh): void {
     // Debug: Log all pointer events to see what's being picked
-    console.log(`[INTERACT] Pointer event on mesh: ${mesh.name}, isPickable: ${mesh.isPickable}`);
+    // console.debug(`[INTERACT] Pointer event on mesh: ${mesh.name}, isPickable: ${mesh.isPickable}`);
 
     // Extract node ID from mesh name (format: node_<id> or billboard_<id>)
     const meshName = mesh.name;
@@ -127,20 +127,20 @@ export class InteractionManager {
       if (nodeData) {
         this.currentHoveredNode = nodeData;
         const meshType = meshName.startsWith('node_') ? 'node' : 'billboard';
-        console.log(`[INTERACT] Hovering over ${meshType} ${nodeId}: ${nodeData.label}`);
+        // console.log(`[INTERACT] Hovering over ${meshType} ${nodeId}: ${nodeData.label}`);
 
         // Notify UI that hover state changed
-        if (meshType === 'billboard') {
-          console.log(`[INTERACT] Billboard hover detected - UI should show overlay`);
-        }
+        // if (meshType === 'billboard') {
+        //   console.debug(`[INTERACT] Billboard hover detected - UI should show overlay`);
+        // }
 
         // TODO: Update UI overlay with hover information
         // This will be implemented in Phase 4
       } else {
-        console.log(`[INTERACT] No node data found for ID ${nodeId}`);
+        console.warn(`[INTERACT] No node data found for ID ${nodeId}`);
       }
     } else {
-      console.log(`[INTERACT] Mesh name ${meshName} doesn't match expected patterns`);
+      console.warn(`[INTERACT] Mesh name ${meshName} doesn't match expected patterns`);
     }
   }
 
@@ -149,7 +149,7 @@ export class InteractionManager {
    */
   private handleNodeHoverEnd(): void {
     if (this.currentHoveredNode) {
-      console.log(`[INTERACT] End hover over node ${this.currentHoveredNode.id}`);
+      // console.debug(`[INTERACT] End hover over node ${this.currentHoveredNode.id}`);
       this.currentHoveredNode = null;
 
       // TODO: Clear UI overlay
@@ -161,14 +161,22 @@ export class InteractionManager {
    * Handle node click event
    */
   private handleNodeClick(mesh: Mesh): void {
-    // Extract node ID from mesh name (format: node_<id>)
+    // Extract node ID from mesh name (format: node_<id> or billboard_<id>)
     const meshName = mesh.name;
+    let nodeId: number | null = null;
+
     if (meshName.startsWith('node_')) {
-      const nodeId = parseInt(meshName.substring(5));
+      nodeId = parseInt(meshName.substring(5));
+    } else if (meshName.startsWith('billboard_')) {
+      nodeId = parseInt(meshName.substring(10));
+    }
+
+    if (nodeId !== null) {
       const nodeData = this.nodeIdToDataMap.get(nodeId);
 
       if (nodeData) {
-        console.log(`[INTERACT] Clicked node ${nodeId}: ${nodeData.label}`);
+        const meshType = meshName.startsWith('node_') ? 'node' : 'billboard';
+        console.debug(`[INTERACT] Clicked ${meshType} ${nodeId}: ${nodeData.label}`);
 
         // Navigate to the clicked node
         const currentNamespace = dataStore.state.currentNamespace;
@@ -183,18 +191,18 @@ export class InteractionManager {
    * Debug method to list all pickable meshes in the scene
    */
   public debugListPickableMeshes(): void {
-    console.log('[INTERACT] Listing all pickable meshes in scene:');
+    // console.debug('[INTERACT] Listing all pickable meshes in scene:');
     const meshes = this.scene.meshes;
     let pickableCount = 0;
 
     meshes.forEach(mesh => {
       if (mesh.isPickable) {
-        console.log(`[INTERACT] Pickable mesh: ${mesh.name} at (${mesh.position.x}, ${mesh.position.y}, ${mesh.position.z})`);
+        // console.log(`[INTERACT] Pickable mesh: ${mesh.name} at (${mesh.position.x}, ${mesh.position.y}, ${mesh.position.z})`);
         pickableCount++;
       }
     });
 
-    console.log(`[INTERACT] Total pickable meshes: ${pickableCount} out of ${meshes.length} total meshes`);
+    console.debug(`[INTERACT] Total pickable meshes: ${pickableCount} out of ${meshes.length} total meshes`);
   }
 
   /**

@@ -54,6 +54,10 @@ export type AppState = {
   currentView: 'namespace_selection' | 'node_view';
   currentNamespace: string | null;
   currentNode: ClusterNode | null;
+  ancestorChain: ClusterNode[]; // Nodes from current to root
+  ancestorChildren: Record<number, ClusterNode[]>; // Direct children for each ancestor
+  showAncestors: boolean; // Whether ancestor visualization is active
+  showBillboards: boolean; // Whether billboard labels are visible
   loading: boolean;
   error: string | null;
 };
@@ -66,6 +70,14 @@ export type PageCache = {
   [key: string]: Page | Page[];
 };
 
+// Ancestor visualization constants
+export const ANCESTOR_VISUALIZATION = {
+  EXTENDED_LINK_LENGTH_MULTIPLIER: 3, // 3x normal link length
+  ANCESTOR_NODE_SCALE: 0.7, // Smaller size for ancestor nodes
+  ANCESTOR_LINK_OPACITY: 0.6, // Semi-transparent links for ancestors
+  ANCESTOR_NODE_OPACITY: 0.8, // Semi-transparent nodes for ancestors
+};
+
 // Constants
 export const API_BASE_URL = 'http://localhost:8000/api';
 
@@ -74,7 +86,7 @@ export const COLORS = {
   LEAF: '#3366CC', // Wikipedia blue
   DEPTH: [
     '#FF8C00', // Orange
-    '#FFA500', 
+    '#FFA500',
     '#FFB700',
     '#FFC900',
     '#FFD900',

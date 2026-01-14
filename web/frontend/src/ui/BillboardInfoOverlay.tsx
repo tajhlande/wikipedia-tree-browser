@@ -14,7 +14,7 @@ export const BillboardInfoOverlay: Component = () => {
     isLeaf: boolean;
     parentId: number | null;
   } | null>(null);
-  
+
   // Create a reactive signal for the hovered node
   const [hoveredNode, setHoveredNode] = createSignal<ClusterNode | null>(null);
 
@@ -24,16 +24,16 @@ export const BillboardInfoOverlay: Component = () => {
       // Poll the interaction manager for hovered node changes
       const checkHoveredNode = () => {
         const currentHoveredNode = interactionManager.getHoveredNode();
-        console.log(`[UI] BillboardInfoOverlay: Checking hovered node: ${currentHoveredNode ? currentHoveredNode.label : 'null'}`);
+        // console.log(`[UI] BillboardInfoOverlay: Checking hovered node: ${currentHoveredNode ? currentHoveredNode.label : 'null'}`);
         setHoveredNode(currentHoveredNode);
       };
-      
+
       // Check immediately
       checkHoveredNode();
-      
+
       // Set up polling to detect changes
       const intervalId = setInterval(checkHoveredNode, 100);
-      
+
       // Clean up interval on effect cleanup
       onCleanup(() => clearInterval(intervalId));
     }
@@ -42,10 +42,10 @@ export const BillboardInfoOverlay: Component = () => {
   // Update billboard hover info when hovered node changes
   createEffect(() => {
     const currentHoveredNode = hoveredNode();
-    console.log(`[UI] BillboardInfoOverlay: Hovered node changed: ${currentHoveredNode ? currentHoveredNode.label : 'null'}`);
-    
+    // console.debug(`[UI] BillboardInfoOverlay: Hovered node changed: ${currentHoveredNode ? currentHoveredNode.label : 'null'}`);
+
     if (currentHoveredNode) {
-      console.log(`[UI] BillboardInfoOverlay: Showing info for node ${currentHoveredNode.id} - ${currentHoveredNode.label}`);
+      // console.debug(`[UI] BillboardInfoOverlay: Showing info for node ${currentHoveredNode.id} - ${currentHoveredNode.label}`);
       setBillboardHoverInfo({
         nodeId: currentHoveredNode.id,
         label: currentHoveredNode.label,
@@ -53,13 +53,13 @@ export const BillboardInfoOverlay: Component = () => {
         isLeaf: currentHoveredNode.is_leaf,
         parentId: currentHoveredNode.parent_id
       });
-      console.log(`[UI] BillboardInfoOverlay: State updated, should be visible`);
+      // console.debug(`[UI] BillboardInfoOverlay: State updated, should be visible`);
     } else {
-      console.log(`[UI] BillboardInfoOverlay: Hiding overlay (no hovered node)`);
+      // console.debug(`[UI] BillboardInfoOverlay: Hiding overlay (no hovered node)`);
       setBillboardHoverInfo(null);
     }
   });
-  
+
   return (
     <Show when={billboardHoverInfo()}>
       {console.log(`[UI] BillboardInfoOverlay: Rendering with data`, billboardHoverInfo())}

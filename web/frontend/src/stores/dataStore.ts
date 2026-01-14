@@ -1,11 +1,11 @@
 import { createStore } from 'solid-js/store';
-import type { 
-  AppState, 
-  ClusterNode, 
-  Page, 
-  NodeCache, 
+import type {
+  AppState,
+  ClusterNode,
+  Page,
+  NodeCache,
   PageCache,
-  Namespace 
+  Namespace
 } from '../types';
 import { apiClient } from '../services/apiClient';
 
@@ -14,14 +14,14 @@ import { apiClient } from '../services/apiClient';
  * Manages application state and data caching
  */
 export const createDataStore = () => {
-  
+
   /**
    * Map backend cluster node response to frontend ClusterNode model
    */
   const _mapBackendNodeToFrontend = (backendNode: any, namespace: string): ClusterNode => {
     // Validate and normalize centroid data
     let centroid: Vector3D = [0, 0, 0]; // Default to origin
-    
+
     if (backendNode.centroid_3d !== undefined && backendNode.centroid_3d !== null) {
       if (Array.isArray(backendNode.centroid_3d) && backendNode.centroid_3d.length === 3) {
         // Validate that all values are valid numbers
@@ -38,7 +38,7 @@ export const createDataStore = () => {
     } else if (backendNode.centroid_3d === null) {
       console.warn(`[DATA] Node ${backendNode.node_id} has null centroid_3d`);
     }
-    
+
     return {
       id: backendNode.node_id || 0,
       namespace: backendNode.namespace || namespace,
@@ -53,11 +53,15 @@ export const createDataStore = () => {
       updated_at: new Date().toISOString()  // Use current time as fallback
     };
   };
-  
+
   const [state, setState] = createStore<AppState>({
     currentView: 'namespace_selection',
     currentNamespace: null,
     currentNode: null,
+    ancestorChain: [],
+    ancestorChildren: {},
+    showAncestors: false,
+    showBillboards: true,
     loading: false,
     error: null,
   });
@@ -106,6 +110,48 @@ export const createDataStore = () => {
    */
   const setCurrentNode = (node: ClusterNode | null) => {
     setState('currentNode', node);
+  };
+
+  /**
+   * Set ancestor chain
+   */
+  const setAncestorChain = (ancestors: ClusterNode[]) => {
+    setState('ancestorChain', ancestors);
+  };
+
+  /**
+   * Set ancestor children
+   */
+  const setAncestorChildren = (children: Record<number, ClusterNode[]>) => {
+    setState('ancestorChildren', children);
+  };
+
+  /**
+   * Set show ancestors flag
+   */
+  const setShowAncestors = (show: boolean) => {
+    setState('showAncestors', show);
+  };
+
+  /**
+   * Toggle ancestor visualization
+   */
+  const toggleAncestorView = () => {
+    setState('showAncestors', !state.showAncestors);
+  };
+
+  /**
+   * Set show billboards flag
+   */
+  const setShowBillboards = (show: boolean) => {
+    setState('showBillboards', show);
+  };
+
+  /**
+   * Toggle billboard visibility
+   */
+  const toggleBillboards = () => {
+    setState('showBillboards', !state.showBillboards);
   };
 
   /**
@@ -199,17 +245,17 @@ export const createDataStore = () => {
   /**
    * Load root node for namespace
    */
-  const loadRootNode = async (namespace: string): Promise<ClusterNode> => {
-    setLoading(true);
-    clearError();
-
+  const loadRootNode = async (namespace: string, bypassCache: boolean = false): Promise<ClusterNode> => {
     const cacheKey = `root_${namespace}`;
     const cachedNode = getCachedNode(cacheKey);
 
-    if (cachedNode) {
+    if (cachedNode && !bypassCache) {
       console.log(`[CACHE] Returning cached root node for namespace: ${namespace}`);
       return cachedNode as ClusterNode;
     }
+
+    setLoading(true);
+    clearError();
 
     try {
       const result = await apiClient.getRootNode(namespace);
@@ -220,15 +266,21 @@ export const createDataStore = () => {
 
       // Map backend response to frontend model
       const mappedNode = _mapBackendNodeToFrontend(result.data, namespace);
-      
+
       // Validate mapped node has a valid ID
       if (!mappedNode.id) {
         console.error('[DATA] Mapped root node missing ID:', mappedNode);
         throw new Error('Root node data is incomplete - missing ID after mapping');
       }
 
-      console.log(`[DATA] Loaded and mapped root node ${mappedNode.id} for namespace ${namespace}`);
-      
+      // Validate this is actually a root node before caching
+      if (mappedNode.parent_id !== null && mappedNode.parent_id !== undefined) {
+        console.error(`[DATA] ERROR: Attempting to cache non-root node ${mappedNode.id} (parent_id: ${mappedNode.parent_id}) as root for namespace ${namespace}`);
+        throw new Error(`Invalid root node: node ${mappedNode.id} has parent ${mappedNode.parent_id}`);
+      }
+
+      console.log(`[DATA] Loaded and mapped root node ${mappedNode.id} for namespace ${namespace} (bypass cache: ${bypassCache})`);
+
       cacheNode(cacheKey, mappedNode);
       return mappedNode;
     } catch (error) {
@@ -297,12 +349,121 @@ export const createDataStore = () => {
   };
 
   /**
+   * Load extended node view with ancestors (current node, children, parent, ancestors)
+   */
+  const loadExtendedNodeView = async (namespace: string, nodeId: number): Promise<{
+    currentNode: ClusterNode;
+    children: ClusterNode[];
+    parent: ClusterNode | null;
+    ancestors: ClusterNode[];
+    ancestorChildren: Record<number, ClusterNode[]>;
+  }> => {
+    setLoading(true);
+    clearError();
+
+    try {
+      // Load basic node view first
+      const { currentNode, children, parent } = await loadNodeView(namespace, nodeId);
+
+      // Load ancestors and their children
+      const ancestorsResult = await apiClient.getNodeAncestors(namespace, nodeId);
+
+      if (!ancestorsResult.success || !ancestorsResult.data) {
+        console.warn(`[DATA] No ancestors found for node ${nodeId} - this is expected for root nodes`);
+        return {
+          currentNode,
+          children,
+          parent,
+          ancestors: [],
+          ancestorChildren: {},
+        };
+      }
+
+      // Build list of node IDs to load children for: all ancestors + parent (if exists)
+      const ancestorIds = ancestorsResult.data.map(ancestor => ancestor.id);
+      const nodeIdsToLoadChildrenFor = [...ancestorIds];
+
+      // Add parent ID to load its children (siblings of current node)
+      if (parent && parent.id) {
+        // Only add if not already in ancestors list
+        if (!nodeIdsToLoadChildrenFor.includes(parent.id)) {
+          nodeIdsToLoadChildrenFor.push(parent.id);
+          console.log(`[DATA] Adding parent ${parent.id} to children batch load`);
+        }
+      }
+
+      console.log(`[DATA] Loading children for ${nodeIdsToLoadChildrenFor.length} nodes:`, nodeIdsToLoadChildrenFor);
+      const childrenBatchResult = await apiClient.getNodeChildrenBatch(namespace, nodeIdsToLoadChildrenFor);
+
+      if (!childrenBatchResult.success) {
+        console.warn(`[DATA] Failed to load children for some ancestors: ${childrenBatchResult.error}`);
+      }
+
+      // Map backend data to frontend models for ancestors
+      const mappedAncestors = ancestorsResult.data.map(ancestor =>
+        _mapBackendNodeToFrontend(ancestor, namespace)
+      );
+
+      // Map ancestor children
+      const mappedAncestorChildren: Record<number, ClusterNode[]> = {};
+      if (childrenBatchResult.success && childrenBatchResult.data) {
+        Object.entries(childrenBatchResult.data).forEach(([ancestorIdStr, childrenData]) => {
+          const ancestorId = parseInt(ancestorIdStr);
+          if (childrenData && childrenData.length > 0) {
+            mappedAncestorChildren[ancestorId] = childrenData.map(child =>
+              _mapBackendNodeToFrontend(child, namespace)
+            );
+            console.log(`[DATA] Loaded ${childrenData.length} children for node ${ancestorId}`);
+          } else {
+            mappedAncestorChildren[ancestorId] = [];
+          }
+        });
+      }
+
+      // Cache ancestor data
+      mappedAncestors.forEach(ancestor => {
+        cacheNode(`node_${namespace}_${ancestor.id}`, ancestor);
+      });
+
+      Object.entries(mappedAncestorChildren).forEach(([ancestorIdStr, childrenData]) => {
+        const ancestorId = parseInt(ancestorIdStr);
+        cacheNode(`children_${namespace}_${ancestorId}`, childrenData);
+      });
+
+      console.log(`[DATA] Extended view loaded: ${mappedAncestors.length} ancestors, ${Object.keys(mappedAncestorChildren).length} sets of ancestor children`);
+
+      return {
+        currentNode,
+        children,
+        parent,
+        ancestors: mappedAncestors,
+        ancestorChildren: mappedAncestorChildren,
+      };
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unknown error loading extended node view');
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
    * Navigate to a node
    */
   const navigateToNode = async (namespace: string, nodeId: number): Promise<void> => {
     try {
-      const { currentNode } = await loadNodeView(namespace, nodeId);
-      setCurrentNode(currentNode);
+      let result;
+      if (state.showAncestors) {
+        result = await loadExtendedNodeView(namespace, nodeId);
+        setAncestorChain(result.ancestors);
+        setAncestorChildren(result.ancestorChildren);
+      } else {
+        result = await loadNodeView(namespace, nodeId);
+        setAncestorChain([]);
+        setAncestorChildren({});
+      }
+
+      setCurrentNode(result.currentNode);
       setCurrentNamespace(namespace);
       setCurrentView('node_view');
     } catch (error) {
@@ -324,6 +485,8 @@ export const createDataStore = () => {
     }
 
     try {
+      // When navigating to parent, we need to reload the parent's view
+      // If we're in ancestor view, we need to load the parent with its own ancestors
       await navigateToNode(currentNamespace, currentNode.parent_id);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error navigating to parent');
@@ -343,9 +506,11 @@ export const createDataStore = () => {
     }
 
     try {
-      const rootNode = await loadRootNode(currentNamespace);
-      setCurrentNode(rootNode);
-      setCurrentView('node_view');
+      // Always fetch fresh root node from API when navigating to root
+      // This ensures we get the actual root (parent_id = null) and not a stale cache
+      const rootNode = await loadRootNode(currentNamespace, true);
+      // Use navigateToNode to properly load the full view (with children)
+      await navigateToNode(currentNamespace, rootNode.id);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error navigating to root');
       throw error;
@@ -403,6 +568,12 @@ export const createDataStore = () => {
     setCurrentView,
     setCurrentNamespace,
     setCurrentNode,
+    setAncestorChain,
+    setAncestorChildren,
+    setShowAncestors,
+    toggleAncestorView,
+    setShowBillboards,
+    toggleBillboards,
     cacheNode,
     getCachedNode,
     cachePage,
@@ -414,6 +585,7 @@ export const createDataStore = () => {
     loadNamespaces,
     loadRootNode,
     loadNodeView,
+    loadExtendedNodeView,
     navigateToNode,
     navigateToParent,
     navigateToRoot,

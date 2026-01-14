@@ -1,0 +1,689 @@
+import {
+  Engine,
+  Scene,
+  ArcRotateCamera,
+  Vector3,
+  HemisphericLight,
+  MeshBuilder,
+  Color3,
+  DirectionalLight
+} from "@babylonjs/core";
+import { NodeManager } from './nodeManager';
+import { LinkManager } from './linkManager';
+import { InteractionManager } from './interactionManager';
+import { dataStore } from '../stores/dataStore';
+import { createEffect, onCleanup } from 'solid-js';
+import type { ClusterNode } from '../types';
+
+// Global scene references for reactive updates
+export let scene: Scene | null = null;
+export let engine: Engine | null = null;
+export let camera: ArcRotateCamera | null = null;
+export let nodeManager: NodeManager | null = null;
+export let linkManager: LinkManager | null = null;
+export let interactionManager: InteractionManager | null = null;
+
+export function initScene(canvasId: string) {
+  try {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !(canvas instanceof HTMLCanvasElement)) {
+      console.error(`Canvas element with id "${canvasId}" not found or is not a canvas element`);
+      return;
+    }
+
+    // Initialize Babylon.js engine and scene
+    engine = new Engine(canvas, true);
+    scene = new Scene(engine);
+
+    // Setup camera with better initial positioning
+    camera = new ArcRotateCamera(
+      "camera",
+      Math.PI / 2,
+      Math.PI / 3,
+      10,
+      Vector3.Zero(),
+      scene
+    );
+
+    // Camera control setup
+    camera.attachControl(canvas, true);
+    camera.wheelPrecision = 50; // Smoother zoom
+    camera.panningSensibility = 500; // Better panning
+    camera.minZ = 0.1; // Closer zoom
+    camera.maxZ = 1000; // Farther zoom
+
+    // Enable camera inertia for smoother movement
+    camera.inertia = 0.8;
+
+    // Set initial camera position and target
+    camera.setPosition(new Vector3(0, 0, -15));
+    camera.setTarget(Vector3.Zero());
+
+    // console.log("[SCENE] Camera controls enabled");
+
+    // Improved lighting setup
+    const hemiLight = new HemisphericLight("hemiLight", new Vector3(0, 1, 0), scene);
+    hemiLight.intensity = 0.8;
+    hemiLight.diffuse = new Color3(0.8, 0.8, 0.8);
+    hemiLight.specular = new Color3(0.2, 0.2, 0.2);
+
+    const dirLight1 = new DirectionalLight("dirLight1", new Vector3(-1, -2, -1), scene);
+    dirLight1.intensity = 0.5;
+    dirLight1.diffuse = new Color3(0.9, 0.9, 0.9);
+    dirLight1.specular = new Color3(0.5, 0.5, 0.5);
+
+    const dirLight2 = new DirectionalLight("dirLight2", new Vector3(1, 2, -1), scene);
+    dirLight2.intensity = 0.5;
+    dirLight2.diffuse = new Color3(0.9, 0.9, 0.9);
+    dirLight2.specular = new Color3(0.5, 0.5, 0.5);
+
+    const dirLight3 = new DirectionalLight("dirLight3", new Vector3(1, 2, 1), scene);
+    dirLight3.intensity = 0.5;
+    dirLight3.diffuse = new Color3(0.9, 0.9, 0.9);
+    dirLight3.specular = new Color3(0.5, 0.5, 0.5);
+
+    // Initialize managers
+    nodeManager = new NodeManager(scene);
+    linkManager = new LinkManager(scene);
+    interactionManager = new InteractionManager(scene);
+
+    // Set node manager reference in link manager for positioning adjustments
+    if (linkManager && nodeManager) {
+      linkManager.setNodeManager(nodeManager);
+    }
+
+    // Synchronize scene scaling between node and link managers
+    // This ensures links scale properly with nodes
+    const initialScale = 3.0; // Default scale factor
+    if (nodeManager) nodeManager.setSceneScale(initialScale);
+    if (linkManager) linkManager.setSceneScale(initialScale);
+
+    // Setup reactive updates for data store changes
+    setupReactiveUpdates();
+
+    // Create a simple box for initial demo (will be removed when nodes are loaded)
+    const demoBox = MeshBuilder.CreateBox("demoBox", { size: 1 }, scene);
+    demoBox.position = new Vector3(0, 0, 0);
+
+    // Store reference to remove later
+    (scene as any).demoBox = demoBox;
+
+    // Ensure canvas has focus for camera controls
+    canvas.focus();
+    canvas.tabIndex = 1; // Make canvas focusable
+
+    engine.runRenderLoop(() => {
+      try {
+        if (scene) {
+          // Update label visibility based on camera distance (LOD system)
+          if (nodeManager && camera) {
+            nodeManager.updateLabelVisibility(camera);
+          }
+
+          scene.render();
+        }
+      } catch (renderError) {
+        console.error("Error during scene rendering:", renderError);
+      }
+    });
+
+    window.addEventListener("resize", () => {
+      try {
+        if (engine) {
+          engine.resize();
+        }
+      } catch (resizeError) {
+        console.error("Error during engine resize:", resizeError);
+      }
+    });
+
+    // console.log("[SCENE] Babylon.js scene initialized with visualization managers");
+
+    return {
+      engine,
+      scene,
+      camera,
+      nodeManager,
+      linkManager,
+      interactionManager
+    };
+  } catch (error) {
+    console.error("Failed to initialize Babylon.js scene:", error);
+    return null;
+  }
+}
+
+/**
+ * Setup reactive updates for data store changes
+ */
+function setupReactiveUpdates() {
+  if (!scene || !nodeManager || !linkManager) {
+    console.error("[SCENE] Cannot setup reactive updates - scene or managers not initialized");
+    return;
+  }
+
+  // Reactive effect for current view changes
+  createEffect(() => {
+    const currentView = dataStore.state.currentView;
+    const currentNode = dataStore.state.currentNode;
+    const currentNamespace = dataStore.state.currentNamespace;
+    const showAncestors = dataStore.state.showAncestors;
+
+    // console.log(`[SCENE] View changed to: ${currentView}, showAncestors: ${showAncestors}`);
+
+    if (currentView === 'node_view' && currentNode && currentNamespace) {
+      // Remove demo box if it exists
+      if ((scene as any).demoBox) {
+        (scene as any).demoBox.dispose();
+        (scene as any).demoBox = null;
+      }
+
+      // Load and render the appropriate node view
+      if (showAncestors) {
+        loadExtendedNodeView(currentNamespace, currentNode.id);
+      } else {
+        loadNodeView(currentNamespace, currentNode.id);
+      }
+    }
+  });
+
+  // Reactive effect for ancestor view toggle
+  createEffect(() => {
+    const showAncestors = dataStore.state.showAncestors;
+    const currentView = dataStore.state.currentView;
+    const currentNode = dataStore.state.currentNode;
+    const currentNamespace = dataStore.state.currentNamespace;
+
+    // console.log(`[SCENE] Ancestor view toggle changed to: ${showAncestors}`);
+
+    // When ancestor view is toggled, reload the current node with appropriate view
+    if (currentView === 'node_view' && currentNode && currentNamespace) {
+      if (showAncestors) {
+        loadExtendedNodeView(currentNamespace, currentNode.id);
+      } else {
+        loadNodeView(currentNamespace, currentNode.id);
+      }
+    }
+  });
+
+  // Reactive effect for current node changes
+  createEffect(() => {
+    const currentNode = dataStore.state.currentNode;
+    const showAncestors = dataStore.state.showAncestors;
+    if (currentNode) {
+      // console.log(`[SCENE] Current node changed to: ${currentNode.id} (${currentNode.label})`);
+
+      // Center camera on appropriate target based on view mode
+      if (camera && currentNode.centroid) {
+        let targetPosition: Vector3;
+
+        if (showAncestors) {
+          // For ancestor view, focus on centroid of current node and its children
+          targetPosition = calculateAncestorViewCentroid(currentNode);
+        } else {
+          // For regular view, focus on current node only
+          targetPosition = new Vector3(
+            currentNode.centroid[0],
+            currentNode.centroid[1],
+            currentNode.centroid[2]
+          );
+        }
+
+        // Reset camera to consistent zoom level and position
+        resetCameraForNodeView(camera, targetPosition, showAncestors);
+
+        // console.log(`[SCENE] Camera centered on ${showAncestors ? 'ancestor view centroid' : 'node'} ${currentNode.id} at (${targetPosition.x}, ${targetPosition.y}, ${targetPosition.z})`);
+      }
+    }
+  });
+}
+
+/**
+ * Load and render a node view (current node, children, parent)
+ */
+async function loadNodeView(namespace: string, nodeId: number) {
+  if (!scene || !nodeManager || !linkManager) {
+    console.error("[SCENE] Cannot load node view - scene or managers not initialized");
+    return;
+  }
+
+  try {
+    // console.log(`[SCENE] Loading node view for node ${nodeId} in namespace ${namespace}`);
+
+    // Clear existing nodes and links
+    nodeManager.clearAllNodes();
+    linkManager.clearAllLinks();
+
+    // Load node data using API client
+    const nodeViewData = await dataStore.loadNodeView(namespace, nodeId);
+
+    // Log node data for debugging
+    /* console.log(`[SCENE] Loaded node view data:`, {
+      currentNode: {
+        id: nodeViewData.currentNode.id,
+        label: nodeViewData.currentNode.label,
+        depth: nodeViewData.currentNode.depth,
+        centroid: nodeViewData.currentNode.centroid,
+        hasValidCentroid: nodeViewData.currentNode.centroid &&
+                         Array.isArray(nodeViewData.currentNode.centroid) &&
+                         nodeViewData.currentNode.centroid.length === 3
+      },
+      childrenCount: nodeViewData.children.length,
+      parentExists: !!nodeViewData.parent
+    }); */
+
+    // Validate children data
+    const invalidChildren = nodeViewData.children.filter(child =>
+      !child || !child.id || !child.centroid || !Array.isArray(child.centroid) || child.centroid.length !== 3
+    );
+
+    if (invalidChildren.length > 0) {
+      console.warn(`[SCENE] Found ${invalidChildren.length} children with invalid centroids:`,
+                  invalidChildren.map(c => ({ id: c?.id, label: c?.label, centroid: c?.centroid })));
+
+      // Filter out completely invalid children to prevent rendering issues
+      const validChildren = nodeViewData.children.filter(child =>
+        child && child.id && child.centroid && Array.isArray(child.centroid) && child.centroid.length === 3
+      );
+
+      // console.log(`[SCENE] Filtered out ${nodeViewData.children.length - validChildren.length} invalid children, keeping ${validChildren.length} valid ones`);
+
+      // Update the node view data to only include valid children
+      nodeViewData.children = validChildren;
+    }
+
+    // Create current node
+    const currentNodeMesh = nodeManager.createNode(nodeViewData.currentNode);
+    console.log(`[SCENE] Created current node ${nodeViewData.currentNode.id} (${nodeViewData.currentNode.label}) at depth ${nodeViewData.currentNode.depth}`);
+    console.log(`[SCENE] Current node centroid: [${nodeViewData.currentNode.centroid}]`);
+    console.log(`[SCENE] Current node position: (${currentNodeMesh.position.x}, ${currentNodeMesh.position.y}, ${currentNodeMesh.position.z})`);
+
+    // Register nodes with interaction manager
+    interactionManager?.registerNode(nodeViewData.currentNode.id, nodeViewData.currentNode);
+
+    // Create parent node if it exists
+    if (nodeViewData.parent) {
+      try {
+        const parentNodeMesh = nodeManager.createNode(nodeViewData.parent);
+        interactionManager?.registerNode(nodeViewData.parent.id, nodeViewData.parent);
+
+        // Create link from parent to current node
+        try {
+          linkManager.createLink(nodeViewData.parent, nodeViewData.currentNode);
+          // console.log(`[SCENE] Created link from parent ${nodeViewData.parent.id} to current node ${nodeViewData.currentNode.id}`);
+        } catch (linkError) {
+          console.error(`[SCENE] Failed to create link from parent to current node:`, linkError);
+        }
+        // console.log(`[SCENE] Created parent node ${nodeViewData.parent.id}`);
+      } catch (error) {
+        console.error(`[SCENE] Failed to create parent node:`, error);
+      }
+    } else {
+      // console.log(`[SCENE] No parent node for ${nodeViewData.currentNode.id} - this is expected for root nodes`);
+    }
+
+    // Create child nodes
+    const successfulChildren: Array<number> = [];
+    const failedChildren: Array<number> = [];
+
+    nodeViewData.children.forEach(child => {
+      try {
+        // For non-root nodes, position children relative to the current node
+        const relativeToNode = nodeViewData.currentNode.depth > 0 ? nodeViewData.currentNode : undefined;
+        if (relativeToNode) {
+          console.log(`[SCENE] Creating child node ${child.id} (${child.label}) relative to node ${relativeToNode.id} (${relativeToNode.label})`);
+        }
+        const childNodeMesh = nodeManager.createNode(child, false, undefined, relativeToNode);
+        interactionManager.registerNode(child.id, child);
+
+        // Create link from current node to child
+        try {
+          linkManager.createLink(nodeViewData.currentNode, child);
+          // console.log(`[SCENE] Created link from current node ${nodeViewData.currentNode.id} to child ${child.id}`);
+        } catch (linkError) {
+          console.error(`[SCENE] Failed to create link to child ${child.id}:`, linkError);
+        }
+
+        successfulChildren.push(child.id);
+      } catch (error) {
+        console.error(`[SCENE] Failed to create child node ${child.id} (${child.label}):`, error);
+        failedChildren.push({ id: child.id, label: child.label, error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    });
+
+    if (failedChildren.length > 0) {
+      console.warn(`[SCENE] Created ${successfulChildren.length} children successfully, failed to create ${failedChildren.length} children`);
+      console.warn('[SCENE] Failed children:', failedChildren);
+    }
+
+    /* console.log(`[SCENE] Successfully loaded node view: ` +
+                `${nodeViewData.children.length} children, ` +
+                `${nodeViewData.parent ? 1 : 0} parent`); */
+
+  } catch (error) {
+    console.error("[SCENE] Failed to load node view:", error);
+    dataStore.setError(`Failed to load node view: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Load and render an extended node view with ancestors
+ */
+async function loadExtendedNodeView(namespace: string, nodeId: number) {
+  if (!scene || !nodeManager || !linkManager) {
+    console.error("[SCENE] Cannot load extended node view - scene or managers not initialized");
+    return;
+  }
+
+  try {
+    console.log(`[SCENE] Loading extended node view for node ${nodeId} in namespace ${namespace}`);
+
+    // Clear existing nodes and links
+    nodeManager.clearAllNodes();
+    linkManager.clearAllLinks();
+
+    // Load extended node data using API client
+    const nodeViewData = await dataStore.loadExtendedNodeView(namespace, nodeId);
+
+    // Log node data for debugging
+    console.log(`[SCENE] Loaded extended node view data:`, {
+      currentNode: {
+        id: nodeViewData.currentNode.id,
+        label: nodeViewData.currentNode.label,
+        depth: nodeViewData.currentNode.depth,
+      },
+      childrenCount: nodeViewData.children.length,
+      parentExists: !!nodeViewData.parent,
+      ancestorCount: nodeViewData.ancestors.length,
+      ancestorChildrenCount: Object.keys(nodeViewData.ancestorChildren).length
+    });
+
+    // Create current node
+    const currentNodeMesh = nodeManager.createNode(nodeViewData.currentNode);
+    console.log(`[SCENE] Created current node ${nodeViewData.currentNode.id} (${nodeViewData.currentNode.label}) at depth ${nodeViewData.currentNode.depth}`);
+    console.log(`[SCENE] Current node centroid: [${nodeViewData.currentNode.centroid}]`);
+    console.log(`[SCENE] Current node position: (${currentNodeMesh.position.x}, ${currentNodeMesh.position.y}, ${currentNodeMesh.position.z})`);
+
+    // Register nodes with interaction manager
+    interactionManager?.registerNode(nodeViewData.currentNode.id, nodeViewData.currentNode);
+
+    // Note: In extended view, parent is included in ancestors, so we process it there
+    // Don't create parent separately to avoid duplicates
+
+    // Create child nodes
+    const successfulChildren = [];
+    const failedChildren = [];
+
+    nodeViewData.children.forEach(child => {
+      try {
+        const childNodeMesh = nodeManager?.createNode(child);
+        interactionManager?.registerNode(child.id, child);
+
+        // Create link from current node to child
+        try {
+          linkManager.createLink(nodeViewData.currentNode, child);
+          //console.debug(`[SCENE] Created link from current node ${nodeViewData.currentNode.id} to child ${child.id}`);
+        } catch (linkError) {
+          console.error(`[SCENE] Failed to create link to child ${child.id}:`, linkError);
+        }
+
+        successfulChildren.push(child.id);
+      } catch (error) {
+        console.error(`[SCENE] Failed to create child node ${child.id} (${child.label}):`, error);
+        failedChildren.push({ id: child.id, label: child.label, error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    });
+
+    if (failedChildren.length > 0) {
+      console.warn(`[SCENE] Created ${successfulChildren.length} children successfully, failed to create ${failedChildren.length} children`);
+      console.warn('[SCENE] Failed children:', failedChildren);
+    }
+
+    // Create parent node if it exists (positioned 5x farther from current node)
+    if (nodeViewData.parent) {
+      try {
+        const parentNodeMesh = nodeManager.createNode(nodeViewData.parent, true, nodeViewData.currentNode);
+        interactionManager.registerNode(nodeViewData.parent.id, nodeViewData.parent);
+        console.log(`[SCENE] Created parent node ${nodeViewData.parent.id} with extended positioning`);
+
+        // Create link from parent to current node (normal link, but will be longer due to repositioning)
+        try {
+          linkManager.createLink(nodeViewData.parent, nodeViewData.currentNode, false);
+          console.log(`[SCENE] Created link from parent ${nodeViewData.parent.id} to current node ${nodeViewData.currentNode.id}`);
+        } catch (linkError) {
+          console.error(`[SCENE] Failed to create link from parent to current node:`, linkError);
+        }
+      } catch (error) {
+        console.error(`[SCENE] Failed to create parent node:`, error);
+      }
+    }
+
+    // Create ancestor nodes and their children
+    if (nodeViewData.ancestors && nodeViewData.ancestors.length > 0) {
+      console.log(`[SCENE] Creating ${nodeViewData.ancestors.length} ancestor nodes`);
+
+      // Create ancestor nodes
+      nodeViewData.ancestors.forEach(ancestor => {
+        try {
+          const ancestorNodeMesh = nodeManager.createNode(ancestor, true);
+          interactionManager.registerNode(ancestor.id, ancestor);
+          console.log(`[SCENE] Created ancestor node ${ancestor.id} (${ancestor.label})`);
+        } catch (error) {
+          console.error(`[SCENE] Failed to create ancestor node ${ancestor.id}:`, error);
+        }
+      });
+
+      // Create links between ancestors (normal links)
+      for (let i = 0; i < nodeViewData.ancestors.length - 1; i++) {
+        const parentAncestor = nodeViewData.ancestors[i];
+        const childAncestor = nodeViewData.ancestors[i + 1];
+
+        try {
+          linkManager.createLink(parentAncestor, childAncestor, false);
+          console.log(`[SCENE] Created link between ancestors ${parentAncestor.id} -> ${childAncestor.id}`);
+        } catch (linkError) {
+          console.error(`[SCENE] Failed to create link between ancestors ${parentAncestor.id} -> ${childAncestor.id}:`, linkError);
+        }
+      }
+
+      // Create link from last ancestor to parent (normal link)
+      if (nodeViewData.ancestors.length > 0 && nodeViewData.parent) {
+        const lastAncestor = nodeViewData.ancestors[nodeViewData.ancestors.length - 1];
+        try {
+          linkManager.createLink(lastAncestor, nodeViewData.parent, false);
+          console.log(`[SCENE] Created link from last ancestor ${lastAncestor.id} to parent ${nodeViewData.parent.id}`);
+        } catch (linkError) {
+          console.error(`[SCENE] Failed to create link from last ancestor to parent:`, linkError);
+        }
+      }
+
+      // Create ancestor children (direct children for each ancestor)
+      Object.entries(nodeViewData.ancestorChildren).forEach(([ancestorIdStr, children]) => {
+        const ancestorId = parseInt(ancestorIdStr);
+
+        // Find the ancestor node - could be in ancestors array or be the parent
+        let ancestorNode = nodeViewData.ancestors.find(a => a.id === ancestorId);
+        if (!ancestorNode && nodeViewData.parent && nodeViewData.parent.id === ancestorId) {
+          ancestorNode = nodeViewData.parent;
+          console.log(`[SCENE] Creating children for parent node ${ancestorId}`);
+        }
+
+        if (ancestorNode && children && children.length > 0) {
+          console.log(`[SCENE] Creating ${children.length} children for ancestor/parent ${ancestorId}`);
+
+          children.forEach(child => {
+            // Skip the current node if it appears in parent's children
+            if (child.id === nodeViewData.currentNode.id) {
+              console.log(`[SCENE] Skipping current node ${child.id} in parent's children`);
+              return;
+            }
+
+            try {
+              const childNodeMesh = nodeManager.createNode(child, true); // Create as ancestor node
+              interactionManager.registerNode(child.id, child);
+
+              // Create link from ancestor to its child (normal link, not extended)
+              try {
+                linkManager.createLink(ancestorNode, child, false);
+                console.log(`[SCENE] Created link from ancestor/parent ${ancestorNode.id} to its child ${child.id}`);
+              } catch (linkError) {
+                console.error(`[SCENE] Failed to create link from ancestor ${ancestorNode.id} to child ${child.id}:`, linkError);
+              }
+            } catch (error) {
+              console.error(`[SCENE] Failed to create ancestor child node ${child.id}:`, error);
+            }
+          });
+        }
+      });
+    }
+
+    console.log(`[SCENE] Successfully loaded extended node view with ${nodeViewData.ancestors.length} ancestors`);
+
+  } catch (error) {
+    console.error("[SCENE] Failed to load extended node view:", error);
+    dataStore.setError(`Failed to load extended node view: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Calculate centroid for ancestor view (current node + its children)
+ */
+function calculateAncestorViewCentroid(currentNode: ClusterNode): Vector3 {
+  // Get current node position
+  const currentNodePosition = new Vector3(
+    currentNode.centroid[0] * (nodeManager?.getSceneScale() || 3.0),
+    currentNode.centroid[1] * (nodeManager?.getSceneScale() || 3.0),
+    currentNode.centroid[2] * (nodeManager?.getSceneScale() || 3.0)
+  );
+
+  // Get children positions from the scene
+  const childrenPositions: Vector3[] = [];
+  const currentNodeId = currentNode.id;
+
+  if (nodeManager) {
+    const allNodes = nodeManager.getAllNodes();
+    allNodes.forEach((mesh, nodeId) => {
+      // Check if this node is a child of the current node
+      // For now, we'll use a simple approach: if it's not the current node and not an ancestor
+      if (nodeId !== currentNodeId) {
+        childrenPositions.push(mesh.position);
+      }
+    });
+  }
+
+  // Calculate centroid
+  if (childrenPositions.length === 0) {
+    return currentNodePosition; // Only current node
+  }
+
+  // Add current node to the mix
+  const allPositions = [currentNodePosition, ...childrenPositions];
+
+  // Calculate average position
+  const sum = allPositions.reduce((acc, pos) => {
+    return new Vector3(
+      acc.x + pos.x,
+      acc.y + pos.y,
+      acc.z + pos.z
+    );
+  }, Vector3.Zero());
+
+  return new Vector3(
+    sum.x / allPositions.length,
+    sum.y / allPositions.length,
+    sum.z / allPositions.length
+  );
+}
+
+
+
+/**
+ * Ease in out quad function for smooth animations
+ */
+function easeInOutQuad(t: number): number {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+/**
+ * Reset camera to appropriate position and zoom for node view
+ */
+function resetCameraForNodeView(camera: ArcRotateCamera, targetPosition: Vector3, isAncestorView: boolean): void {
+  // Base camera radius (zoom level)
+  const baseRadius = 16;
+
+  // Adjust radius based on view type
+  const finalRadius = isAncestorView ? baseRadius * 1.3 : baseRadius; // Slightly more zoom for ancestor view
+
+  // Store current camera state for smooth transition
+  const currentTarget = camera.target.clone();
+  const currentRadius = camera.radius;
+  const currentAlpha = camera.alpha;
+  const currentBeta = camera.beta;
+
+  // Create smooth transition animation
+  let frameCount = 0;
+  const totalFrames = 20; // Shorter animation for snappier response
+
+  const animationId = setInterval(() => {
+    frameCount++;
+    const progress = frameCount / totalFrames;
+    const easedProgress = easeInOutQuad(progress);
+
+    // Interpolate target position
+    const newTarget = Vector3.Lerp(currentTarget, targetPosition, easedProgress);
+    camera.setTarget(newTarget);
+
+    // Interpolate radius (zoom level)
+    const newRadius = currentRadius + (finalRadius - currentRadius) * easedProgress;
+    camera.radius = newRadius;
+
+    // Preserve camera angles (alpha, beta) for consistent orientation
+    // This prevents the camera from jumping to a different angle
+    camera.alpha = currentAlpha;
+    camera.beta = currentBeta;
+
+    if (frameCount >= totalFrames) {
+      clearInterval(animationId);
+      // Ensure final values are set precisely
+      camera.setTarget(targetPosition);
+      camera.radius = finalRadius;
+    }
+  }, 16); // ~60fps
+}
+
+/**
+ * Clean up scene resources
+ */
+export function cleanupScene() {
+  if (nodeManager) {
+    nodeManager.dispose();
+    nodeManager = null;
+  }
+
+  if (linkManager) {
+    linkManager.dispose();
+    linkManager = null;
+  }
+
+  if (interactionManager) {
+    interactionManager.dispose();
+    interactionManager = null;
+  }
+
+  if (scene) {
+    scene.dispose();
+    scene = null;
+  }
+
+  if (engine) {
+    engine.dispose();
+    engine = null;
+  }
+
+  // console.log("[SCENE] Scene resources cleaned up");
+}
+
+// Setup cleanup on component unmount
+onCleanup(() => {
+  cleanupScene();
+});

@@ -308,6 +308,43 @@ class DatabaseService(ClusterService):
             return None
         return self._map_cluster_row_to_response(row, namespace)
 
+    def get_cluster_node_ancestors(
+        self, namespace, node_id: int
+    ) -> list[ClusterNodeResponse]:
+        """Get parent node of a specific cluster node"""
+        sqlconn = self._get_connection(namespace)
+        select_sql = """
+            WITH RECURSIVE ancestor_tree AS (
+                SELECT node_id, namespace, parent_id, depth, doc_count, child_count, final_label, centroid_three_d
+                FROM cluster_tree
+                WHERE namespace = :namespace AND node_id = :node_id
+
+                UNION ALL
+
+                -- Recursive case: find parent of current node
+                SELECT p.node_id, p.namespace, p.parent_id, p.depth, p.doc_count, p.child_count,
+                    p.final_label, p.centroid_three_d
+                FROM cluster_tree AS p
+                JOIN ancestor_tree AS a ON a.parent_id = p.node_id AND a.namespace = p.namespace
+                WHERE p.namespace = :namespace
+            )
+            SELECT node_id, namespace, parent_id, depth, doc_count, child_count, final_label, centroid_three_d
+            FROM ancestor_tree
+            WHERE node_id != :node_id  -- Exclude the original node
+            ORDER BY depth DESC;  -- Order from root (highest depth) to direct parent (lowest depth)
+        """
+        cursor = sqlconn.execute(
+            select_sql,
+            {
+                "node_id": node_id,
+                "namespace": namespace,
+            },
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            return []
+        return [self._map_cluster_row_to_response(row, namespace) for row in rows]
+
     def _map_cluster_row_to_response(
             self,
             row: sqlite3.Row,

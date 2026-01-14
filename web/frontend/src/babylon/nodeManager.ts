@@ -12,44 +12,34 @@ import {
   Engine
 } from "@babylonjs/core";
 import type { ClusterNode } from '../types';
+import { ClusterManager } from './clusterManager';
+import { dataStore } from '../stores/dataStore';
 
 /**
  * Node Manager for WP Embeddings Visualization
- * Handles creation, management, and destruction of 3D nodes
+ * Simplified version that delegates to ClusterManager
  */
 export class NodeManager {
   private scene: Scene;
-  private nodeMeshes: Map<number, Mesh> = new Map();
+  private clusterManager: ClusterManager;
   private nodeMaterials: Map<string, StandardMaterial> = new Map();
   private nodeContainer: TransformNode;
 
-  // Mesh quality settings (adjustable for performance)
-  private sphereSegments: number = 16;
-  private sphereDiameter: number = 0.5;
-
-  // Scene scaling factor to make the visualization more spread out
-  private sceneScale: number = 3.0; // 3x scaling for better visibility
-
-  // Fallback position tracking for nodes without centroids
-  private fallbackPositionIndex: number = 0;
-  private readonly FALLBACK_RADIUS: number = 10; // Distance from origin
-  private readonly FALLBACK_ANGLE_INCREMENT: number = Math.PI / 4; // 45 degree increments
-
   // Billboard labels for nodes
   private nodeBillboards: Map<number, Mesh> = new Map();
+  private billboardMaterials: Map<number, StandardMaterial> = new Map();
 
   // LOD (Level of Detail) settings for label visibility
-  private readonly LABEL_VISIBILITY_DISTANCE: number = 20; // Show labels when closer than this
-  private readonly LABEL_FADE_START: number = 15; // Start fading at this distance
+  private readonly LABEL_VISIBILITY_DISTANCE: number = 20;
+  private readonly LABEL_FADE_START: number = 15;
 
-  constructor(scene: Scene) {
+  constructor(scene: Scene, clusterManager: ClusterManager) {
     this.scene = scene;
+    this.clusterManager = clusterManager;
     this.nodeContainer = new TransformNode("nodeContainer", scene);
 
     // Initialize color materials
     this.initializeMaterials();
-
-    // console.log('[NODE] NodeManager initialized with scene scale:', this.sceneScale);
   }
 
   /**
@@ -93,17 +83,10 @@ export class NodeManager {
       material.specularPower = 32;
       this.nodeMaterials.set(`depth_${index}`, material);
     });
-
-    // console.log('[NODE] Initialized node materials');
   }
-
 
   /**
    * Wrap text into multiple lines based on maximum width
-   * @param text The text to wrap
-   * @param maxWidth Maximum width in pixels before wrapping
-   * @param fontSize Font size in pixels
-   * @returns Array of text lines
    */
   private wrapText(text: string, maxWidth: number, fontSize: number): string[] {
     const words = text.split(' ');
@@ -111,24 +94,18 @@ export class NodeManager {
     let currentLine = '';
 
     for (const word of words) {
-      // Estimate if adding this word would exceed max width
-      // Approximate: each character is about fontSize/2 pixels wide
       const estimatedLineWidth = (currentLine.length + word.length) * (fontSize / 2);
 
       if (currentLine.length === 0) {
-        // First word in line
         currentLine = word;
       } else if (estimatedLineWidth < maxWidth) {
-        // Add to current line
         currentLine += ' ' + word;
       } else {
-        // Start new line
         lines.push(currentLine);
         currentLine = word;
       }
     }
 
-    // Add the last line
     if (currentLine.length > 0) {
       lines.push(currentLine);
     }
@@ -137,288 +114,130 @@ export class NodeManager {
   }
 
   /**
-   * Generate a unique fallback position for nodes without centroids
-   * Positions nodes in a circle around the origin to prevent overlap
+   * Create or update a node in the scene using ClusterManager
    */
-  private getFallbackPosition(): Vector3 {
-    // Calculate position on a circle in the X-Z plane (Y=0 for simplicity)
-    const angle = this.fallbackPositionIndex * this.FALLBACK_ANGLE_INCREMENT;
-    const x = this.FALLBACK_RADIUS * Math.cos(angle);
-    const z = this.FALLBACK_RADIUS * Math.sin(angle);
-
-    // Increment index for next fallback position
-    this.fallbackPositionIndex++;
-
-    // Add some vertical variation for better visual distinction
-    const y = this.fallbackPositionIndex % 2 === 0 ? 1 : -1;
-
-    // Apply scene scaling to fallback positions as well
-    return new Vector3(
-      x * this.sceneScale,
-      y * this.sceneScale,
-      z * this.sceneScale
-    );
+  public createNode(node: ClusterNode, clusterNodeId: number): Mesh {
+    // Delegate to ClusterManager for node creation
+    return this.clusterManager.addNodeToCluster(node, clusterNodeId);
   }
 
   /**
-   * Validate node data before creation
+   * Create a link between two nodes using ClusterManager
    */
-  private validateNode(node: ClusterNode): boolean {
-    if (!node || !node.id) {
-      console.error('[NODE] Invalid node - missing required fields:', node);
-      return false;
-    }
-
-    if (node.centroid === undefined) {
-      console.warn(`[NODE] Node ${node.id} (${node.label}) is missing centroid data - will use fallback position`);
-      return true; // We can still create the node, just use fallback position
-    }
-
-    if (!Array.isArray(node.centroid) || node.centroid.length !== 3) {
-      console.error(`[NODE] Node ${node.id} (${node.label}) has invalid centroid format:`, node.centroid);
-      return false;
-    }
-
-    // Check for NaN or Infinite values
-    const [x, y, z] = node.centroid;
-    if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number' ||
-        isNaN(x) || isNaN(y) || isNaN(z) || !isFinite(x) || !isFinite(y) || !isFinite(z)) {
-      console.error(`[NODE] Node ${node.id} (${node.label}) has invalid centroid values:`, node.centroid);
-      return false;
-    }
-
-    return true;
+  public createLink(parentNode: ClusterNode, childNode: ClusterNode, clusterNodeId: number): Mesh {
+    // Delegate to ClusterManager for link creation
+    return this.clusterManager.addLinkToCluster(parentNode, childNode, clusterNodeId);
   }
 
   /**
-   * Create or update a node in the scene
+   * Show a cluster (make all its nodes and links visible)
    */
-  public createNode(node: ClusterNode): Mesh {
-    // Validate node data first
-    if (!this.validateNode(node)) {
-      console.error(`[NODE] Failed validation - cannot create node ${node.id}`);
-      throw new Error(`Invalid node data for node ${node.id}`);
-    }
-
-    // Check if node already exists
-    const existingMesh = this.nodeMeshes.get(node.id);
-    if (existingMesh) {
-      this.updateNode(existingMesh, node);
-      return existingMesh;
-    }
-
-    // Create new node mesh
-    const nodeMesh = MeshBuilder.CreateSphere(
-      `node_${node.id}`,
-      {
-        segments: this.sphereSegments,
-        diameter: this.sphereDiameter
-      },
-      this.scene
-    );
-
-    // Set node properties
-    this.updateNode(nodeMesh, node);
-
-    // Parent to container for easier management
-    nodeMesh.setParent(this.nodeContainer);
-
-    // Store reference
-    this.nodeMeshes.set(node.id, nodeMesh);
-
-    // Create billboard label for the node
-    this.createBillboardLabel(node, nodeMesh);
-
-    // console.log(`[NODE] Created node ${node.id} (${node.label}) at depth ${node.depth}`);
-
-    return nodeMesh;
+  public showCluster(clusterNodeId: number): void {
+    this.clusterManager.showCluster(clusterNodeId);
+    this.showBillboardsForCluster(clusterNodeId);
   }
 
   /**
-   * Update an existing node mesh
+   * Hide a cluster (make all its nodes and links invisible)
    */
-  private updateNode(mesh: Mesh, node: ClusterNode): void {
-    // Position the node using its centroid with scene scaling
-    if (node.centroid && Array.isArray(node.centroid) && node.centroid.length === 3) {
-      // Validate that all centroid values are valid numbers
-      const [x, y, z] = node.centroid;
-      if (typeof x === 'number' && typeof y === 'number' && typeof z === 'number' &&
-          isFinite(x) && isFinite(y) && isFinite(z)) {
-        // Apply scene scaling to make the visualization more spread out
-        const scaledX = x * this.sceneScale;
-        const scaledY = y * this.sceneScale;
-        const scaledZ = z * this.sceneScale;
-        mesh.position = new Vector3(scaledX, scaledY, scaledZ);
-        // console.log(`[NODE] Original centroid (${x}, ${y}, ${z}) scaled by ${this.sceneScale} -> (${scaledX}, ${scaledY}, ${scaledZ})`);
-      } else {
-        // Use fallback position for invalid centroid values
-        mesh.position = this.getFallbackPosition();
-        console.warn(`[NODE] Node ${node.id} has invalid centroid values - using fallback position:`, node.centroid);
-      }
-    } else if (node.centroid === undefined) {
-      // Use fallback position for missing centroid data
-      mesh.position = this.getFallbackPosition();
-      console.warn(`[NODE] Node ${node.id} is missing centroid data - using fallback position`);
-    } else {
-      // Use fallback position for malformed centroid data
-      mesh.position = this.getFallbackPosition();
-      console.warn(`[NODE] Node ${node.id} has malformed centroid - using fallback position:`, node.centroid);
-    }
-
-    // Apply appropriate material based on node type
-    this.applyNodeMaterial(mesh, node);
-
-    // Enable physics and interactions
-    mesh.isPickable = true;
-    mesh.checkCollisions = true;
+  public hideCluster(clusterNodeId: number): void {
+    this.clusterManager.hideCluster(clusterNodeId);
+    this.hideBillboardsForCluster(clusterNodeId);
   }
 
   /**
-   * Apply material to node based on its type and depth
+   * Clean up unused nodes and links
    */
-  private applyNodeMaterial(mesh: Mesh, node: ClusterNode): void {
-    let materialKey: string;
-
-    if (node.depth === 0) {
-      // Root node
-      materialKey = 'root';
-    } else if (node.is_leaf) {
-      // Leaf node
-      materialKey = 'leaf';
-    } else {
-      // Non-leaf, non-root node - use depth-based color
-      // Clamp depth to available materials
-      const depthIndex = Math.min(Math.max(0, node.depth - 1), 11); // 0-11 for 12 depth levels
-      materialKey = `depth_${depthIndex}`;
-    }
-
-    const material = this.nodeMaterials.get(materialKey);
-    if (material) {
-      mesh.material = material;
-    } else {
-      console.error(`[NODE] No material found for key: ${materialKey}`);
-      // Fallback to default material
-      const fallbackMaterial = new StandardMaterial(`fallback_${node.id}`, this.scene);
-      fallbackMaterial.diffuseColor = new Color3(0.8, 0.8, 0.8); // Gray
-      mesh.material = fallbackMaterial;
-    }
-  }
-
-  /**
-   * Remove a node from the scene
-   */
-  public removeNode(nodeId: number): void {
-    const mesh = this.nodeMeshes.get(nodeId);
-    if (mesh) {
-      mesh.dispose();
-      this.nodeMeshes.delete(nodeId);
-      // console.log(`[NODE] Removed node ${nodeId}`);
-    }
-  }
-
-  /**
-   * Remove all nodes from the scene
-   */
-  public clearAllNodes(): void {
-    this.nodeMeshes.forEach((mesh, nodeId) => {
-      mesh.dispose();
-    });
-    this.nodeMeshes.clear();
-
-    // Also clear billboards when clearing nodes
-    this.clearAllBillboards();
-
-    // console.log('[NODE] Cleared all nodes and billboards');
+  public cleanupUnusedResources(): void {
+    this.clusterManager.cleanupUnusedNodes();
+    this.clusterManager.cleanupUnusedLinks();
   }
 
   /**
    * Get a node mesh by ID
    */
   public getNode(nodeId: number): Mesh | undefined {
-    return this.nodeMeshes.get(nodeId);
+    return this.clusterManager.getNodeMesh(nodeId);
   }
 
   /**
    * Get all node meshes
    */
   public getAllNodes(): Map<number, Mesh> {
-    return this.nodeMeshes;
+    // Return a copy of the master node map
+    const allNodes = this.clusterManager.getAllNodes();
+    return allNodes ? new Map(allNodes) : new Map();
   }
 
   /**
-   * Set mesh quality settings
+   * Remove a node from the scene
    */
-  public setMeshQuality(segments: number, diameter: number): void {
-    this.sphereSegments = segments;
-    this.sphereDiameter = diameter;
-    // console.log(`[NODE] Updated mesh quality: segments=${segments}, diameter=${diameter}`);
+  public removeNode(nodeId: number): void {
+    // Note: In the new architecture, nodes are managed by ClusterManager
+    // and are automatically cleaned up when not in visible clusters
+    // This method is kept for backward compatibility
   }
 
   /**
-   * Get current mesh quality settings
+   * Remove all nodes from the scene
    */
-  public getMeshQuality(): { segments: number; diameter: number } {
-    return {
-      segments: this.sphereSegments,
-      diameter: this.sphereDiameter
-    };
+  public clearAllNodes(): void {
+    this.clusterManager.clearAll();
+    this.clearAllBillboards();
   }
 
   /**
-   * Set scene scaling factor
-   * @param scale The scaling factor to apply to node positions
+   * Create a billboard label for a node (public method for external access)
    */
-  public setSceneScale(scale: number): void {
-    this.sceneScale = scale;
-    // console.log(`[NODE] Updated scene scale to ${scale}x`);
-  }
+  public createBillboardForNode(nodeId: number, node: ClusterNode, clusterNodeId?: number): void {
+    const nodeMesh = this.clusterManager.getNodeMesh(nodeId);
+    if (!nodeMesh) {
+      console.warn(`[NODEMANAGER] Cannot create billboard for node ${nodeId}: mesh not found`);
+      return;
+    }
 
-  /**
-   * Get current scene scale
-   */
-  public getSceneScale(): number {
-    return this.sceneScale;
+    // Check if billboard already exists
+    if (this.nodeBillboards.has(nodeId)) {
+      console.log(`[NODEMANAGER] Billboard for node ${nodeId} already exists, skipping`);
+      return;
+    }
+
+    this.createBillboardLabel(node, nodeMesh, clusterNodeId);
+    console.log(`[NODEMANAGER] Created billboard for node ${nodeId} (${node.label})`);
   }
 
   /**
    * Create a billboard label for a node
    */
-  private createBillboardLabel(node: ClusterNode, nodeMesh: Mesh): void {
-    // Wrap the label text into multiple lines if needed
-    // Allow about 3 words per line (increase max width)
-    const maxLineWidth = 450; // pixels (was 300, now allows ~3 words per line)
+  private createBillboardLabel(node: ClusterNode, nodeMesh: Mesh, clusterNodeId?: number): void {
+    const maxLineWidth = 450;
     const fontSize = 48;
     const textLines = this.wrapText(node.label, maxLineWidth, fontSize);
 
-    // Adjust height based on number of text lines
-    // Use consistent line spacing: 0.15 3D units per line
-    const lineHeight3D = 0.30; // 3D units per line
+    const lineHeight3D = 0.30;
     const billboardHeight = Math.max(0.5, textLines.length * lineHeight3D);
-
-    // Double the width for better readability (was 1.5, now 3.0)
     const billboardWidth = 3.0;
 
-    // Create a plane that will serve as the billboard
     const billboard = MeshBuilder.CreatePlane(
       `billboard_${node.id}`,
-      { size: 1, width: billboardWidth, height: billboardHeight }, // Consistent width, variable height
+      { size: 1, width: billboardWidth, height: billboardHeight },
       this.scene
     );
 
-    // Position the billboard along the link vector with margin
-    // For root node or nodes without parent, use default positioning
+    // Parent billboard to the same parent as the node mesh (cluster container)
+    // This ensures billboards move with their cluster
+    if (nodeMesh.parent) {
+      billboard.setParent(nodeMesh.parent);
+    }
+
+    // Calculate position relative to the node in local space
     const labelPosition = this.calculateBillboardPosition(node, nodeMesh);
     billboard.position = labelPosition;
-
-    // Make it always face the camera (billboard behavior)
     billboard.billboardMode = Mesh.BILLBOARDMODE_ALL;
-
-    // Make billboard pickable for hover interactions
     billboard.isPickable = true;
 
-    // Create dynamic texture for the label text with consistent sizing
     const textureSize = 512;
-    const lineHeight = fontSize * 1.15; // 1.15 line spacing in pixels
+    const lineHeight = fontSize * 1.15;
     const textureHeight = Math.max(128, textLines.length * lineHeight + 50);
     const dynamicTexture = new DynamicTexture(
       `label_texture_${node.id}`,
@@ -428,20 +247,14 @@ export class NodeManager {
       DynamicTexture.TRILINEAR_SAMPLINGMODE
     );
 
-    // Set up text properties for consistent rendering
     dynamicTexture.hasAlpha = true;
-
-    // Get the 2D context to draw background
     const ctx = dynamicTexture.getContext();
 
-    // HIGH PRIORITY IMPROVEMENT #1: Add semi-transparent background
-    // Calculate background rectangle dimensions with padding
-    const padding = 20; // pixels
+    const padding = 20;
     const bgWidth = textureSize - (padding * 2);
     const bgHeight = textureHeight - (padding * 2);
 
-    // Draw rounded rectangle background with semi-transparent dark color
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Semi-transparent black background
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
     const cornerRadius = 10;
     ctx.beginPath();
     ctx.moveTo(padding + cornerRadius, padding);
@@ -456,93 +269,69 @@ export class NodeManager {
     ctx.closePath();
     ctx.fill();
 
-    // Draw each line of text with consistent rendering
     const yStart = (textureHeight - textLines.length * lineHeight) / 2 + fontSize;
     for (let i = 0; i < textLines.length; i++) {
       const yPos = yStart + i * lineHeight;
       dynamicTexture.drawText(
         textLines[i],
-        padding + 10, //textureSize / 2, // x position (centered)
-        yPos, // y position
+        padding + 10,
+        yPos,
         `bold ${fontSize}px Arial`,
-        "#FFFFFF", // White color for better contrast against dark background
-        null, // No background (we already drew it)
-        true, // invertY
-        true // center horizontally
+        "#FFFFFF",
+        null,
+        true,
+        true
       );
     }
 
-    // Force texture update to ensure consistency
     dynamicTexture.update();
 
-    // Create a unique material for this billboard (each needs its own texture)
     const billboardMat = new StandardMaterial(`billboard_mat_${node.id}`, this.scene);
-    billboardMat.diffuseColor = new Color3(1, 1, 1); // White
-    billboardMat.specularColor = new Color3(0, 0, 0); // No specular
-    billboardMat.emissiveColor = new Color3(0.8, 0.8, 0.8); // Slight glow
-    billboardMat.disableLighting = true; // Not affected by lighting
+    billboardMat.diffuseColor = new Color3(1, 1, 1);
+    billboardMat.specularColor = new Color3(0, 0, 0);
+    billboardMat.emissiveColor = new Color3(0.8, 0.8, 0.8);
+    billboardMat.disableLighting = true;
     billboardMat.backFaceCulling = false;
-    billboardMat.useAlphaFromDiffuseTexture = true; // Enable transparency
+    billboardMat.useAlphaFromDiffuseTexture = true;
+    billboardMat.alphaMode = Engine.ALPHA_COMBINE;
+    billboardMat.alpha = 1.0;
     billboardMat.diffuseTexture = dynamicTexture;
 
-    // Make billboard much more pickable with significant improvements
-    billboard.position.z += 0.5; // Move significantly forward to ensure it's pickable
-
-    // Enable alpha testing to ensure transparent areas don't block picking
-    // Use ALPHA_TEST instead of ALPHA_COMBINE for better picking behavior
+    billboard.position.z += 0.5;
     billboardMat.alphaMode = Engine.ALPHA_COMBINE;
-    billboardMat.alphaCutOff = 0.3; // Lower cutoff for better picking
-
-    // Make the billboard significantly larger to improve pickability
+    billboardMat.alphaCutOff = 0.3;
     billboard.scaling = new Vector3(1.5, 1.5, 1.5);
-
-    // Add a debug bounding box to visualize the pickable area
-    console.log(`[NODE] Created billboard for node ${node.id} at position (${billboard.position.x}, ${billboard.position.y}, ${billboard.position.z})`);
-    console.log(`[NODE] Billboard scaling: (${billboard.scaling.x}, ${billboard.scaling.y}, ${billboard.scaling.z})`);
-    console.log(`[NODE] Billboard isPickable: ${billboard.isPickable}`);
     billboard.material = billboardMat;
 
-    // Store reference for later management
     this.nodeBillboards.set(node.id, billboard);
-
-    // console.log(`[NODE] Created text billboard label for node ${node.id}: "${node.label}"`);
+    this.billboardMaterials.set(node.id, billboardMat);
   }
 
   /**
    * Calculate the optimal position for a billboard label
-   * Position is colinear with the link vector, past the child node by a margin
+   * Returns position in local space (relative to parent container) since billboard is parented
    */
   private calculateBillboardPosition(node: ClusterNode, nodeMesh: Mesh): Vector3 {
-    // Default position (above node) for root nodes or nodes without parents
+    // Since billboard is parented to the same container as nodeMesh, use local positions
     const defaultPosition = nodeMesh.position.add(new Vector3(0, 0.6, 0));
 
-    // If this is the root node or has no parent, use default positioning
     if (!node.parent_id || node.parent_id === 0) {
       return defaultPosition;
     }
 
-    // Get parent node position
-    const parentNodeMesh = this.nodeMeshes.get(node.parent_id);
+    const parentNodeMesh = this.clusterManager.getNodeMesh(node.parent_id);
     if (!parentNodeMesh) {
-      console.warn(`[NODE] Parent node ${node.parent_id} not found for billboard positioning`);
       return defaultPosition;
     }
 
-    // Calculate direction vector from parent to child
+    // Use local positions since we're in the same coordinate space
     const direction = nodeMesh.position.subtract(parentNodeMesh.position);
     const distance = direction.length();
-
-    // Normalize direction vector
     const normalizedDirection = distance > 0 ? direction.scale(1 / distance) : new Vector3(0, 1, 0);
 
-    // Position billboard along the link vector, past the child node by margin
-    // HIGH PRIORITY IMPROVEMENT #3: Increase margin for better separation
-    const margin = 1.0; // Increased from 0.4 to 1.0 for better label spacing
-    const nodeRadius = this.sphereDiameter / 2;
+    const margin = 1.0;
+    const nodeRadius = 0.25; // Fixed radius since all nodes have same size now
     const billboardPosition = nodeMesh.position.add(normalizedDirection.scale(nodeRadius + margin));
-
-    // console.log(`[NODE] Positioning billboard for node ${node.id} at (${billboardPosition.x}, ${billboardPosition.y}, ${billboardPosition.z})`);
-    // console.log(`[NODE] Direction from parent to child: (${normalizedDirection.x}, ${normalizedDirection.y}, ${normalizedDirection.z})`);
 
     return billboardPosition;
   }
@@ -555,7 +344,12 @@ export class NodeManager {
     if (billboard) {
       billboard.dispose();
       this.nodeBillboards.delete(nodeId);
-      // console.log(`[NODE] Removed billboard label for node ${nodeId}`);
+    }
+
+    const material = this.billboardMaterials.get(nodeId);
+    if (material) {
+      material.dispose();
+      this.billboardMaterials.delete(nodeId);
     }
   }
 
@@ -567,49 +361,116 @@ export class NodeManager {
       billboard.dispose();
     });
     this.nodeBillboards.clear();
-    // console.log('[NODE] Cleared all billboard labels');
+
+    this.billboardMaterials.forEach((material, nodeId) => {
+      material.dispose();
+    });
+    this.billboardMaterials.clear();
+  }
+
+  /**
+   * Show billboards for nodes in a cluster
+   */
+  public showBillboardsForCluster(clusterNodeId: number): void {
+    // Only show billboards if the global flag is enabled
+    if (!dataStore.state.showBillboards) {
+      console.log(`[NODEMANAGER] Billboards disabled globally, skipping cluster ${clusterNodeId}`);
+      return;
+    }
+
+    const nodeIds = this.clusterManager.getNodesInCluster(clusterNodeId);
+    if (!nodeIds) return;
+
+    nodeIds.forEach(nodeId => {
+      const billboard = this.nodeBillboards.get(nodeId);
+      if (billboard) {
+        billboard.setEnabled(true);
+      }
+    });
+    console.log(`[NODEMANAGER] Enabled billboards for cluster ${clusterNodeId}`);
+  }
+
+  /**
+   * Hide billboards for nodes in a cluster
+   */
+  public hideBillboardsForCluster(clusterNodeId: number): void {
+    const nodeIds = this.clusterManager.getNodesInCluster(clusterNodeId);
+    if (!nodeIds) return;
+
+    nodeIds.forEach(nodeId => {
+      const billboard = this.nodeBillboards.get(nodeId);
+      if (billboard) {
+        billboard.setEnabled(false);
+      }
+    });
+    console.log(`[NODEMANAGER] Disabled billboards for cluster ${clusterNodeId}`);
   }
 
   /**
    * Update label visibility based on camera distance (LOD)
-   * HIGH PRIORITY IMPROVEMENT #2: Implement distance-based label visibility
    */
   public updateLabelVisibility(camera: Camera): void {
     if (!camera) return;
 
+    // If billboards are globally disabled, hide all and return
+    if (!dataStore.state.showBillboards) {
+      this.nodeBillboards.forEach((billboard) => {
+        billboard.setEnabled(false);
+      });
+      return;
+    }
+
     const cameraPosition = camera.position;
 
     this.nodeBillboards.forEach((billboard, nodeId) => {
-      const nodeMesh = this.nodeMeshes.get(nodeId);
+      const nodeMesh = this.clusterManager.getNodeMesh(nodeId);
       if (!nodeMesh) return;
 
-      // Calculate distance from camera to node
-      const distance = Vector3.Distance(cameraPosition, nodeMesh.position);
+      // Use absolute position for distance calculation (accounts for transform hierarchy)
+      const nodeAbsolutePos = nodeMesh.getAbsolutePosition();
+      const distance = Vector3.Distance(cameraPosition, nodeAbsolutePos);
 
-      // Show/hide based on distance threshold
       if (distance > this.LABEL_VISIBILITY_DISTANCE) {
         billboard.setEnabled(false);
       } else {
         billboard.setEnabled(true);
 
-        // Fade labels between LABEL_FADE_START and LABEL_VISIBILITY_DISTANCE
         if (distance > this.LABEL_FADE_START) {
           const fadeRange = this.LABEL_VISIBILITY_DISTANCE - this.LABEL_FADE_START;
           const fadeAmount = (distance - this.LABEL_FADE_START) / fadeRange;
           const opacity = 1.0 - fadeAmount;
 
-          // Update material alpha
           if (billboard.material) {
             billboard.material.alpha = opacity;
           }
         } else {
-          // Full opacity when closer than fade start distance
           if (billboard.material) {
             billboard.material.alpha = 1.0;
           }
         }
       }
     });
+  }
+
+  /**
+   * Set the root node ID
+   */
+  public setRootNodeId(nodeId: number): void {
+    this.clusterManager.setRootNodeId(nodeId);
+  }
+
+  /**
+   * Get the root node ID
+   */
+  public getRootNodeId(): number | null {
+    return this.clusterManager.getRootNodeId();
+  }
+
+  /**
+   * Check if a cluster is visible
+   */
+  public isClusterVisible(clusterNodeId: number): boolean {
+    return this.clusterManager.isClusterVisible(clusterNodeId);
   }
 
   /**
@@ -622,7 +483,11 @@ export class NodeManager {
     });
     this.nodeMaterials.clear();
 
+    this.billboardMaterials.forEach((material) => {
+      material.dispose();
+    });
+    this.billboardMaterials.clear();
+
     this.nodeContainer.dispose();
-    // console.log('[NODE] NodeManager disposed');
   }
 }

@@ -12,37 +12,48 @@ export const NavigationControls: Component = () => {
         {/* Parent Button */}
         <button
           onClick={() => {
-            const currentNamespace = dataStore.state.currentNamespace;
             const currentNode = dataStore.state.currentNode;
-            if (currentNamespace && currentNode && currentNode.parent_id) {
-              dataStore.navigateToParent(currentNamespace, currentNode.id);
+            if (currentNode && currentNode.parent_id) {
+              dataStore.navigateToParent();
             }
           }}
           disabled={!dataStore.state.currentNode?.parent_id}
           class={`px-4 py-2 rounded-lg text-white font-medium transition-all duration-200 ${
-            dataStore.state.currentNode?.parent_id 
-              ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer' 
+            dataStore.state.currentNode?.parent_id
+              ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
               : 'bg-gray-400 cursor-not-allowed'
           }`}
           title={dataStore.state.currentNode?.parent_id ? 'Go to parent node' : 'No parent node'}
         >
           ← Parent
         </button>
-        
+
         {/* Home Button */}
         <button
           onClick={() => {
-            const currentNamespace = dataStore.state.currentNamespace;
-            if (currentNamespace) {
-              dataStore.navigateToRoot(currentNamespace);
-            }
+            dataStore.navigateToRoot();
           }}
           class="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium transition-all duration-200"
           title="Return to root node"
         >
           🏠 Home
         </button>
-        
+
+        {/* Ancestor View Toggle */}
+        <button
+          onClick={() => {
+            dataStore.toggleAncestorView();
+          }}
+          class={`px-4 py-2 rounded-lg text-white font-medium transition-all duration-200 ${
+            dataStore.state.showAncestors
+              ? 'bg-orange-600 hover:bg-orange-700'
+              : 'bg-yellow-600 hover:bg-yellow-700'
+          }`}
+          title={dataStore.state.showAncestors ? 'Hide ancestor view' : 'Show ancestor view'}
+        >
+          {dataStore.state.showAncestors ? '👁️‍🗨️ Hide Ancestors' : '👁️ Show Ancestors'}
+        </button>
+
         {/* Back to Namespace Selection */}
         <button
           onClick={() => {
@@ -52,6 +63,21 @@ export const NavigationControls: Component = () => {
           title="Back to namespace selection"
         >
           🔙 Namespaces
+        </button>
+
+        {/* Billboard Toggle */}
+        <button
+          onClick={() => {
+            dataStore.toggleBillboards();
+          }}
+          class={`px-4 py-2 rounded-lg text-white font-medium transition-all duration-200 ${
+            dataStore.state.showBillboards
+              ? 'bg-teal-600 hover:bg-teal-700'
+              : 'bg-gray-600 hover:bg-gray-700'
+          }`}
+          title={dataStore.state.showBillboards ? 'Hide billboard labels' : 'Show billboard labels'}
+        >
+          {dataStore.state.showBillboards ? '🏷️ Hide Labels' : '🏷️ Show Labels'}
         </button>
       </div>
     </Show>

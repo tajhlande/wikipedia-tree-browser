@@ -9,18 +9,29 @@ import {
   DirectionalLight
 } from "@babylonjs/core";
 import { NodeManager } from './nodeManager';
-import { LinkManager } from './linkManager';
+import { ClusterManager } from './clusterManager';
+import { NavigationManager } from './navigationManager';
+import { AncestorNavigationManager } from './ancestorNavigationManager';
+import { ResourceManager } from './resourceManager';
 import { InteractionManager } from './interactionManager';
 import { dataStore } from '../stores/dataStore';
 import { createEffect, onCleanup } from 'solid-js';
+import type { ClusterNode } from '../types';
 
 // Global scene references for reactive updates
 export let scene: Scene | null = null;
 export let engine: Engine | null = null;
 export let camera: ArcRotateCamera | null = null;
+export let clusterManager: ClusterManager | null = null;
 export let nodeManager: NodeManager | null = null;
-export let linkManager: LinkManager | null = null;
+export let navigationManager: NavigationManager | null = null;
+export let ancestorNavigationManager: AncestorNavigationManager | null = null;
+export let resourceManager: ResourceManager | null = null;
 export let interactionManager: InteractionManager | null = null;
+
+// Track current node ID for cluster management
+let currentNodeId: number | null = null;
+let rootNodeId: number | null = null;
 
 export function initScene(canvasId: string) {
   try {
@@ -58,8 +69,6 @@ export function initScene(canvasId: string) {
     camera.setPosition(new Vector3(0, 0, -15));
     camera.setTarget(Vector3.Zero());
 
-    // console.log("[SCENE] Camera controls enabled");
-
     // Improved lighting setup
     const hemiLight = new HemisphericLight("hemiLight", new Vector3(0, 1, 0), scene);
     hemiLight.intensity = 0.8;
@@ -81,16 +90,19 @@ export function initScene(canvasId: string) {
     dirLight3.diffuse = new Color3(0.9, 0.9, 0.9);
     dirLight3.specular = new Color3(0.5, 0.5, 0.5);
 
-    // Initialize managers
-    nodeManager = new NodeManager(scene);
-    linkManager = new LinkManager(scene);
+    // Initialize cluster-based managers
+    clusterManager = new ClusterManager(scene);
+    nodeManager = new NodeManager(scene, clusterManager);
+    navigationManager = new NavigationManager(clusterManager);
+    ancestorNavigationManager = new AncestorNavigationManager(clusterManager);
+    resourceManager = new ResourceManager(clusterManager);
     interactionManager = new InteractionManager(scene);
 
-    // Synchronize scene scaling between node and link managers
-    // This ensures links scale properly with nodes
-    const initialScale = 3.0; // Default scale factor
-    if (nodeManager) nodeManager.setSceneScale(initialScale);
-    if (linkManager) linkManager.setSceneScale(initialScale);
+    // Set camera reference for navigation managers
+    if (camera) {
+      navigationManager.setCamera(camera);
+      ancestorNavigationManager.setCamera(camera);
+    }
 
     // Setup reactive updates for data store changes
     setupReactiveUpdates();
@@ -131,14 +143,17 @@ export function initScene(canvasId: string) {
       }
     });
 
-    // console.log("[SCENE] Babylon.js scene initialized with visualization managers");
+    console.log("[SCENE] Babylon.js scene initialized with cluster-based architecture");
 
     return {
       engine,
       scene,
       camera,
+      clusterManager,
       nodeManager,
-      linkManager,
+      navigationManager,
+      ancestorNavigationManager,
+      resourceManager,
       interactionManager
     };
   } catch (error) {
@@ -151,167 +166,187 @@ export function initScene(canvasId: string) {
  * Setup reactive updates for data store changes
  */
 function setupReactiveUpdates() {
-  if (!scene || !nodeManager || !linkManager) {
+  if (!scene || !nodeManager || !clusterManager || !navigationManager || !ancestorNavigationManager) {
     console.error("[SCENE] Cannot setup reactive updates - scene or managers not initialized");
     return;
   }
 
-  // Reactive effect for current view changes
+  // Single consolidated reactive effect for view and node changes
+  // This prevents duplicate triggers that were causing the blinking issue
   createEffect(() => {
     const currentView = dataStore.state.currentView;
     const currentNode = dataStore.state.currentNode;
     const currentNamespace = dataStore.state.currentNamespace;
+    const showAncestors = dataStore.state.showAncestors;
 
-    // console.log(`[SCENE] View changed to: ${currentView}`);
+    console.log(`[SCENE EFFECT] View: ${currentView}, Node: ${currentNode?.id}, ShowAncestors: ${showAncestors}`);
 
-    if (currentView === 'node_view' && currentNode && currentNamespace) {
+    if (currentView === 'node_view' && currentNode && currentNamespace && clusterManager) {
       // Remove demo box if it exists
       if ((scene as any).demoBox) {
         (scene as any).demoBox.dispose();
         (scene as any).demoBox = null;
       }
 
-      // Load and render the node view
-      loadNodeView(currentNamespace, currentNode.id);
+      // Set root node ID on first load (always visible)
+      if (rootNodeId === null) {
+        rootNodeId = currentNode.id;
+        clusterManager.setRootNodeId(currentNode.id);
+        console.log(`[SCENE] Set root node ID: ${rootNodeId}`);
+      }
+
+      // Load and render the appropriate node view
+      if (showAncestors) {
+        console.log(`[SCENE EFFECT] Loading EXTENDED view for node ${currentNode.id}`);
+        loadExtendedNodeView(currentNamespace, currentNode.id);
+      } else {
+        console.log(`[SCENE EFFECT] Loading REGULAR view for node ${currentNode.id}`);
+        loadNodeView(currentNamespace, currentNode.id);
+      }
     }
   });
 
-  // Reactive effect for current node changes
+  // Reactive effect for billboard visibility toggle
+  createEffect(() => {
+    const showBillboards = dataStore.state.showBillboards;
+    console.log(`[SCENE EFFECT] Billboard visibility changed: ${showBillboards}`);
+
+    if (nodeManager && camera) {
+      // Force update label visibility to apply the new state
+      nodeManager.updateLabelVisibility(camera);
+    }
+  });
+
+  // Reactive effect for current node changes (camera positioning only)
   createEffect(() => {
     const currentNode = dataStore.state.currentNode;
-    if (currentNode) {
-      // console.log(`[SCENE] Current node changed to: ${currentNode.id} (${currentNode.label})`);
+    const showAncestors = dataStore.state.showAncestors;
+    if (currentNode && camera) {
+      console.log(`[SCENE] Current node changed to: ${currentNode.id} (${currentNode.label})`);
 
-      // Center camera on current node
-      if (camera && currentNode.centroid) {
-        const targetPosition = new Vector3(
-          currentNode.centroid[0],
-          currentNode.centroid[1],
-          currentNode.centroid[2]
-        );
+      // Center camera on appropriate target based on view mode
+      if (currentNode.centroid) {
+        let targetPosition: Vector3;
 
-        // Set camera target directly (don't interfere with mouse controls)
-        camera.setTarget(targetPosition);
+        if (showAncestors) {
+          // For ancestor view, focus on centroid of current node and its children
+          targetPosition = calculateAncestorViewCentroid(currentNode);
+        } else {
+          // For regular view, focus on current node only
+          targetPosition = new Vector3(
+            currentNode.centroid[0] * 3.0, // Apply scene scaling
+            currentNode.centroid[1] * 3.0,
+            currentNode.centroid[2] * 3.0
+          );
+        }
 
-        // console.log(`[SCENE] Camera centered on node ${currentNode.id} at (${targetPosition.x}, ${targetPosition.y}, ${targetPosition.z})`);
+        // Small delay to ensure nodes are actually visible before positioning camera
+        setTimeout(() => {
+          if (camera) {
+            // Reset camera to consistent zoom level and position
+            resetCameraForNodeView(camera, targetPosition, showAncestors);
+            console.log(`[SCENE] Camera centered on ${showAncestors ? 'ancestor view centroid' : 'node'} ${currentNode.id} at (${targetPosition.x}, ${targetPosition.y}, ${targetPosition.z})`);
+          }
+        }, 200); // 200ms delay to allow nodes to become visible
       }
     }
   });
 }
 
 /**
+ * Convert node view data to cluster data format
+ */
+function convertToClusterData(nodeViewData: {
+  currentNode: ClusterNode;
+  children: ClusterNode[];
+  parent: ClusterNode | null;
+}): ClusterNode[] {
+  const clusterData: ClusterNode[] = [];
+
+  // Add current node
+  if (nodeViewData.currentNode) {
+    clusterData.push(nodeViewData.currentNode);
+  }
+
+  // Add parent node if exists
+  if (nodeViewData.parent) {
+    clusterData.push(nodeViewData.parent);
+  }
+
+  // Add child nodes
+  if (nodeViewData.children && nodeViewData.children.length > 0) {
+    clusterData.push(...nodeViewData.children);
+  }
+
+  return clusterData;
+}
+
+/**
  * Load and render a node view (current node, children, parent)
+ * Following the cluster architecture plan: add clusters, don't clear all
  */
 async function loadNodeView(namespace: string, nodeId: number) {
-  if (!scene || !nodeManager || !linkManager) {
+  if (!scene || !nodeManager || !clusterManager || !navigationManager || !camera) {
     console.error("[SCENE] Cannot load node view - scene or managers not initialized");
     return;
   }
 
   try {
-    // console.log(`[SCENE] Loading node view for node ${nodeId} in namespace ${namespace}`);
-
-    // Clear existing nodes and links
-    nodeManager.clearAllNodes();
-    linkManager.clearAllLinks();
+    console.log(`[SCENE] Loading node view for node ${nodeId} in namespace ${namespace}`);
 
     // Load node data using API client
     const nodeViewData = await dataStore.loadNodeView(namespace, nodeId);
 
-    // Log node data for debugging
-    /* console.log(`[SCENE] Loaded node view data:`, {
-      currentNode: {
-        id: nodeViewData.currentNode.id,
-        label: nodeViewData.currentNode.label,
-        depth: nodeViewData.currentNode.depth,
-        centroid: nodeViewData.currentNode.centroid,
-        hasValidCentroid: nodeViewData.currentNode.centroid &&
-                         Array.isArray(nodeViewData.currentNode.centroid) &&
-                         nodeViewData.currentNode.centroid.length === 3
-      },
-      childrenCount: nodeViewData.children.length,
-      parentExists: !!nodeViewData.parent
-    }); */
+    // Convert to cluster data format
+    const clusterData = convertToClusterData(nodeViewData);
 
-    // Validate children data
-    const invalidChildren = nodeViewData.children.filter(child =>
-      !child || !child.id || !child.centroid || !Array.isArray(child.centroid) || child.centroid.length !== 3
+    if (clusterData.length === 0) {
+      console.error("[SCENE] No cluster data available to create cluster");
+      dataStore.setError("No cluster data available for the selected node");
+      return;
+    }
+
+    // Hide previous cluster (except root) - as per architecture plan
+    if (currentNodeId !== null && currentNodeId !== rootNodeId) {
+      console.log(`[SCENE] Hiding previous cluster: ${currentNodeId}`);
+      if (nodeManager) {
+        nodeManager.hideCluster(currentNodeId);
+      } else {
+        clusterManager.hideCluster(currentNodeId);
+      }
+    }
+
+    // Create/update the cluster for the new node
+    createNodeCluster(nodeViewData, nodeId);
+
+    // Show the new cluster (through nodeManager to enable billboards)
+    console.log(`[SCENE] Showing new cluster: ${nodeId}`);
+    if (nodeManager) {
+      nodeManager.showCluster(nodeId);
+    } else {
+      clusterManager.showCluster(nodeId);
+    }
+
+    // Update current node ID
+    currentNodeId = nodeId;
+
+    // Clean up unused resources (as per architecture plan)
+    console.log(`[SCENE] Cleaning up unused nodes and links`);
+    clusterManager.cleanupUnusedNodes();
+    clusterManager.cleanupUnusedLinks();
+
+    // Position camera for the node view
+    await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for nodes to be visible
+    resetCameraForNodeView(camera,
+      new Vector3(
+        nodeViewData.currentNode.centroid[0] * 3.0,
+        nodeViewData.currentNode.centroid[1] * 3.0,
+        nodeViewData.currentNode.centroid[2] * 3.0
+      ),
+      false
     );
 
-    if (invalidChildren.length > 0) {
-      console.warn(`[SCENE] Found ${invalidChildren.length} children with invalid centroids:`,
-                  invalidChildren.map(c => ({ id: c?.id, label: c?.label, centroid: c?.centroid })));
-
-      // Filter out completely invalid children to prevent rendering issues
-      const validChildren = nodeViewData.children.filter(child =>
-        child && child.id && child.centroid && Array.isArray(child.centroid) && child.centroid.length === 3
-      );
-
-      // console.log(`[SCENE] Filtered out ${nodeViewData.children.length - validChildren.length} invalid children, keeping ${validChildren.length} valid ones`);
-
-      // Update the node view data to only include valid children
-      nodeViewData.children = validChildren;
-    }
-
-    // Create current node
-    const currentNodeMesh = nodeManager.createNode(nodeViewData.currentNode);
-
-    // Register nodes with interaction manager
-    interactionManager.registerNode(nodeViewData.currentNode.id, nodeViewData.currentNode);
-
-    // Create parent node if it exists
-    if (nodeViewData.parent) {
-      try {
-        const parentNodeMesh = nodeManager.createNode(nodeViewData.parent);
-        interactionManager.registerNode(nodeViewData.parent.id, nodeViewData.parent);
-
-        // Create link from parent to current node
-        try {
-          linkManager.createLink(nodeViewData.parent, nodeViewData.currentNode);
-          // console.log(`[SCENE] Created link from parent ${nodeViewData.parent.id} to current node ${nodeViewData.currentNode.id}`);
-        } catch (linkError) {
-          console.error(`[SCENE] Failed to create link from parent to current node:`, linkError);
-        }
-        // console.log(`[SCENE] Created parent node ${nodeViewData.parent.id}`);
-      } catch (error) {
-        console.error(`[SCENE] Failed to create parent node:`, error);
-      }
-    } else {
-      // console.log(`[SCENE] No parent node for ${nodeViewData.currentNode.id} - this is expected for root nodes`);
-    }
-
-    // Create child nodes
-    const successfulChildren = [];
-    const failedChildren = [];
-
-    nodeViewData.children.forEach(child => {
-      try {
-        const childNodeMesh = nodeManager.createNode(child);
-        interactionManager.registerNode(child.id, child);
-
-        // Create link from current node to child
-        try {
-          linkManager.createLink(nodeViewData.currentNode, child);
-          // console.log(`[SCENE] Created link from current node ${nodeViewData.currentNode.id} to child ${child.id}`);
-        } catch (linkError) {
-          console.error(`[SCENE] Failed to create link to child ${child.id}:`, linkError);
-        }
-
-        successfulChildren.push(child.id);
-      } catch (error) {
-        console.error(`[SCENE] Failed to create child node ${child.id} (${child.label}):`, error);
-        failedChildren.push({ id: child.id, label: child.label, error: error instanceof Error ? error.message : 'Unknown error' });
-      }
-    });
-
-    if (failedChildren.length > 0) {
-      console.warn(`[SCENE] Created ${successfulChildren.length} children successfully, failed to create ${failedChildren.length} children`);
-      console.warn('[SCENE] Failed children:', failedChildren);
-    }
-
-    /* console.log(`[SCENE] Successfully loaded node view: ` +
-                `${nodeViewData.children.length} children, ` +
-                `${nodeViewData.parent ? 1 : 0} parent`); */
+    console.log(`[SCENE] Successfully loaded node view for node ${nodeId} with ${clusterData.length} nodes`);
 
   } catch (error) {
     console.error("[SCENE] Failed to load node view:", error);
@@ -320,38 +355,280 @@ async function loadNodeView(namespace: string, nodeId: number) {
 }
 
 /**
- * Clean up scene resources
+ * Create a node cluster from node view data
  */
-export function cleanupScene() {
-  if (nodeManager) {
-    nodeManager.dispose();
-    nodeManager = null;
+function createNodeCluster(nodeViewData: {
+  currentNode: ClusterNode;
+  children: ClusterNode[];
+  parent: ClusterNode | null;
+}, clusterNodeId: number): void {
+  if (!clusterManager || !nodeManager) {
+    console.error("[SCENE] ClusterManager or NodeManager not initialized");
+    return;
   }
 
-  if (linkManager) {
-    linkManager.dispose();
-    linkManager = null;
+  const mgr = clusterManager; // Capture for use in forEach
+  const nodeMgr = nodeManager; // Capture for use in forEach
+
+  // Add current node to cluster
+  mgr.addNodeToCluster(nodeViewData.currentNode, clusterNodeId);
+  interactionManager?.registerNode(nodeViewData.currentNode.id, nodeViewData.currentNode);
+  // Create billboard for current node (pass clusterNodeId for proper parenting)
+  nodeMgr.createBillboardForNode(nodeViewData.currentNode.id, nodeViewData.currentNode, clusterNodeId);
+
+  // Add parent node to cluster (if exists)
+  if (nodeViewData.parent) {
+    mgr.addNodeToCluster(nodeViewData.parent, clusterNodeId);
+    interactionManager?.registerNode(nodeViewData.parent.id, nodeViewData.parent);
+    // Create billboard for parent node (pass clusterNodeId for proper parenting)
+    nodeMgr.createBillboardForNode(nodeViewData.parent.id, nodeViewData.parent, clusterNodeId);
+
+    // Create link from parent to current node
+    mgr.addLinkToCluster(nodeViewData.parent, nodeViewData.currentNode, clusterNodeId);
+  }
+
+  // Add child nodes to cluster
+  nodeViewData.children.forEach(child => {
+    mgr.addNodeToCluster(child, clusterNodeId);
+    interactionManager?.registerNode(child.id, child);
+    // Create billboard for child node (pass clusterNodeId for proper parenting)
+    nodeMgr.createBillboardForNode(child.id, child, clusterNodeId);
+
+    // Create link from current node to child
+    mgr.addLinkToCluster(nodeViewData.currentNode, child, clusterNodeId);
+  });
+
+  console.log(`[SCENE] Created cluster ${clusterNodeId} with ${1 + (nodeViewData.parent ? 1 : 0) + nodeViewData.children.length} nodes and billboards`);
+}
+
+/**
+ * Load and render an extended node view with ancestors
+ * Following the cluster architecture plan: add clusters, don't clear all
+ */
+async function loadExtendedNodeView(namespace: string, nodeId: number) {
+  if (!scene || !nodeManager || !clusterManager || !ancestorNavigationManager) {
+    console.error("[SCENE] Cannot load extended node view - scene or managers not initialized");
+    return;
+  }
+
+  try {
+    console.log(`[SCENE] Loading extended node view for node ${nodeId} in namespace ${namespace}`);
+
+    // Load extended node data using API client
+    const nodeViewData = await dataStore.loadExtendedNodeView(namespace, nodeId);
+
+    // Hide previous cluster (except root) - as per architecture plan
+    if (currentNodeId !== null && currentNodeId !== rootNodeId) {
+      console.log(`[SCENE] Hiding previous cluster: ${currentNodeId}`);
+      if (nodeManager) {
+        nodeManager.hideCluster(currentNodeId);
+      } else {
+        clusterManager.hideCluster(currentNodeId);
+      }
+    }
+
+    // Create/update the cluster for the current node
+    createNodeCluster(nodeViewData, nodeId);
+
+    // Show the current node cluster (through nodeManager to enable billboards)
+    console.log(`[SCENE] Showing new cluster: ${nodeId}`);
+    if (nodeManager) {
+      nodeManager.showCluster(nodeId);
+    } else {
+      clusterManager.showCluster(nodeId);
+    }
+
+    // Update current node ID
+    currentNodeId = nodeId;
+
+    // Load and show ancestor view
+    await ancestorNavigationManager.showAncestorView();
+
+    // Clean up unused resources (as per architecture plan)
+    console.log(`[SCENE] Cleaning up unused nodes and links`);
+    clusterManager.cleanupUnusedNodes();
+    clusterManager.cleanupUnusedLinks();
+
+    console.log(`[SCENE] Successfully loaded extended node view for node ${nodeId}`);
+
+  } catch (error) {
+    console.error("[SCENE] Failed to load extended node view:", error);
+    dataStore.setError(`Failed to load extended node view: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Calculate centroid for ancestor view (current node + children)
+ */
+function calculateAncestorViewCentroid(currentNode: ClusterNode): Vector3 {
+  // For ancestor view, we want to center on the current node and its children
+  // This provides better context for the hierarchical structure
+
+  // If current node has valid centroid, use it as base
+  if (currentNode.centroid && Array.isArray(currentNode.centroid) && currentNode.centroid.length === 3) {
+    const [x, y, z] = currentNode.centroid;
+    return new Vector3(x, y, z);
+  }
+
+  // Fallback to origin
+  return Vector3.Zero();
+}
+
+/**
+ * Reset camera for node view
+ */
+function resetCameraForNodeView(camera: ArcRotateCamera, targetPosition: Vector3, isAncestorView: boolean): void {
+  // Calculate appropriate camera distance based on view type
+  // Reduced to ensure billboards are within LOD visibility distance (20 units)
+  const baseDistance = isAncestorView ? 15 : 12;
+
+  // Calculate bounds of all visible nodes for better camera positioning
+  if (!clusterManager) {
+    console.warn('[SCENE] ClusterManager not initialized for camera positioning');
+  } else {
+    const visibleClusters = clusterManager.getVisibleClusters();
+    if (visibleClusters && visibleClusters.size > 0) {
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+
+    // Get all nodes from visible clusters
+    visibleClusters.forEach(clusterNodeId => {
+      const nodesInCluster = clusterManager?.getNodesInCluster(clusterNodeId);
+      if (nodesInCluster) {
+        nodesInCluster.forEach(nodeId => {
+          const nodeMesh = clusterManager?.getNodeMesh(nodeId);
+          if (nodeMesh?.isEnabled()) {
+            const pos = nodeMesh.position;
+            minX = Math.min(minX, pos.x);
+            maxX = Math.max(maxX, pos.x);
+            minY = Math.min(minY, pos.y);
+            maxY = Math.max(maxY, pos.y);
+            minZ = Math.min(minZ, pos.z);
+            maxZ = Math.max(maxZ, pos.z);
+          }
+        });
+      }
+    });
+
+    if (minX !== Infinity) { // We found some enabled nodes
+      // Calculate center of all visible nodes
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      const centerZ = (minZ + maxZ) / 2;
+
+      // Calculate size of bounding box
+      const sizeX = maxX - minX;
+      const sizeY = maxY - minY;
+      const sizeZ = maxZ - minZ;
+      const maxSize = Math.max(sizeX, sizeY, sizeZ);
+
+      // Adjust camera distance based on cluster size
+      // Cap the distance to ensure billboards remain visible (LOD threshold is 20)
+      const adjustedDistance = Math.min(18, baseDistance + maxSize * 1.5);
+
+      // Position camera to see all nodes
+      camera.setPosition(new Vector3(
+        centerX,
+        centerY + maxSize * 0.5, // Slightly above the center
+        centerZ - adjustedDistance
+      ));
+
+      // Set target to center of all nodes
+      camera.setTarget(new Vector3(centerX, centerY, centerZ));
+
+      // Adjust camera parameters
+      camera.radius = adjustedDistance;
+      camera.alpha = Math.PI / 2; // Side view
+      camera.beta = Math.PI / 3; // Slightly above
+
+      console.log(`[SCENE] Adjusted camera for cluster: size=${maxSize.toFixed(2)}, distance=${adjustedDistance.toFixed(2)}`);
+      return;
+    }
+    }
+  }
+
+  // Fallback to original positioning if no nodes found
+  console.warn('[SCENE] No enabled nodes found for camera positioning, using fallback');
+
+  // Use a more robust fallback that ensures nodes are visible
+  // Position camera within LOD threshold to ensure billboards are visible
+  const fallbackDistance = Math.min(18, baseDistance * 1.2);
+
+  // Position camera
+  camera.setPosition(new Vector3(
+    targetPosition.x,
+    targetPosition.y + 5, // Slightly elevated for better view
+    targetPosition.z - fallbackDistance
+  ));
+
+  // Set target
+  camera.setTarget(targetPosition);
+
+  // Adjust camera parameters for better viewing
+  camera.radius = fallbackDistance;
+  camera.alpha = Math.PI / 2; // Side view
+  camera.beta = Math.PI / 4; // More elevated view
+
+  // Ensure camera doesn't get too close
+  camera.lowerRadiusLimit = 10;
+  camera.upperRadiusLimit = 200;
+}
+
+/**
+ * Position camera for ancestor view
+ */
+function positionCameraForAncestorView(camera: ArcRotateCamera, targetPosition: Vector3): void {
+  // Wider view for ancestor visualization
+  const distance = 35;
+
+  camera.setPosition(new Vector3(
+    targetPosition.x,
+    targetPosition.y + 10,
+    targetPosition.z - distance
+  ));
+
+  camera.setTarget(targetPosition);
+  camera.radius = distance;
+  camera.alpha = Math.PI / 2;
+  camera.beta = Math.PI / 4;
+}
+
+/**
+ * Clean up resources when component unmounts
+ */
+export function cleanupScene() {
+  if (resourceManager) {
+    resourceManager.dispose();
+  }
+
+  if (navigationManager) {
+    navigationManager.dispose();
+  }
+
+  if (ancestorNavigationManager) {
+    ancestorNavigationManager.dispose();
+  }
+
+  if (nodeManager) {
+    nodeManager.dispose();
+  }
+
+  if (clusterManager) {
+    clusterManager.clearAll();
   }
 
   if (interactionManager) {
     interactionManager.dispose();
-    interactionManager = null;
-  }
-
-  if (scene) {
-    scene.dispose();
-    scene = null;
   }
 
   if (engine) {
     engine.dispose();
-    engine = null;
   }
 
-  // console.log("[SCENE] Scene resources cleaned up");
-}
+  // Reset tracking variables
+  currentNodeId = null;
+  rootNodeId = null;
 
-// Setup cleanup on component unmount
-onCleanup(() => {
-  cleanupScene();
-});
+  console.log("[SCENE] Scene cleanup completed");
+}

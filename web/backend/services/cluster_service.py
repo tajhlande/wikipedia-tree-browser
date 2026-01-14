@@ -52,6 +52,12 @@ class ClusterService(ManagedService):
     ) -> Optional[ClusterNodeResponse]:
         pass
 
+    @abstractmethod
+    def get_cluster_node_ancestors(
+        self, namespace, node_id: int
+    ) -> list[ClusterNodeResponse]:
+        pass
+
     # ====================================================================================================
     # Other methods
 

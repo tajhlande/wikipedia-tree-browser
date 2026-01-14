@@ -27,7 +27,7 @@ export class ApiClient {
    */
   private async fetchWithErrorHandling<T>(url: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
     try {
-      console.log(`[API] ${options.method || 'GET'} ${url}`);
+      console.debug(`[API] ${options.method || 'GET'} ${url}`);
 
       const response = await fetch(url, {
         ...options,
@@ -47,7 +47,7 @@ export class ApiClient {
       let data;
       try {
         data = await response.json();
-        console.log(`[API] Response for ${url}:`, data);
+        console.debug(`[API] Response for ${url}:`, data);
       } catch (jsonError) {
         console.error(`[API] Failed to parse JSON response for ${url}:`, jsonError);
         return {
@@ -61,14 +61,14 @@ export class ApiClient {
       // Handle null responses (e.g., when parent doesn't exist)
       let responseData;
       if (data === null) {
-        console.log(`[API] Null response received for ${url} - this is expected for root node parent`);
+        console.debug(`[API] Null response received for ${url} - this is expected for root node parent`);
         responseData = null;
       } else if (data !== null && data !== undefined && data.data !== undefined) {
         responseData = data.data;
       } else if (data !== null && data !== undefined) {
         responseData = data;
       } else {
-        console.log(`[API] Empty response received for ${url}`);
+        console.warn(`[API] Empty response received for ${url}`);
         responseData = null;
       }
 
@@ -180,6 +180,103 @@ export class ApiClient {
     return this.fetchWithErrorHandling<ClusterNode[]>(
       `${this.baseUrl}/clusters/namespace/${namespace}/node_id/${nodeId}/siblings`
     );
+  }
+
+  /**
+   * Get all ancestors for a cluster node back to root
+   */
+  async getNodeAncestors(namespace: string, nodeId: number): Promise<ApiResponse<ClusterNode[]>> {
+    return this.fetchWithErrorHandling<ClusterNode[]>(
+      `${this.baseUrl}/clusters/namespace/${namespace}/node_id/${nodeId}/ancestors`
+    );
+  }
+
+  /**
+   * Get children for multiple nodes (batch loading)
+   */
+  async getNodeChildrenBatch(namespace: string, nodeIds: number[]): Promise<ApiResponse<Record<number, ClusterNode[]>>> {
+    try {
+      // For now, implement as sequential calls since backend may not support batch
+      // This can be optimized later if backend adds batch endpoint
+      const result: Record<number, ClusterNode[]> = {};
+
+      for (const nodeId of nodeIds) {
+        const response = await this.getClusterNodeChildren(namespace, nodeId);
+        if (response.success && response.data) {
+          result[nodeId] = response.data;
+        } else {
+          result[nodeId] = [];
+        }
+      }
+
+      return {
+        success: true,
+        data: result,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: {},
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  /**
+   * Get node cluster data (node + children + parent)
+   */
+  async getNodeCluster(nodeId: number, namespace: string): Promise<ApiResponse<ClusterNode[]>> {
+    try {
+      // Load the node and its immediate context
+      const [node, children, parent] = await Promise.all([
+        this.getClusterNode(namespace, nodeId),
+        this.getClusterNodeChildren(namespace, nodeId),
+        this.getClusterNodeParent(namespace, nodeId),
+      ]);
+
+      if (!node.success || !node.data) {
+        return {
+          success: false,
+          data: [],
+          error: node.error || 'Failed to load node',
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      const clusterData: ClusterNode[] = [node.data];
+
+      // Add children if they exist
+      if (children.success && children.data) {
+        clusterData.push(...children.data);
+      }
+
+      // Add parent if it exists
+      if (parent.success && parent.data) {
+        clusterData.push(parent.data);
+      }
+
+      return {
+        success: true,
+        data: clusterData,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        data: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  /**
+   * Get children for a specific node (used by AncestorNavigationManager)
+   */
+  async getNodeChildren(nodeId: number, namespace: string): Promise<ApiResponse<ClusterNode[]>> {
+    return this.getClusterNodeChildren(namespace, nodeId);
   }
 
   /**

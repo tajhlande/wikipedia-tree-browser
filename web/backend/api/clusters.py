@@ -136,3 +136,22 @@ async def get_cluster_node_parent(
         raise HTTPException(
             status_code=500, detail=f"Error retrieving cluster parent: {str(e)}"
         )
+
+@router.get("/namespace/{namespace}/node_id/{node_id}/ancestors")
+async def get_cluster_node_ancestors(
+    namespace: Annotated[str, Path(title="Wikipedia namespace")],
+    node_id: Annotated[int, Path(title="Cluster node ID")],
+    cluster_service: ClusterService = Depends(
+        lambda: service_provider("cluster_service")
+    ),
+):
+    """Get ancestor nodes of a specific cluster node"""
+    logger.debug("get_cluster_node_ancestors()")
+    try:
+        ancestors = cluster_service.get_cluster_node_ancestors(namespace, node_id)
+        return ancestors
+    except Exception as e:
+        logger.exception("Unable to find ancestors")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving cluster parent: {str(e)}"
+        )
