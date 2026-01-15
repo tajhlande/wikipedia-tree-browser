@@ -273,7 +273,7 @@ export class ApiClient {
   }
 
   /**
-   * Get children for a specific node (used by AncestorNavigationManager)
+   * Get children for a specific node
    */
   async getNodeChildren(nodeId: number, namespace: string): Promise<ApiResponse<ClusterNode[]>> {
     return this.getClusterNodeChildren(namespace, nodeId);

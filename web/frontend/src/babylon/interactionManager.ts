@@ -3,7 +3,9 @@ import {
   Mesh,
   Vector3,
   PointerEventTypes,
-  Observer
+  Observer,
+  PointerInfo,
+  AbstractMesh
 } from "@babylonjs/core";
 import { dataStore } from '../stores/dataStore';
 import type { ClusterNode } from '../types';
@@ -14,8 +16,8 @@ import type { ClusterNode } from '../types';
  */
 export class InteractionManager {
   private scene: Scene;
-  private hoverObserver: Observer<Mesh> | null = null;
-  private clickObserver: Observer<Mesh> | null = null;
+  private hoverObserver: Observer<PointerInfo> | null = null;
+  private clickObserver: Observer<PointerInfo> | null = null;
   private currentHoveredNode: ClusterNode | null = null;
   private nodeIdToDataMap: Map<number, ClusterNode> = new Map();
 
@@ -107,7 +109,7 @@ export class InteractionManager {
   /**
    * Handle node hover event
    */
-  private handleNodeHover(mesh: Mesh): void {
+  private handleNodeHover(mesh: AbstractMesh): void {
     // Debug: Log all pointer events to see what's being picked
     // console.debug(`[INTERACT] Pointer event on mesh: ${mesh.name}, isPickable: ${mesh.isPickable}`);
 
@@ -160,7 +162,7 @@ export class InteractionManager {
   /**
    * Handle node click event
    */
-  private handleNodeClick(mesh: Mesh): void {
+  private handleNodeClick(mesh: AbstractMesh): void {
     // Extract node ID from mesh name (format: node_<id> or billboard_<id>)
     const meshName = mesh.name;
     let nodeId: number | null = null;

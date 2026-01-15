@@ -14,11 +14,10 @@ import {
 import { NodeManager } from './nodeManager';
 import { ClusterManager } from './clusterManager';
 import { NavigationManager } from './navigationManager';
-import { AncestorNavigationManager } from './ancestorNavigationManager';
 import { ResourceManager } from './resourceManager';
 import { InteractionManager } from './interactionManager';
 import { dataStore } from '../stores/dataStore';
-import { createEffect, onCleanup } from 'solid-js';
+import { createEffect } from 'solid-js';
 import type { ClusterNode } from '../types';
 
 // Global scene references for reactive updates
@@ -28,7 +27,6 @@ export let camera: ArcRotateCamera | null = null;
 export let clusterManager: ClusterManager | null = null;
 export let nodeManager: NodeManager | null = null;
 export let navigationManager: NavigationManager | null = null;
-export let ancestorNavigationManager: AncestorNavigationManager | null = null;
 export let resourceManager: ResourceManager | null = null;
 export let interactionManager: InteractionManager | null = null;
 
@@ -45,24 +43,17 @@ declare module "@babylonjs/core" {
   }
 }
 
-const easingFunction = (whichprop: string, targetval: number, frames: number, fps=60) => {
-    const ease = new CubicEase();
-    ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
-  Animation.CreateAndStartAnimation('at4', this, whichprop, frames, 60, (this as any)[whichprop], targetval, 0, ease);
-  console.debug(`[CAMERA] Easing ${whichprop} to ${targetval} in ${frames} frames`)
-}
-
 ArcRotateCamera.prototype.easeTo = function (whichprop: string, targetval: number, frames: number, fps=60) {
     const ease = new CubicEase();
     ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
   Animation.CreateAndStartAnimation('at4', this, whichprop, frames, 60, (this as any)[whichprop], targetval, 0, ease);
-  console.debug(`[CAMERA] Easing camera.${whichprop} to ${targetval} in ${frames} frames`)
+  // console.debug(`[CAMERA] Easing camera.${whichprop} to ${targetval} in ${frames} frames`)
 };
 Vector3.prototype.easeTo = function (whichprop: string, targetval: number, frames: number, fps=60) {
     const ease = new CubicEase();
     ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
   Animation.CreateAndStartAnimation('at4', this, whichprop, frames, 60, (this as any)[whichprop], targetval, 0, ease);
-  console.debug(`[CAMERA] Easing vector.${whichprop} to ${targetval} in ${frames} frames`)
+  // console.debug(`[CAMERA] Easing vector.${whichprop} to ${targetval} in ${frames} frames`)
 };
 
 export function initScene(canvasId: string) {
@@ -126,14 +117,12 @@ export function initScene(canvasId: string) {
     clusterManager = new ClusterManager(scene);
     nodeManager = new NodeManager(scene, clusterManager);
     navigationManager = new NavigationManager(clusterManager);
-    ancestorNavigationManager = new AncestorNavigationManager(clusterManager);
     resourceManager = new ResourceManager(clusterManager);
     interactionManager = new InteractionManager(scene);
 
     // Set camera reference for navigation managers
     if (camera) {
       navigationManager.setCamera(camera);
-      ancestorNavigationManager.setCamera(camera);
     }
 
     // Setup reactive updates for data store changes
@@ -184,7 +173,6 @@ export function initScene(canvasId: string) {
       clusterManager,
       nodeManager,
       navigationManager,
-      ancestorNavigationManager,
       resourceManager,
       interactionManager
     };
@@ -198,7 +186,7 @@ export function initScene(canvasId: string) {
  * Setup reactive updates for data store changes
  */
 function setupReactiveUpdates() {
-  if (!scene || !nodeManager || !clusterManager || !navigationManager || !ancestorNavigationManager) {
+  if (!scene || !nodeManager || !clusterManager || !navigationManager) {
     console.error("[SCENE] Cannot setup reactive updates - scene or managers not initialized");
     return;
   }
@@ -483,67 +471,6 @@ function createNodeCluster(nodeViewData: {
 }
 
 /**
- * Load and render an extended node view with ancestors
- * Using state synchronization approach
- */
-async function loadExtendedNodeView(namespace: string, nodeId: number) {
-  if (!scene || !nodeManager || !clusterManager || !ancestorNavigationManager || !camera) {
-    console.error("[SCENE] Cannot load extended node view - scene or managers not initialized");
-    return;
-  }
-
-  try {
-    console.log(`[SCENE] Loading extended node view for node ${nodeId} in namespace ${namespace}`);
-
-    // Remove demo box if it exists
-    if ((scene as any).demoBox) {
-      (scene as any).demoBox.dispose();
-      (scene as any).demoBox = null;
-    }
-
-    // Synchronize scene to target state (including ancestors)
-    await syncSceneToTargetState(namespace, nodeId, true);
-
-    // Update current node ID
-    currentNodeId = nodeId;
-
-    // Position camera for the ancestor view
-    const nodeViewData = await dataStore.loadExtendedNodeView(namespace, nodeId);
-    await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for nodes to be visible
-    resetCameraForNodeView(camera,
-      new Vector3(
-        nodeViewData.currentNode.centroid[0] * 3.0,
-        nodeViewData.currentNode.centroid[1] * 3.0,
-        nodeViewData.currentNode.centroid[2] * 3.0
-      )
-    );
-
-    console.log(`[SCENE] Successfully loaded extended node view for node ${nodeId}`);
-
-  } catch (error) {
-    console.error("[SCENE] Failed to load extended node view:", error);
-    dataStore.setError(`Failed to load extended node view: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-/**
- * Calculate centroid for ancestor view (current node + children)
- */
-function calculateAncestorViewCentroid(currentNode: ClusterNode): Vector3 {
-  // For ancestor view, we want to center on the current node and its children
-  // This provides better context for the hierarchical structure
-
-  // If current node has valid centroid, use it as base
-  if (currentNode.centroid && Array.isArray(currentNode.centroid) && currentNode.centroid.length === 3) {
-    const [x, y, z] = currentNode.centroid;
-    return new Vector3(x, y, z);
-  }
-
-  // Fallback to origin
-  return Vector3.Zero();
-}
-
-/**
  * Reset camera for node view
  */
 function resetCameraForNodeView(camera: ArcRotateCamera, targetPosition: Vector3): void {
@@ -598,28 +525,27 @@ function resetCameraForNodeView(camera: ArcRotateCamera, targetPosition: Vector3
 
       // Position camera to see all nodes
       const easingFrames = 90;
+      const timeoutDelay = 10;
       const newPosition = new Vector3(
         centerX,
         centerY + maxSize * 0.5, // Slightly above the center
         centerZ - adjustedDistance
       )
       // camera.setPosition(newPosition);
-      console.debug(`[CAMERA] camera.position['x'] = ${camera.position['x']}`)
-      console.debug(`[CAMERA] camera.position['x'] = ${camera.position['x']}`)
-      setTimeout(() => camera.position.easeTo("x", newPosition.x, easingFrames), 100);
-      setTimeout(() => camera.position.easeTo("y", newPosition.y, easingFrames), 100);
-      setTimeout(() => camera.position.easeTo("z", newPosition.z, easingFrames), 100);
+      setTimeout(() => camera.position.easeTo("x", newPosition.x, easingFrames), timeoutDelay);
+      setTimeout(() => camera.position.easeTo("y", newPosition.y, easingFrames), timeoutDelay);
+      setTimeout(() => camera.position.easeTo("z", newPosition.z, easingFrames), timeoutDelay);
 
       // Set target to center of all nodes
       const newTarget = new Vector3(centerX, centerY, centerZ);
       // camera.setTarget(newTarget);
-      setTimeout(() => camera.target.easeTo("x", newTarget.x, easingFrames), 100);
-      setTimeout(() => camera.target.easeTo("y", newTarget.y, easingFrames), 100);
-      setTimeout(() => camera.target.easeTo("z", newTarget.z, easingFrames), 100);
+      setTimeout(() => camera.target.easeTo("x", newTarget.x, easingFrames), timeoutDelay);
+      setTimeout(() => camera.target.easeTo("y", newTarget.y, easingFrames), timeoutDelay);
+      setTimeout(() => camera.target.easeTo("z", newTarget.z, easingFrames), timeoutDelay);
 
       // Adjust camera parameters
       camera.radius = adjustedDistance;
-      // setTimeout(() => camera.easeTo("radius", adjustedDistance, easingFrames), 100);
+      // setTimeout(() => camera.easeTo("radius", adjustedDistance, easingFrames), timeoutDelay);
       camera.alpha = Math.PI / 2; // Side view
       camera.beta = Math.PI / 3; // Slightly above
 
@@ -666,10 +592,6 @@ export function cleanupScene() {
 
   if (navigationManager) {
     navigationManager.dispose();
-  }
-
-  if (ancestorNavigationManager) {
-    ancestorNavigationManager.dispose();
   }
 
   if (nodeManager) {

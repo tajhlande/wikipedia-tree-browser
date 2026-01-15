@@ -71,102 +71,6 @@ export class NavigationManager {
   }
 
   /**
-   * Create a node cluster from cluster data
-   */
-  protected createNodeCluster(clusterData: ClusterNode[]): void {
-    if (!clusterData || clusterData.length === 0) {
-      console.warn('[NAV] Empty cluster data received');
-      return;
-    }
-
-    // Find the central node (this should be the clusterNodeId)
-    const centralNode = clusterData.find(node => node.id === this.currentNodeId);
-
-    if (!centralNode) {
-      console.error('[NAV] Central node not found in cluster data.', {
-        currentNodeId: this.currentNodeId,
-        availableNodeIds: clusterData.map(n => n.id),
-        availableNodeLabels: clusterData.map(n => n.label).slice(0, 5) + (clusterData.length > 5 ? '...' : '')
-      });
-
-      // Check if any of the available nodes might be related to our target
-      const possibleMatches = clusterData.filter(node =>
-        node.parent_id === this.currentNodeId ||
-        (node.children && node.children.includes(this.currentNodeId))
-      );
-
-      if (possibleMatches.length > 0) {
-        console.warn('[NAV] Found possible related nodes. Using first match as central node');
-        const matchedNode = possibleMatches[0];
-
-        // Add all nodes to the cluster using the matched node as central
-        clusterData.forEach(node => {
-          this.clusterManager.addNodeToCluster(node, matchedNode.id);
-        });
-
-        // Create links based on parent-child relationships
-        clusterData.forEach(childNode => {
-          if (childNode.parent_id === matchedNode.id) {
-            this.clusterManager.addLinkToCluster(matchedNode, childNode, matchedNode.id);
-          }
-        });
-
-        // Also create link to our target node if it's a parent
-        if (matchedNode.parent_id === this.currentNodeId) {
-          // We need to create a placeholder for the missing central node
-          console.warn('[NAV] Creating placeholder for missing central node (parent)');
-          // Note: In a real scenario, we might want to load the parent node data
-        }
-
-        return;
-      }
-
-      // Fallback: use the first node as central node if current node is not in the data
-      if (clusterData.length > 0) {
-        console.warn('[NAV] Using first node as fallback central node');
-        const fallbackCentralNode = clusterData[0];
-
-        // Add all nodes to the cluster using the fallback central node
-        clusterData.forEach(node => {
-          this.clusterManager.addNodeToCluster(node, fallbackCentralNode.id);
-        });
-
-        // Create links based on parent-child relationships
-        clusterData.forEach(childNode => {
-          if (childNode.parent_id === fallbackCentralNode.id) {
-            this.clusterManager.addLinkToCluster(fallbackCentralNode, childNode, fallbackCentralNode.id);
-          }
-        });
-      }
-
-      return;
-    }
-
-    // Add all nodes in the cluster to the cluster manager
-    clusterData.forEach(node => {
-      // Each node belongs to the cluster defined by the central node
-      this.clusterManager.addNodeToCluster(node, centralNode.id);
-    });
-
-    // Add links between nodes based on parent-child relationships
-    clusterData.forEach(childNode => {
-      if (childNode.parent_id === centralNode.id) {
-        this.clusterManager.addLinkToCluster(centralNode, childNode, centralNode.id);
-      }
-    });
-
-    // Also create links from other nodes to their children if they exist in this cluster
-    clusterData.forEach(potentialParent => {
-      clusterData.forEach(potentialChild => {
-        if (potentialChild.parent_id === potentialParent.id &&
-            potentialChild.id !== centralNode.id) {
-          this.clusterManager.addLinkToCluster(potentialParent, potentialChild, centralNode.id);
-        }
-      });
-    });
-  }
-
-  /**
    * Position camera for a specific node
    */
   protected positionCameraForNode(nodeId: number): void {
@@ -233,136 +137,33 @@ export class NavigationManager {
 
     // Position the camera
     const easingFrames = 90;
+    const timeoutDelay = 10;
     const newCameraPosition = new Vector3(
       targetPosition.x,
       targetPosition.y + 5, // Slightly elevated
       targetPosition.z - cameraDistance
     );
     // this.camera.setPosition(newCameraPosition);
-    setTimeout(() => this.camera?.position.easeTo("x", newCameraPosition.x, easingFrames), 100);
-    setTimeout(() => this.camera?.position.easeTo("y", newCameraPosition.y, easingFrames), 100);
-    setTimeout(() => this.camera?.position.easeTo("z", newCameraPosition.z, easingFrames), 100);
+    setTimeout(() => this.camera?.position.easeTo("x", newCameraPosition.x, easingFrames), timeoutDelay);
+    setTimeout(() => this.camera?.position.easeTo("y", newCameraPosition.y, easingFrames), timeoutDelay);
+    setTimeout(() => this.camera?.position.easeTo("z", newCameraPosition.z, easingFrames), timeoutDelay);
 
 
     // this.camera.setTarget(targetPosition);
-    setTimeout(() => this.camera?.target.easeTo("x", targetPosition.x, easingFrames), 100);
-    setTimeout(() => this.camera?.target.easeTo("y", targetPosition.y, easingFrames), 100);
-    setTimeout(() => this.camera?.target.easeTo("z", targetPosition.z, easingFrames), 100);
+    setTimeout(() => this.camera?.target.easeTo("x", targetPosition.x, easingFrames), timeoutDelay);
+    setTimeout(() => this.camera?.target.easeTo("y", targetPosition.y, easingFrames), timeoutDelay);
+    setTimeout(() => this.camera?.target.easeTo("z", targetPosition.z, easingFrames), timeoutDelay);
 
     // this.camera.radius = cameraDistance;
     // this.camera.alpha = Math.PI / 2; // Side view
     // this.camera.beta = Math.PI / 4; // Slightly above
-    setTimeout(() => this.camera?.easeTo("radius", cameraDistance, easingFrames), 100);
-    setTimeout(() => this.camera?.easeTo("alpha", Math.PI / 2, easingFrames), 100);
-    setTimeout(() => this.camera?.easeTo("beta",  Math.PI / 4, easingFrames), 100);
+    setTimeout(() => this.camera?.easeTo("radius", cameraDistance, easingFrames), timeoutDelay);
+    setTimeout(() => this.camera?.easeTo("alpha", Math.PI / 2, easingFrames), timeoutDelay);
+    setTimeout(() => this.camera?.easeTo("beta",  Math.PI / 4, easingFrames), timeoutDelay);
 
     console.log(`[NAV] Positioned camera for node ${nodeId} at (${targetPosition.x}, ${targetPosition.y}, ${targetPosition.z}) with distance ${cameraDistance}`);
   }
 
-  /**
-   * Navigate to a specific node
-   */
-  public async navigateToNode(nodeId: number, namespace: string): Promise<void> {
-    if (!nodeId) {
-      console.error('[NAV] Cannot navigate to null or undefined nodeId');
-      return;
-    }
-
-    if (this.currentNodeId === nodeId) return;
-
-    // Push current node to history
-    if (this.currentNodeId !== null) {
-      this.navigationHistory.push(this.currentNodeId);
-    }
-
-    try {
-      console.log(`[NAV] Navigating to node ${nodeId} in namespace ${namespace}`);
-
-      // Load node cluster data
-      const clusterData = await this.loadNodeClusterData(nodeId, namespace);
-
-      if (!clusterData || clusterData.length === 0) {
-        console.error(`[NAV] No cluster data received for node ${nodeId}`);
-        throw new Error(`No cluster data available for node ${nodeId}`);
-      }
-
-      // Create the cluster
-      this.createNodeCluster(clusterData);
-
-      // Show new cluster, hide previous (except root)
-      this.clusterManager.showCluster(nodeId);
-      if (this.currentNodeId !== null && this.currentNodeId !== this.clusterManager.getRootNodeId()) {
-        this.clusterManager.hideCluster(this.currentNodeId);
-      }
-
-      // Update current node ID before positioning camera
-      this.currentNodeId = nodeId;
-
-      // Small delay to ensure nodes are visible before positioning camera
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Position camera
-      this.positionCameraForNode(nodeId);
-
-      // Clean up unused resources
-      this.clusterManager.cleanupUnusedNodes();
-      this.clusterManager.cleanupUnusedLinks();
-
-      console.log(`[NAV] Successfully navigated to node ${nodeId}`);
-
-    } catch (error) {
-      console.error(`[NAV] Failed to navigate to node ${nodeId}:`, error);
-      // Reset currentNodeId if navigation failed
-      if (this.currentNodeId !== nodeId) {
-        this.currentNodeId = null;
-      }
-      throw error;
-    }
-  }
-
-  /**
-   * Go back to previous node
-   */
-  public goBack(): void {
-    if (this.navigationHistory.length > 0) {
-      const previousNodeId = this.navigationHistory.pop();
-      if (previousNodeId) {
-        // Get current namespace from data store or context
-        const namespace = ''; // This should be obtained from the application context
-        this.navigateToNode(previousNodeId, namespace);
-      }
-    }
-  }
-
-  /**
-   * Go forward to next node (if available)
-   */
-  public goForward(): void {
-    // Note: For simplicity, we're not implementing forward navigation history
-    // This could be added if needed by maintaining a forward stack
-    console.log('[NAV] Forward navigation not implemented');
-  }
-
-  /**
-   * Get current node ID
-   */
-  public getCurrentNodeId(): number | null {
-    return this.currentNodeId;
-  }
-
-  /**
-   * Get navigation history
-   */
-  public getNavigationHistory(): number[] {
-    return [...this.navigationHistory];
-  }
-
-  /**
-   * Clear navigation history
-   */
-  public clearHistory(): void {
-    this.navigationHistory = [];
-  }
 
   /**
    * Clear data cache
@@ -375,7 +176,6 @@ export class NavigationManager {
    * Dispose resources
    */
   public dispose(): void {
-    this.clearHistory();
     this.clearCache();
   }
 }

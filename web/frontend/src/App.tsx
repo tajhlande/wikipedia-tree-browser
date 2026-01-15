@@ -26,8 +26,6 @@ const App: Component = () => {
         <NamespaceSelector />
       </Show>
 
-      {/* Overlay UI - removed as requested (contained debug, kobalte, and tailwind test buttons) */}
-
       {/* Navigation Controls - shown in node view */}
       <NavigationControls />
 

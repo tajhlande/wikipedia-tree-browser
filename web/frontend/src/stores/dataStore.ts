@@ -321,105 +321,6 @@ export const createDataStore = () => {
   };
 
   /**
-   * Load extended node view with ancestors (current node, children, parent, ancestors)
-   */
-  const loadExtendedNodeView = async (namespace: string, nodeId: number): Promise<{
-    currentNode: ClusterNode;
-    children: ClusterNode[];
-    parent: ClusterNode | null;
-    ancestors: ClusterNode[];
-    ancestorChildren: Record<number, ClusterNode[]>;
-  }> => {
-    setLoading(true);
-    clearError();
-
-    try {
-      // Load basic node view first
-      const { currentNode, children, parent } = await loadNodeView(namespace, nodeId);
-
-      // Load ancestors and their children
-      const ancestorsResult = await apiClient.getNodeAncestors(namespace, nodeId);
-
-      if (!ancestorsResult.success || !ancestorsResult.data) {
-        console.warn(`[DATA] No ancestors found for node ${nodeId} - this is expected for root nodes`);
-        return {
-          currentNode,
-          children,
-          parent,
-          ancestors: [],
-          ancestorChildren: {},
-        };
-      }
-
-      // Build list of node IDs to load children for: all ancestors + parent (if exists)
-      const ancestorIds = ancestorsResult.data.map(ancestor => ancestor.id);
-      const nodeIdsToLoadChildrenFor = [...ancestorIds];
-
-      // Add parent ID to load its children (siblings of current node)
-      if (parent && parent.id) {
-        // Only add if not already in ancestors list
-        if (!nodeIdsToLoadChildrenFor.includes(parent.id)) {
-          nodeIdsToLoadChildrenFor.push(parent.id);
-          console.log(`[DATA] Adding parent ${parent.id} to children batch load`);
-        }
-      }
-
-      console.log(`[DATA] Loading children for ${nodeIdsToLoadChildrenFor.length} nodes:`, nodeIdsToLoadChildrenFor);
-      const childrenBatchResult = await apiClient.getNodeChildrenBatch(namespace, nodeIdsToLoadChildrenFor);
-
-      if (!childrenBatchResult.success) {
-        console.warn(`[DATA] Failed to load children for some ancestors: ${childrenBatchResult.error}`);
-      }
-
-      // Map backend data to frontend models for ancestors
-      const mappedAncestors = ancestorsResult.data.map(ancestor =>
-        _mapBackendNodeToFrontend(ancestor, namespace)
-      );
-
-      // Map ancestor children
-      const mappedAncestorChildren: Record<number, ClusterNode[]> = {};
-      if (childrenBatchResult.success && childrenBatchResult.data) {
-        Object.entries(childrenBatchResult.data).forEach(([ancestorIdStr, childrenData]) => {
-          const ancestorId = parseInt(ancestorIdStr);
-          if (childrenData && childrenData.length > 0) {
-            mappedAncestorChildren[ancestorId] = childrenData.map(child =>
-              _mapBackendNodeToFrontend(child, namespace)
-            );
-            console.log(`[DATA] Loaded ${childrenData.length} children for node ${ancestorId}`);
-          } else {
-            mappedAncestorChildren[ancestorId] = [];
-          }
-        });
-      }
-
-      // Cache ancestor data
-      mappedAncestors.forEach(ancestor => {
-        cacheNode(`node_${namespace}_${ancestor.id}`, ancestor);
-      });
-
-      Object.entries(mappedAncestorChildren).forEach(([ancestorIdStr, childrenData]) => {
-        const ancestorId = parseInt(ancestorIdStr);
-        cacheNode(`children_${namespace}_${ancestorId}`, childrenData);
-      });
-
-      console.log(`[DATA] Extended view loaded: ${mappedAncestors.length} ancestors, ${Object.keys(mappedAncestorChildren).length} sets of ancestor children`);
-
-      return {
-        currentNode,
-        children,
-        parent,
-        ancestors: mappedAncestors,
-        ancestorChildren: mappedAncestorChildren,
-      };
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Unknown error loading extended node view');
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /**
    * Navigate to a node
    */
   const navigateToNode = async (namespace: string, nodeId: number): Promise<void> => {
@@ -548,7 +449,6 @@ export const createDataStore = () => {
     loadNamespaces,
     loadRootNode,
     loadNodeView,
-    loadExtendedNodeView,
     navigateToNode,
     navigateToParent,
     navigateToRoot,
