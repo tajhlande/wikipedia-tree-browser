@@ -96,8 +96,11 @@ def get_language_for_namespace(namespace: str, language_file: str = "../../data/
     """
     global namespace_dict, lang_dict
     try:
+        logger.info("Trying to load language for namespace `%s`", namespace)
         if namespace_dict:
             return namespace_dict[namespace]
+        # if the dict isn't loaded yet, we'll load it below
+
     except KeyError as e:
         logger.error("Invalid namespace for language lookup: %s", namespace)
         raise e

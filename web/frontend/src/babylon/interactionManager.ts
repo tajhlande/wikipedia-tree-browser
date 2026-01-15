@@ -177,11 +177,24 @@ export class InteractionManager {
       if (nodeData) {
         const meshType = meshName.startsWith('node_') ? 'node' : 'billboard';
         console.debug(`[INTERACT] Clicked ${meshType} ${nodeId}: ${nodeData.label}`);
-
-        // Navigate to the clicked node
         const currentNamespace = dataStore.state.currentNamespace;
-        if (currentNamespace) {
-          dataStore.navigateToNode(currentNamespace, nodeId);
+
+        // if this is a leaf node, show the list of pages
+        if (nodeData.is_leaf) {
+          console.debug(`[INTERACT] Show pages for leaf node ${nodeId}: ${nodeData.label}`)
+          // Set the current node and show the leaf node overlay
+          //dataStore.setCurrentNode(nodeData);
+          dataStore.setState('leafNodeInfoVisible', true);
+          dataStore.setState('leafNode', nodeData)
+          console.debug(`[INTERACT] Set leafNodeInfoVisible to true, currentNode:`, nodeData);
+        } else {
+          // Navigate to the clicked node
+          if (currentNamespace) {
+            console.debug(`[INTERACT] Navigating to node ${nodeId}`)
+            dataStore.setState('leafNodeInfoVisible', false);
+            dataStore.setState('leafNode', null)
+            dataStore.navigateToNode(currentNamespace, nodeId);
+          }
         }
       }
     }

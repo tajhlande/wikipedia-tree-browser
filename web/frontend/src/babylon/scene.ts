@@ -6,7 +6,10 @@ import {
   HemisphericLight,
   MeshBuilder,
   Color3,
-  DirectionalLight
+  DirectionalLight,
+  CubicEase,
+  EasingFunction,
+  Animation,
 } from "@babylonjs/core";
 import { NodeManager } from './nodeManager';
 import { ClusterManager } from './clusterManager';
@@ -32,6 +35,35 @@ export let interactionManager: InteractionManager | null = null;
 // Track current node ID for cluster management
 let currentNodeId: number | null = null;
 let rootNodeId: number | null = null;
+
+declare module "@babylonjs/core" {
+  interface ArcRotateCamera {
+    easeTo(whichprop: string, targetval: number, speed: number): void;
+  }
+  interface Vector3 {
+    easeTo(whichprop: string, targetval: number, speed: number): void;
+  }
+}
+
+const easingFunction = (whichprop: string, targetval: number, frames: number, fps=60) => {
+    const ease = new CubicEase();
+    ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
+  Animation.CreateAndStartAnimation('at4', this, whichprop, frames, 60, (this as any)[whichprop], targetval, 0, ease);
+  console.debug(`[CAMERA] Easing ${whichprop} to ${targetval} in ${frames} frames`)
+}
+
+ArcRotateCamera.prototype.easeTo = function (whichprop: string, targetval: number, frames: number, fps=60) {
+    const ease = new CubicEase();
+    ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
+  Animation.CreateAndStartAnimation('at4', this, whichprop, frames, 60, (this as any)[whichprop], targetval, 0, ease);
+  console.debug(`[CAMERA] Easing camera.${whichprop} to ${targetval} in ${frames} frames`)
+};
+Vector3.prototype.easeTo = function (whichprop: string, targetval: number, frames: number, fps=60) {
+    const ease = new CubicEase();
+    ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
+  Animation.CreateAndStartAnimation('at4', this, whichprop, frames, 60, (this as any)[whichprop], targetval, 0, ease);
+  console.debug(`[CAMERA] Easing vector.${whichprop} to ${targetval} in ${frames} frames`)
+};
 
 export function initScene(canvasId: string) {
   try {
@@ -177,9 +209,8 @@ function setupReactiveUpdates() {
     const currentView = dataStore.state.currentView;
     const currentNode = dataStore.state.currentNode;
     const currentNamespace = dataStore.state.currentNamespace;
-    const showAncestors = dataStore.state.showAncestors;
 
-    console.log(`[SCENE EFFECT] View: ${currentView}, Node: ${currentNode?.id}, ShowAncestors: ${showAncestors}`);
+    console.log(`[SCENE EFFECT] View: ${currentView}, Node: ${currentNode?.id}`);
 
     if (currentView === 'node_view' && currentNode && currentNamespace && clusterManager) {
       // Remove demo box if it exists
@@ -196,13 +227,8 @@ function setupReactiveUpdates() {
       }
 
       // Load and render the appropriate node view
-      if (showAncestors) {
-        console.log(`[SCENE EFFECT] Loading EXTENDED view for node ${currentNode.id}`);
-        loadExtendedNodeView(currentNamespace, currentNode.id);
-      } else {
-        console.log(`[SCENE EFFECT] Loading REGULAR view for node ${currentNode.id}`);
-        loadNodeView(currentNamespace, currentNode.id);
-      }
+      console.log(`[SCENE EFFECT] Loading view for node ${currentNode.id}`);
+      loadNodeView(currentNamespace, currentNode.id);
     }
   });
 
@@ -220,7 +246,6 @@ function setupReactiveUpdates() {
   // Reactive effect for current node changes (camera positioning only)
   createEffect(() => {
     const currentNode = dataStore.state.currentNode;
-    const showAncestors = dataStore.state.showAncestors;
     if (currentNode && camera) {
       console.log(`[SCENE] Current node changed to: ${currentNode.id} (${currentNode.label})`);
 
@@ -228,24 +253,19 @@ function setupReactiveUpdates() {
       if (currentNode.centroid) {
         let targetPosition: Vector3;
 
-        if (showAncestors) {
-          // For ancestor view, focus on centroid of current node and its children
-          targetPosition = calculateAncestorViewCentroid(currentNode);
-        } else {
-          // For regular view, focus on current node only
-          targetPosition = new Vector3(
-            currentNode.centroid[0] * 3.0, // Apply scene scaling
-            currentNode.centroid[1] * 3.0,
-            currentNode.centroid[2] * 3.0
-          );
-        }
+        // For regular view, focus on current node only
+        targetPosition = new Vector3(
+          currentNode.centroid[0] * 3.0, // Apply scene scaling
+          currentNode.centroid[1] * 3.0,
+          currentNode.centroid[2] * 3.0
+        );
 
         // Small delay to ensure nodes are actually visible before positioning camera
         setTimeout(() => {
           if (camera) {
             // Reset camera to consistent zoom level and position
-            resetCameraForNodeView(camera, targetPosition, showAncestors);
-            console.log(`[SCENE] Camera centered on ${showAncestors ? 'ancestor view centroid' : 'node'} ${currentNode.id} at (${targetPosition.x}, ${targetPosition.y}, ${targetPosition.z})`);
+            resetCameraForNodeView(camera, targetPosition);
+            console.log(`[SCENE] Camera centered on node ${currentNode.id} at (${targetPosition.x}, ${targetPosition.y}, ${targetPosition.z})`);
           }
         }, 200); // 200ms delay to allow nodes to become visible
       }
@@ -404,8 +424,7 @@ async function loadNodeView(namespace: string, nodeId: number) {
         nodeViewData.currentNode.centroid[0] * 3.0,
         nodeViewData.currentNode.centroid[1] * 3.0,
         nodeViewData.currentNode.centroid[2] * 3.0
-      ),
-      false
+      )
     );
 
     console.log(`[SCENE] Successfully loaded node view for node ${nodeId}`);
@@ -496,8 +515,7 @@ async function loadExtendedNodeView(namespace: string, nodeId: number) {
         nodeViewData.currentNode.centroid[0] * 3.0,
         nodeViewData.currentNode.centroid[1] * 3.0,
         nodeViewData.currentNode.centroid[2] * 3.0
-      ),
-      true
+      )
     );
 
     console.log(`[SCENE] Successfully loaded extended node view for node ${nodeId}`);
@@ -528,10 +546,10 @@ function calculateAncestorViewCentroid(currentNode: ClusterNode): Vector3 {
 /**
  * Reset camera for node view
  */
-function resetCameraForNodeView(camera: ArcRotateCamera, targetPosition: Vector3, isAncestorView: boolean): void {
+function resetCameraForNodeView(camera: ArcRotateCamera, targetPosition: Vector3): void {
   // Calculate appropriate camera distance based on view type
   // Reduced to ensure billboards are within LOD visibility distance (20 units)
-  const baseDistance = isAncestorView ? 15 : 12;
+  const baseDistance = 12;
 
   // Calculate bounds of all visible nodes for better camera positioning
   if (!clusterManager) {
@@ -579,17 +597,29 @@ function resetCameraForNodeView(camera: ArcRotateCamera, targetPosition: Vector3
       const adjustedDistance = Math.min(18, baseDistance + maxSize * 1.5);
 
       // Position camera to see all nodes
-      camera.setPosition(new Vector3(
+      const easingFrames = 90;
+      const newPosition = new Vector3(
         centerX,
         centerY + maxSize * 0.5, // Slightly above the center
         centerZ - adjustedDistance
-      ));
+      )
+      // camera.setPosition(newPosition);
+      console.debug(`[CAMERA] camera.position['x'] = ${camera.position['x']}`)
+      console.debug(`[CAMERA] camera.position['x'] = ${camera.position['x']}`)
+      setTimeout(() => camera.position.easeTo("x", newPosition.x, easingFrames), 100);
+      setTimeout(() => camera.position.easeTo("y", newPosition.y, easingFrames), 100);
+      setTimeout(() => camera.position.easeTo("z", newPosition.z, easingFrames), 100);
 
       // Set target to center of all nodes
-      camera.setTarget(new Vector3(centerX, centerY, centerZ));
+      const newTarget = new Vector3(centerX, centerY, centerZ);
+      // camera.setTarget(newTarget);
+      setTimeout(() => camera.target.easeTo("x", newTarget.x, easingFrames), 100);
+      setTimeout(() => camera.target.easeTo("y", newTarget.y, easingFrames), 100);
+      setTimeout(() => camera.target.easeTo("z", newTarget.z, easingFrames), 100);
 
       // Adjust camera parameters
       camera.radius = adjustedDistance;
+      // setTimeout(() => camera.easeTo("radius", adjustedDistance, easingFrames), 100);
       camera.alpha = Math.PI / 2; // Side view
       camera.beta = Math.PI / 3; // Slightly above
 
@@ -624,25 +654,6 @@ function resetCameraForNodeView(camera: ArcRotateCamera, targetPosition: Vector3
   // Ensure camera doesn't get too close
   camera.lowerRadiusLimit = 10;
   camera.upperRadiusLimit = 200;
-}
-
-/**
- * Position camera for ancestor view
- */
-function positionCameraForAncestorView(camera: ArcRotateCamera, targetPosition: Vector3): void {
-  // Wider view for ancestor visualization
-  const distance = 35;
-
-  camera.setPosition(new Vector3(
-    targetPosition.x,
-    targetPosition.y + 10,
-    targetPosition.z - distance
-  ));
-
-  camera.setTarget(targetPosition);
-  camera.radius = distance;
-  camera.alpha = Math.PI / 2;
-  camera.beta = Math.PI / 4;
 }
 
 /**

@@ -19,6 +19,7 @@
     },
     "web/backend": {
       "python.defaultInterpreterPath": "${workspaceFolder:web/bakend}/.venv/bin/python"
-    }
+    },
+    "search.useIgnoreFiles": false
   }
 }

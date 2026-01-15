@@ -1,7 +1,26 @@
 import { ClusterManager } from './clusterManager';
-import { Vector3, ArcRotateCamera } from "@babylonjs/core";
+import { Vector3, ArcRotateCamera, CubicEase, EasingFunction, Animation } from "@babylonjs/core";
 import type { ClusterNode } from '../types';
 import { apiClient } from '../services/apiClient';
+
+declare module "@babylonjs/core" {
+  interface ArcRotateCamera {
+    easeTo(whichprop: string, targetval: number, speed: number): void;
+  }
+  interface Vector3 {
+    easeTo(whichprop: string, targetval: number, speed: number): void;
+  }
+}
+
+const easingFunction = (whichprop: string, targetval: number, frames: number, fps=60) => {
+    const ease = new CubicEase();
+    ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
+	Animation.CreateAndStartAnimation('at4', this, whichprop, frames, 60, (this as any)[whichprop], targetval, 0, ease);
+  console.debug(`[NAV] Easing camera ${whichprop} to ${targetval} in ${frames} frames`)
+}
+
+ArcRotateCamera.prototype.easeTo = easingFunction;
+Vector3.prototype.easeTo = easingFunction;
 
 /**
  * NavigationManager for cluster-based navigation
@@ -30,7 +49,7 @@ export class NavigationManager {
    */
   protected async loadNodeClusterData(nodeId: number, namespace: string): Promise<ClusterNode[]> {
     const cacheKey = `${namespace}_${nodeId}`;
-    
+
     // Check cache first
     if (this.dataCache.has(cacheKey)) {
       return this.dataCache.get(cacheKey)!;
@@ -40,10 +59,10 @@ export class NavigationManager {
       // Load the node cluster data
       const response = await apiClient.getNodeCluster(nodeId, namespace);
       const clusterData = response.data;
-      
+
       // Cache the data
       this.dataCache.set(cacheKey, clusterData);
-      
+
       return clusterData;
     } catch (error) {
       console.error(`[NAV] Failed to load cluster data for node ${nodeId}:`, error);
@@ -62,56 +81,56 @@ export class NavigationManager {
 
     // Find the central node (this should be the clusterNodeId)
     const centralNode = clusterData.find(node => node.id === this.currentNodeId);
-    
+
     if (!centralNode) {
       console.error('[NAV] Central node not found in cluster data.', {
         currentNodeId: this.currentNodeId,
         availableNodeIds: clusterData.map(n => n.id),
         availableNodeLabels: clusterData.map(n => n.label).slice(0, 5) + (clusterData.length > 5 ? '...' : '')
       });
-      
+
       // Check if any of the available nodes might be related to our target
-      const possibleMatches = clusterData.filter(node => 
-        node.parent_id === this.currentNodeId || 
+      const possibleMatches = clusterData.filter(node =>
+        node.parent_id === this.currentNodeId ||
         (node.children && node.children.includes(this.currentNodeId))
       );
-      
+
       if (possibleMatches.length > 0) {
         console.warn('[NAV] Found possible related nodes. Using first match as central node');
         const matchedNode = possibleMatches[0];
-        
+
         // Add all nodes to the cluster using the matched node as central
         clusterData.forEach(node => {
           this.clusterManager.addNodeToCluster(node, matchedNode.id);
         });
-        
+
         // Create links based on parent-child relationships
         clusterData.forEach(childNode => {
           if (childNode.parent_id === matchedNode.id) {
             this.clusterManager.addLinkToCluster(matchedNode, childNode, matchedNode.id);
           }
         });
-        
+
         // Also create link to our target node if it's a parent
         if (matchedNode.parent_id === this.currentNodeId) {
           // We need to create a placeholder for the missing central node
           console.warn('[NAV] Creating placeholder for missing central node (parent)');
           // Note: In a real scenario, we might want to load the parent node data
         }
-        
+
         return;
       }
-      
+
       // Fallback: use the first node as central node if current node is not in the data
       if (clusterData.length > 0) {
         console.warn('[NAV] Using first node as fallback central node');
         const fallbackCentralNode = clusterData[0];
-        
+
         // Add all nodes to the cluster using the fallback central node
         clusterData.forEach(node => {
           this.clusterManager.addNodeToCluster(node, fallbackCentralNode.id);
         });
-        
+
         // Create links based on parent-child relationships
         clusterData.forEach(childNode => {
           if (childNode.parent_id === fallbackCentralNode.id) {
@@ -119,7 +138,7 @@ export class NavigationManager {
           }
         });
       }
-      
+
       return;
     }
 
@@ -139,7 +158,7 @@ export class NavigationManager {
     // Also create links from other nodes to their children if they exist in this cluster
     clusterData.forEach(potentialParent => {
       clusterData.forEach(potentialChild => {
-        if (potentialChild.parent_id === potentialParent.id && 
+        if (potentialChild.parent_id === potentialParent.id &&
             potentialChild.id !== centralNode.id) {
           this.clusterManager.addLinkToCluster(potentialParent, potentialChild, centralNode.id);
         }
@@ -155,21 +174,22 @@ export class NavigationManager {
       console.warn(`[NAV] Cannot position camera - camera reference not set`);
       return;
     }
-    
+    console.debug("[NAV] Positioning camera for node");
+
     // Get the node mesh to position camera
     const nodeMesh = this.clusterManager.getNodeMesh(nodeId);
-    
+
     if (!nodeMesh) {
       console.warn(`[NAV] Cannot position camera - node ${nodeId} mesh not found`);
       return;
     }
-    
+
     // Calculate bounds of visible nodes in the current cluster for better positioning
     const visibleClusters = this.clusterManager.getVisibleClusters();
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
     let minZ = Infinity, maxZ = -Infinity;
-    
+
     if (visibleClusters && visibleClusters.size > 0) {
       visibleClusters.forEach(clusterNodeId => {
         const nodesInCluster = this.clusterManager.getNodesInCluster(clusterNodeId);
@@ -189,40 +209,53 @@ export class NavigationManager {
         }
       });
     }
-    
+
     let targetPosition = nodeMesh.position;
     let cameraDistance = 20; // Default distance
-    
+
     // If we found visible nodes, calculate better positioning
     if (minX !== Infinity) {
       const centerX = (minX + maxX) / 2;
       const centerY = (minY + maxY) / 2;
       const centerZ = (minZ + maxZ) / 2;
-      
+
       const sizeX = maxX - minX;
       const sizeY = maxY - minY;
       const sizeZ = maxZ - minZ;
       const maxSize = Math.max(sizeX, sizeY, sizeZ);
-      
+
       // Use the center of the cluster as target
       targetPosition = new Vector3(centerX, centerY, centerZ);
-      
+
       // Adjust camera distance based on cluster size
       cameraDistance = 25 + maxSize * 1.5;
     }
-    
+
     // Position the camera
-    this.camera.setPosition(new Vector3(
+    const easingFrames = 90;
+    const newCameraPosition = new Vector3(
       targetPosition.x,
       targetPosition.y + 5, // Slightly elevated
       targetPosition.z - cameraDistance
-    ));
-    
-    this.camera.setTarget(targetPosition);
-    this.camera.radius = cameraDistance;
-    this.camera.alpha = Math.PI / 2; // Side view
-    this.camera.beta = Math.PI / 4; // Slightly above
-    
+    );
+    // this.camera.setPosition(newCameraPosition);
+    setTimeout(() => this.camera?.position.easeTo("x", newCameraPosition.x, easingFrames), 100);
+    setTimeout(() => this.camera?.position.easeTo("y", newCameraPosition.y, easingFrames), 100);
+    setTimeout(() => this.camera?.position.easeTo("z", newCameraPosition.z, easingFrames), 100);
+
+
+    // this.camera.setTarget(targetPosition);
+    setTimeout(() => this.camera?.target.easeTo("x", targetPosition.x, easingFrames), 100);
+    setTimeout(() => this.camera?.target.easeTo("y", targetPosition.y, easingFrames), 100);
+    setTimeout(() => this.camera?.target.easeTo("z", targetPosition.z, easingFrames), 100);
+
+    // this.camera.radius = cameraDistance;
+    // this.camera.alpha = Math.PI / 2; // Side view
+    // this.camera.beta = Math.PI / 4; // Slightly above
+    setTimeout(() => this.camera?.easeTo("radius", cameraDistance, easingFrames), 100);
+    setTimeout(() => this.camera?.easeTo("alpha", Math.PI / 2, easingFrames), 100);
+    setTimeout(() => this.camera?.easeTo("beta",  Math.PI / 4, easingFrames), 100);
+
     console.log(`[NAV] Positioned camera for node ${nodeId} at (${targetPosition.x}, ${targetPosition.y}, ${targetPosition.z}) with distance ${cameraDistance}`);
   }
 
@@ -264,7 +297,7 @@ export class NavigationManager {
 
       // Update current node ID before positioning camera
       this.currentNodeId = nodeId;
-      
+
       // Small delay to ensure nodes are visible before positioning camera
       await new Promise(resolve => setTimeout(resolve, 100));
 

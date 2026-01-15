@@ -5,7 +5,8 @@ import type {
   Page,
   NodeCache,
   PageCache,
-  Namespace
+  Namespace,
+  Vector3D
 } from '../types';
 import { apiClient } from '../services/apiClient';
 
@@ -58,12 +59,11 @@ export const createDataStore = () => {
     currentView: 'namespace_selection',
     currentNamespace: null,
     currentNode: null,
-    ancestorChain: [],
-    ancestorChildren: {},
-    showAncestors: false,
     showBillboards: true,
     loading: false,
     error: null,
+    leafNode: null,
+    leafNodeInfoVisible: false,
   });
 
   const [nodeCache, setNodeCache] = createStore<NodeCache>({});
@@ -110,34 +110,6 @@ export const createDataStore = () => {
    */
   const setCurrentNode = (node: ClusterNode | null) => {
     setState('currentNode', node);
-  };
-
-  /**
-   * Set ancestor chain
-   */
-  const setAncestorChain = (ancestors: ClusterNode[]) => {
-    setState('ancestorChain', ancestors);
-  };
-
-  /**
-   * Set ancestor children
-   */
-  const setAncestorChildren = (children: Record<number, ClusterNode[]>) => {
-    setState('ancestorChildren', children);
-  };
-
-  /**
-   * Set show ancestors flag
-   */
-  const setShowAncestors = (show: boolean) => {
-    setState('showAncestors', show);
-  };
-
-  /**
-   * Toggle ancestor visualization
-   */
-  const toggleAncestorView = () => {
-    setState('showAncestors', !state.showAncestors);
   };
 
   /**
@@ -453,16 +425,10 @@ export const createDataStore = () => {
   const navigateToNode = async (namespace: string, nodeId: number): Promise<void> => {
     try {
       let result;
-      if (state.showAncestors) {
-        result = await loadExtendedNodeView(namespace, nodeId);
-        setAncestorChain(result.ancestors);
-        setAncestorChildren(result.ancestorChildren);
-      } else {
-        result = await loadNodeView(namespace, nodeId);
-        setAncestorChain([]);
-        setAncestorChildren({});
-      }
+      result = await loadNodeView(namespace, nodeId);
 
+      dataStore.setState('leafNodeInfoVisible', false);
+      dataStore.setState('leafNode', null)
       setCurrentNode(result.currentNode);
       setCurrentNamespace(namespace);
       setCurrentView('node_view');
@@ -530,8 +496,9 @@ export const createDataStore = () => {
   /**
    * Load pages for a cluster node
    */
-  const loadPagesForNode = async (namespace: string, nodeId: number, page: number = 1, pageSize: number = 10): Promise<Page[]> => {
-    setLoading(true);
+  const loadPagesForNode = async (namespace: string, nodeId: number, page: number = 0, pageSize: number = 10): Promise<Page[]> => {
+    console.debug(`[DATA] Loading page for node ${nodeId} in namespace ${namespace}, at page ${page} and page size ${pageSize}`)
+    // setLoading(true);
     clearError();
 
     const cacheKey = `pages_${namespace}_${nodeId}_${page}_${pageSize}`;
@@ -543,14 +510,14 @@ export const createDataStore = () => {
     }
 
     try {
-      const result = await apiClient.getPagesInCluster(namespace, nodeId, page, pageSize);
+      const result = await apiClient.getPagesInCluster(namespace, nodeId, pageSize, page);
 
       if (!result.success || !result.data) {
         throw new Error(result.error || 'Failed to load pages');
       }
 
-      cachePage(cacheKey, result.data.items);
-      return result.data.items;
+      cachePage(cacheKey, result.data);
+      return result.data;
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Unknown error loading pages');
       throw error;
@@ -568,10 +535,6 @@ export const createDataStore = () => {
     setCurrentView,
     setCurrentNamespace,
     setCurrentNode,
-    setAncestorChain,
-    setAncestorChildren,
-    setShowAncestors,
-    toggleAncestorView,
     setShowBillboards,
     toggleBillboards,
     cacheNode,

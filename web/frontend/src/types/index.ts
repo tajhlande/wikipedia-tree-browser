@@ -54,11 +54,10 @@ export type AppState = {
   currentView: 'namespace_selection' | 'node_view';
   currentNamespace: string | null;
   currentNode: ClusterNode | null;
-  ancestorChain: ClusterNode[]; // Nodes from current to root
-  ancestorChildren: Record<number, ClusterNode[]>; // Direct children for each ancestor
-  showAncestors: boolean; // Whether ancestor visualization is active
   showBillboards: boolean; // Whether billboard labels are visible
   loading: boolean;
+  leafNode: ClusterNode | null;
+  leafNodeInfoVisible: boolean; // whether leaf node info is showing or not
   error: string | null;
 };
 
