@@ -41,7 +41,7 @@ export class InteractionManager {
         // Use scene.pick method for proper mesh picking with predicate
         const pickResult = this.scene.pick(pointerInfo.event.clientX, pointerInfo.event.clientY, (mesh) => {
           // Only pick meshes that are pickable and match our naming pattern
-          return mesh.isPickable && (mesh.name.startsWith('node_') || mesh.name.startsWith('billboard_'));
+          return mesh.isEnabled() && mesh.isPickable && (mesh.name.startsWith('node_') || mesh.name.startsWith('billboard_'));
         });
 
         const mesh = pickResult?.pickedMesh;
@@ -66,7 +66,7 @@ export class InteractionManager {
         // Use scene.pick method for proper mesh picking with predicate
         const pickResult = this.scene.pick(pointerInfo.event.clientX, pointerInfo.event.clientY, (mesh) => {
           // Only pick meshes that are pickable and match our naming pattern
-          return mesh.isPickable && (mesh.name.startsWith('node_') || mesh.name.startsWith('billboard_'));
+          return mesh.isEnabled() && mesh.isPickable && (mesh.name.startsWith('node_') || mesh.name.startsWith('billboard_'));
         });
 
         const mesh = pickResult?.pickedMesh;

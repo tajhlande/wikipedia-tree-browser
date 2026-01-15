@@ -8,7 +8,7 @@ import { interactionManager } from '../babylon/scene';
  */
 export const NodeInfoOverlay: Component = () => {
   const [hoverInfo, setHoverInfo] = createSignal<{nodeId: number; label: string; depth: number} | null>(null);
-  
+
   // Update hover info when interaction manager changes
   createEffect(() => {
     if (interactionManager) {
@@ -24,7 +24,7 @@ export const NodeInfoOverlay: Component = () => {
       }
     }
   });
-  
+
   return (
     <Show when={dataStore.state.currentView === 'node_view' && dataStore.state.currentNode}>
       <div class="fixed bottom-4 right-4 z-50 bg-black bg-opacity-70 text-white p-4 rounded-lg max-w-xs">
@@ -39,7 +39,7 @@ export const NodeInfoOverlay: Component = () => {
             <strong>Type:</strong> {dataStore.state.currentNode?.is_leaf ? 'Leaf' : 'Cluster'}
           </p>
         </div>
-        
+
         {/* Hover Info */}
         <Show when={hoverInfo()}>
           <div class="mt-3 pt-3 border-t border-gray-600">
@@ -51,9 +51,9 @@ export const NodeInfoOverlay: Component = () => {
             </p>
           </div>
         </Show>
-        
+
         {/* Wikipedia Link for Leaf Nodes */}
-        <Show when={dataStore.state.currentNode?.is_leaf && dataStore.state.currentNamespace}>
+        {/* <Show when={dataStore.state.currentNode?.is_leaf && dataStore.state.currentNamespace}>
           <div class="mt-3">
             <a
               href={`https://${dataStore.state.currentNamespace}.wikipedia.org/wiki/${encodeURIComponent(dataStore.state.currentNode?.label || '')}`}
@@ -64,7 +64,7 @@ export const NodeInfoOverlay: Component = () => {
               🌐 View on Wikipedia
             </a>
           </div>
-        </Show>
+        </Show> */}
       </div>
     </Show>
   );
