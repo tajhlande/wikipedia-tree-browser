@@ -123,7 +123,7 @@ export function initScene(canvasId: string) {
         if (scene) {
           // Update label visibility based on camera distance (LOD system)
           if (nodeManager && camera) {
-            nodeManager.updateLabelVisibility(camera);
+            nodeManager.updateLabelVisibility(camera, currentNodeId ?? -1);
           }
 
           scene.render();
@@ -213,7 +213,7 @@ function setupReactiveUpdates() {
 
     if (nodeManager && camera) {
       // Force update label visibility to apply the new state
-      nodeManager.updateLabelVisibility(camera);
+      nodeManager.updateLabelVisibility(camera, currentNodeId ?? -1);
     }
   });
 

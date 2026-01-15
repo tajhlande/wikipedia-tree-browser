@@ -441,7 +441,7 @@ export class NodeManager {
   /**
    * Update label visibility based on camera distance (LOD)
    */
-  public updateLabelVisibility(camera: Camera): void {
+  public updateLabelVisibility(camera: Camera, currentNodeId: number): void {
     if (!camera) return;
 
     // If billboards are globally disabled, hide all and return
@@ -459,11 +459,16 @@ export class NodeManager {
       const nodeMesh = this.clusterManager.getNodeMesh(nodeId);
       if (!nodeMesh) return;
 
-      // Check if the node belongs to any visible cluster
+      // Check if the node belongs to a visible cluster for the current node
       let isInVisibleCluster = false;
       for (const clusterNodeId of visibleClusters) {
         const nodesInCluster = this.clusterManager.getNodesInCluster(clusterNodeId);
-        if (nodesInCluster && nodesInCluster.has(nodeId)) {
+        if (nodesInCluster && nodesInCluster.has(nodeId) && currentNodeId == clusterNodeId) {
+          isInVisibleCluster = true;
+          break;
+        }
+        // also check if the node is a parent node, i.e. a cluster node id of a visible cluster
+        if (clusterNodeId == nodeId) {
           isInVisibleCluster = true;
           break;
         }
