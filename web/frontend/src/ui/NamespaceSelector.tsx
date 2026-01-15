@@ -66,7 +66,7 @@ export const NamespaceSelector = () => {
         }
 
         console.log(`[NAV] Navigating to root node ${rootNodeResult.id} for namespace ${namespace.name}`);
-        
+
         // Set the root node as current node and switch to node view
         dataStore.setCurrentNode(rootNodeResult);
         dataStore.setCurrentNamespace(namespace.name);
@@ -113,7 +113,7 @@ export const NamespaceSelector = () => {
       <div class="max-w-6xl mx-auto">
         {/* Header */}
         <div class="flex justify-between items-center mb-6">
-          <h1 class="text-3xl font-bold text-white">Wikipedia Tree Visualization</h1>
+          <h1 class="text-3xl font-bold text-white">Wikipedia Tree Browser</h1>
           <div class="text-white text-sm">
             Select a wiki to begin
           </div>
