@@ -39,31 +39,6 @@ export const NavigationControls: Component = () => {
           🏠 Home
         </button>
 
-        {/* Ancestor View Toggle */}
-        <button
-          onClick={() => {
-            dataStore.toggleAncestorView();
-          }}
-          class={`px-4 py-2 rounded-lg text-white font-medium transition-all duration-200 ${
-            dataStore.state.showAncestors
-              ? 'bg-orange-600 hover:bg-orange-700'
-              : 'bg-yellow-600 hover:bg-yellow-700'
-          }`}
-          title={dataStore.state.showAncestors ? 'Hide ancestor view' : 'Show ancestor view'}
-        >
-          {dataStore.state.showAncestors ? '👁️‍🗨️ Hide Ancestors' : '👁️ Show Ancestors'}
-        </button>
-
-        {/* Back to Namespace Selection */}
-        <button
-          onClick={() => {
-            dataStore.navigateToNamespaceSelection();
-          }}
-          class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-all duration-200"
-          title="Back to namespace selection"
-        >
-          🔙 Namespaces
-        </button>
 
         {/* Billboard Toggle */}
         <button
@@ -79,6 +54,18 @@ export const NavigationControls: Component = () => {
         >
           {dataStore.state.showBillboards ? '🏷️ Hide Labels' : '🏷️ Show Labels'}
         </button>
+
+        {/* Back to Namespace Selection */}
+        <button
+          onClick={() => {
+            dataStore.navigateToNamespaceSelection();
+          }}
+          class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-all duration-200"
+          title="Back to namespace selection"
+        >
+          🔙 Namespaces
+        </button>
+
       </div>
     </Show>
   );
