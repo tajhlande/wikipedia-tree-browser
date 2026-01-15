@@ -38,7 +38,6 @@ export class ClusterManager {
   // Set the root node ID (always visible)
   setRootNodeId(nodeId: number): void {
     this.rootNodeId = nodeId;
-    this.visibleClusters.add(nodeId);
   }
 
   // Get the root node ID
@@ -125,7 +124,8 @@ export class ClusterManager {
     }
 
     const [x, y, z] = node.centroid;
-    const nodeAbsolutePos = new Vector3(x * 3.0, y * 3.0, z * 3.0);
+    const viewScaleFactor = 3.0
+    const nodeAbsolutePos = new Vector3(x *viewScaleFactor, y * viewScaleFactor, z * viewScaleFactor);
 
     // Root node (depth 0 or no parent) is always at origin
     if (!node.parent_id || node.parent_id === 0 || node.depth === 0) {
@@ -137,7 +137,8 @@ export class ClusterManager {
     const parentNodeData = this.clusterNodeData.get(node.parent_id);
     if (parentNodeData && parentNodeData.centroid && parentNodeData.centroid.length === 3) {
       const [px, py, pz] = parentNodeData.centroid;
-      const parentAbsolutePos = new Vector3(px * 3.0, py * 3.0, pz * 3.0);
+      const parentScaleFactor = 3.0;
+      const parentAbsolutePos = new Vector3(px * parentScaleFactor, py * parentScaleFactor, pz * parentScaleFactor);
 
       // Calculate position relative to parent (child offset from parent position)
       const relativePos = parentAbsolutePos.add(nodeAbsolutePos);

@@ -282,8 +282,98 @@ function convertToClusterData(nodeViewData: {
 }
 
 /**
+ * Compute which clusters should be visible based on current node and ancestors
+ */
+async function computeTargetClusters(namespace: string, nodeId: number, includeAncestors: boolean): Promise<Array<number>> {
+  const targetClusters = new Array<number>();
+
+  // Always include current node cluster
+  let currentNodeId: number | null = nodeId;
+  while (currentNodeId != null) {
+    targetClusters.push(currentNodeId);
+    const nodeViewData = await dataStore.loadNodeView(namespace, currentNodeId);
+    if (nodeViewData.parent) {
+      currentNodeId = nodeViewData.parent.id;
+    } else {
+      currentNodeId = null;
+    }
+  }
+
+  return targetClusters;
+}
+
+/**
+ * Synchronize scene state: ensure only target clusters are visible
+ */
+async function syncSceneToTargetState(namespace: string, nodeId: number, includeAncestors: boolean) {
+  if (!clusterManager || !nodeManager) {
+    console.error("[SCENE] Cannot sync scene - managers not initialized");
+    return;
+  }
+
+  // Step 1: Compute which clusters should be visible
+  const targetClusters: Array<number> = await computeTargetClusters(namespace, nodeId, includeAncestors);
+  console.log(`[SCENE] Target clusters for node ${nodeId}:`, targetClusters);
+
+  // Step 2: Get currently visible clusters
+  const currentlyVisible = clusterManager.getVisibleClusters();
+  console.log(`[SCENE] Currently visible clusters:`, Array.from(currentlyVisible));
+
+  // Step 3: Determine which clusters to show (in target but not visible)
+  const clustersToShow = new Set<number>();
+  targetClusters.forEach(clusterId => {
+    if (!currentlyVisible.has(clusterId)) {
+      clustersToShow.add(clusterId);
+    }
+  });
+
+  // Step 4: Determine which clusters to hide (visible but not in target)
+  const clustersToHide = new Set<number>();
+  currentlyVisible.forEach(clusterId => {
+    if (targetClusters.indexOf(clusterId) < 0) {
+      clustersToHide.add(clusterId);
+    }
+  });
+
+  console.log(`[SCENE] Clusters to show:`, Array.from(clustersToShow));
+  console.log(`[SCENE] Clusters to hide:`, Array.from(clustersToHide));
+
+  // Step 5: Create missing clusters
+  for (const clusterId of clustersToShow) {
+    const nodeViewData = await dataStore.loadNodeView(namespace, clusterId);
+    createNodeCluster(nodeViewData, clusterId);
+  }
+
+  // Step 6: Show target clusters
+  targetClusters.forEach(clusterId => {
+    if (nodeManager) {
+      nodeManager.showCluster(clusterId);
+    } else if (clusterManager) {
+      clusterManager.showCluster(clusterId);
+    }
+  });
+
+  // Step 7: Hide non-target clusters
+  clustersToHide.forEach(clusterId => {
+    if (nodeManager) {
+      nodeManager.hideCluster(clusterId);
+    } else if (clusterManager) {
+      clusterManager.hideCluster(clusterId);
+    }
+  });
+
+  // Step 8: Clean up unused resources
+  console.log(`[SCENE] Cleaning up unused nodes, links, and billboards`);
+  clusterManager.cleanupUnusedNodes();
+  clusterManager.cleanupUnusedLinks();
+  if (nodeManager) {
+    nodeManager.cleanupUnusedBillboards();
+  }
+}
+
+/**
  * Load and render a node view (current node, children, parent)
- * Following the cluster architecture plan: add clusters, don't clear all
+ * Using state synchronization approach
  */
 async function loadNodeView(namespace: string, nodeId: number) {
   if (!scene || !nodeManager || !clusterManager || !navigationManager || !camera) {
@@ -294,48 +384,20 @@ async function loadNodeView(namespace: string, nodeId: number) {
   try {
     console.log(`[SCENE] Loading node view for node ${nodeId} in namespace ${namespace}`);
 
-    // Load node data using API client
-    const nodeViewData = await dataStore.loadNodeView(namespace, nodeId);
-
-    // Convert to cluster data format
-    const clusterData = convertToClusterData(nodeViewData);
-
-    if (clusterData.length === 0) {
-      console.error("[SCENE] No cluster data available to create cluster");
-      dataStore.setError("No cluster data available for the selected node");
-      return;
+    // Remove demo box if it exists
+    if ((scene as any).demoBox) {
+      (scene as any).demoBox.dispose();
+      (scene as any).demoBox = null;
     }
 
-    // Hide previous cluster (except root) - as per architecture plan
-    if (currentNodeId !== null && currentNodeId !== rootNodeId) {
-      console.log(`[SCENE] Hiding previous cluster: ${currentNodeId}`);
-      if (nodeManager) {
-        nodeManager.hideCluster(currentNodeId);
-      } else {
-        clusterManager.hideCluster(currentNodeId);
-      }
-    }
-
-    // Create/update the cluster for the new node
-    createNodeCluster(nodeViewData, nodeId);
-
-    // Show the new cluster (through nodeManager to enable billboards)
-    console.log(`[SCENE] Showing new cluster: ${nodeId}`);
-    if (nodeManager) {
-      nodeManager.showCluster(nodeId);
-    } else {
-      clusterManager.showCluster(nodeId);
-    }
+    // Synchronize scene to target state
+    await syncSceneToTargetState(namespace, nodeId, false);
 
     // Update current node ID
     currentNodeId = nodeId;
 
-    // Clean up unused resources (as per architecture plan)
-    console.log(`[SCENE] Cleaning up unused nodes and links`);
-    clusterManager.cleanupUnusedNodes();
-    clusterManager.cleanupUnusedLinks();
-
     // Position camera for the node view
+    const nodeViewData = await dataStore.loadNodeView(namespace, nodeId);
     await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for nodes to be visible
     resetCameraForNodeView(camera,
       new Vector3(
@@ -346,7 +408,7 @@ async function loadNodeView(namespace: string, nodeId: number) {
       false
     );
 
-    console.log(`[SCENE] Successfully loaded node view for node ${nodeId} with ${clusterData.length} nodes`);
+    console.log(`[SCENE] Successfully loaded node view for node ${nodeId}`);
 
   } catch (error) {
     console.error("[SCENE] Failed to load node view:", error);
@@ -403,10 +465,10 @@ function createNodeCluster(nodeViewData: {
 
 /**
  * Load and render an extended node view with ancestors
- * Following the cluster architecture plan: add clusters, don't clear all
+ * Using state synchronization approach
  */
 async function loadExtendedNodeView(namespace: string, nodeId: number) {
-  if (!scene || !nodeManager || !clusterManager || !ancestorNavigationManager) {
+  if (!scene || !nodeManager || !clusterManager || !ancestorNavigationManager || !camera) {
     console.error("[SCENE] Cannot load extended node view - scene or managers not initialized");
     return;
   }
@@ -414,40 +476,29 @@ async function loadExtendedNodeView(namespace: string, nodeId: number) {
   try {
     console.log(`[SCENE] Loading extended node view for node ${nodeId} in namespace ${namespace}`);
 
-    // Load extended node data using API client
-    const nodeViewData = await dataStore.loadExtendedNodeView(namespace, nodeId);
-
-    // Hide previous cluster (except root) - as per architecture plan
-    if (currentNodeId !== null && currentNodeId !== rootNodeId) {
-      console.log(`[SCENE] Hiding previous cluster: ${currentNodeId}`);
-      if (nodeManager) {
-        nodeManager.hideCluster(currentNodeId);
-      } else {
-        clusterManager.hideCluster(currentNodeId);
-      }
+    // Remove demo box if it exists
+    if ((scene as any).demoBox) {
+      (scene as any).demoBox.dispose();
+      (scene as any).demoBox = null;
     }
 
-    // Create/update the cluster for the current node
-    createNodeCluster(nodeViewData, nodeId);
-
-    // Show the current node cluster (through nodeManager to enable billboards)
-    console.log(`[SCENE] Showing new cluster: ${nodeId}`);
-    if (nodeManager) {
-      nodeManager.showCluster(nodeId);
-    } else {
-      clusterManager.showCluster(nodeId);
-    }
+    // Synchronize scene to target state (including ancestors)
+    await syncSceneToTargetState(namespace, nodeId, true);
 
     // Update current node ID
     currentNodeId = nodeId;
 
-    // Load and show ancestor view
-    await ancestorNavigationManager.showAncestorView();
-
-    // Clean up unused resources (as per architecture plan)
-    console.log(`[SCENE] Cleaning up unused nodes and links`);
-    clusterManager.cleanupUnusedNodes();
-    clusterManager.cleanupUnusedLinks();
+    // Position camera for the ancestor view
+    const nodeViewData = await dataStore.loadExtendedNodeView(namespace, nodeId);
+    await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for nodes to be visible
+    resetCameraForNodeView(camera,
+      new Vector3(
+        nodeViewData.currentNode.centroid[0] * 3.0,
+        nodeViewData.currentNode.centroid[1] * 3.0,
+        nodeViewData.currentNode.centroid[2] * 3.0
+      ),
+      true
+    );
 
     console.log(`[SCENE] Successfully loaded extended node view for node ${nodeId}`);
 

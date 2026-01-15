@@ -369,6 +369,38 @@ export class NodeManager {
   }
 
   /**
+   * Clean up billboards for nodes that are not in any visible cluster
+   */
+  public cleanupUnusedBillboards(): void {
+    const visibleClusters = this.clusterManager.getVisibleClusters();
+    const usedNodeIds = new Set<number>();
+
+    // Collect all node IDs from visible clusters
+    visibleClusters.forEach(clusterNodeId => {
+      const nodeIds = this.clusterManager.getNodesInCluster(clusterNodeId);
+      if (nodeIds) {
+        nodeIds.forEach(nodeId => usedNodeIds.add(nodeId));
+      }
+    });
+
+    // Remove billboards for nodes not in any visible cluster
+    const billboardsToRemove: number[] = [];
+    this.nodeBillboards.forEach((billboard, nodeId) => {
+      if (!usedNodeIds.has(nodeId)) {
+        billboardsToRemove.push(nodeId);
+      }
+    });
+
+    billboardsToRemove.forEach(nodeId => {
+      this.removeBillboardLabel(nodeId);
+    });
+
+    if (billboardsToRemove.length > 0) {
+      console.log(`[NODEMANAGER] Cleaned up ${billboardsToRemove.length} unused billboards`);
+    }
+  }
+
+  /**
    * Show billboards for nodes in a cluster
    */
   public showBillboardsForCluster(clusterNodeId: number): void {
@@ -421,10 +453,27 @@ export class NodeManager {
     }
 
     const cameraPosition = camera.position;
+    const visibleClusters = this.clusterManager.getVisibleClusters();
 
     this.nodeBillboards.forEach((billboard, nodeId) => {
       const nodeMesh = this.clusterManager.getNodeMesh(nodeId);
       if (!nodeMesh) return;
+
+      // Check if the node belongs to any visible cluster
+      let isInVisibleCluster = false;
+      for (const clusterNodeId of visibleClusters) {
+        const nodesInCluster = this.clusterManager.getNodesInCluster(clusterNodeId);
+        if (nodesInCluster && nodesInCluster.has(nodeId)) {
+          isInVisibleCluster = true;
+          break;
+        }
+      }
+
+      // Only show billboard if node is in a visible cluster
+      if (!isInVisibleCluster) {
+        billboard.setEnabled(false);
+        return;
+      }
 
       // Use absolute position for distance calculation (accounts for transform hierarchy)
       const nodeAbsolutePos = nodeMesh.getAbsolutePosition();
