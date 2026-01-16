@@ -264,6 +264,21 @@ export const createDataStore = () => {
   };
 
   /**
+   * Fetch a single node (may or may not be current node)
+   */
+  const getNodeById = async (namespace: string, nodeId: number): Promise<ClusterNode> => {
+    const nodeKey = `node_${namespace}_${nodeId}`;
+    let node = getCachedNode(nodeKey) as ClusterNode;
+    if (node != null)
+      return node;
+
+    const apiResponse = await apiClient.getClusterNode(namespace, nodeId);
+    node =  _mapBackendNodeToFrontend(apiResponse.data, namespace);
+    cacheNode(nodeKey, node);
+    return node;
+  }
+
+  /**
    * Load node view (current node, children, parent)
    */
   const loadNodeView = async (namespace: string, nodeId: number): Promise<{
@@ -448,6 +463,7 @@ export const createDataStore = () => {
     clearAllCaches,
     loadNamespaces,
     loadRootNode,
+    getNodeById,
     loadNodeView,
     navigateToNode,
     navigateToParent,

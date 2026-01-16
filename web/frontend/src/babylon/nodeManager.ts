@@ -412,6 +412,50 @@ export class NodeManager {
   }
 
   /**
+   * Update all billboard positions to match current node positions
+   * This should be called after node movement/positioning is complete
+   */
+  public updateAllBillboardPositions(): void {
+    if (!dataStore.state.showBillboards) {
+      console.log(`[NODEMANAGER] Skipping billboard position update - billboards are disabled`);
+      return;
+    }
+
+    let updatedCount = 0;
+    const visibleClusters = this.clusterManager.getVisibleClusters();
+
+    this.nodeBillboards.forEach((billboard, nodeId) => {
+      // Find the cluster where this node is currently visible
+      let foundInCluster = false;
+
+      for (const clusterNodeId of visibleClusters) {
+        const nodesInCluster = this.clusterManager.getNodesInCluster(clusterNodeId);
+        if (nodesInCluster && nodesInCluster.has(nodeId)) {
+          const nodeMesh = this.clusterManager.getNodeMeshFromCluster(nodeId, clusterNodeId);
+          if (nodeMesh) {
+            const nodePromise = dataStore.getNodeById(dataStore.state.currentNamespace,nodeId);
+            nodePromise.then((node) => {
+              if (node) {
+                const labelPosition = this.calculateBillboardPosition(node, nodeMesh);
+                billboard.position = labelPosition;
+                console.debug(`[NODEMANAGER] Updated billboard position for node ${nodeId} in cluster ${clusterNodeId} to (${labelPosition.x.toFixed(2)}, ${labelPosition.y.toFixed(2)}, ${labelPosition.z.toFixed(2)})`);
+                updatedCount++;
+                foundInCluster = true;
+              }
+            });
+          }
+        }
+      }
+
+      if (!foundInCluster) {
+        console.debug(`[NODEMANAGER] Billboard for node ${nodeId} not found in any visible cluster`);
+      }
+    });
+
+    console.log(`[NODEMANAGER] Updated positions for ${updatedCount} billboards`);
+  }
+
+  /**
    * Show billboards for nodes in a cluster
    */
   public showBillboardsForCluster(clusterNodeId: number): void {
@@ -427,6 +471,19 @@ export class NodeManager {
     nodeIds.forEach(nodeId => {
       const billboard = this.nodeBillboards.get(nodeId);
       if (billboard) {
+        // Update billboard position when showing it to ensure it's correctly positioned
+        const nodeMesh = this.clusterManager.getNodeMeshFromCluster(nodeId, clusterNodeId);
+        if (nodeMesh && dataStore.state.currentNamespace != null) {
+          const nodePromise = dataStore.getNodeById(dataStore.state.currentNamespace, nodeId);
+          nodePromise.then((node) => {
+              if (node) {
+                const labelPosition = this.calculateBillboardPosition(node, nodeMesh);
+                billboard.position = labelPosition;
+                console.log(`[NODEMANAGER] Updated billboard position for node ${nodeId} in cluster ${clusterNodeId} to (${labelPosition.x.toFixed(2)}, ${labelPosition.y.toFixed(2)}, ${labelPosition.z.toFixed(2)})`);
+              }
+            }
+          );
+        }
         billboard.setEnabled(true);
       }
     });

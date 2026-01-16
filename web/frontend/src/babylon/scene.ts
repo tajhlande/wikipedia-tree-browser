@@ -351,6 +351,13 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
     nodeManager.cleanupUnusedBillboards();
   }
 
+  // Step 9: Update all billboard positions after node movement is complete
+  // This ensures billboards are properly positioned after ancestor chain calculations
+  if (nodeManager) {
+    console.log(`[SCENE] Updating all billboard positions after node movement`);
+    nodeManager.updateAllBillboardPositions();
+  }
+
   console.log(`[SCENE] Sync: final cluster list:`, Array.from(clusterManager.getVisibleClusters()));
 }
 
