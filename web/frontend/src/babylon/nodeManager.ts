@@ -572,8 +572,8 @@ export class NodeManager {
       const distance = Vector3.Distance(cameraPosition, nodeAbsolutePos);
 
       // Compute label visibility and fade distances based on camera distance
-      const label_fade_start = camera.radius * 0.8;
-      const label_visibility_distance = label_fade_start * 1.8;
+      const label_fade_start = this.LABEL_FADE_START; //camera.radius * 0.8;
+      const label_visibility_distance = camera.radius * 1.4;
       // console.debug(`[BILLBOARD_LOD] Billboard: '${billboard.id}'`,
       //   `Camera radius:`, camera.radius,
       //   `, label fade start: `, label_fade_start,
