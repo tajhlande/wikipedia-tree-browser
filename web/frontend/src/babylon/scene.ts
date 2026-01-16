@@ -321,11 +321,11 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
 
   // Step 1: Compute which clusters should be visible
   const targetClusters: Array<number> = await computeTargetClusters(namespace, nodeId, includeAncestors);
-  console.log(`[SCENE] Target clusters for node ${nodeId}:`, targetClusters);
+  console.log(`[SCENE] Sync: Target clusters for node ${nodeId}:`, targetClusters);
 
   // Step 2: Get currently visible clusters
   const currentlyVisible = clusterManager.getVisibleClusters();
-  console.log(`[SCENE] Currently visible clusters:`, Array.from(currentlyVisible));
+  console.log(`[SCENE] Sync: Currently visible clusters:`, Array.from(currentlyVisible));
 
   // Step 3: Determine which clusters to show (in target but not visible)
   const clustersToShow = new Set<number>();
@@ -343,8 +343,8 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
     }
   });
 
-  console.log(`[SCENE] Clusters to show:`, Array.from(clustersToShow));
-  console.log(`[SCENE] Clusters to hide:`, Array.from(clustersToHide));
+  console.log(`[SCENE] Sync: Clusters to show:`, Array.from(clustersToShow));
+  console.log(`[SCENE] Sync: Clusters to hide:`, Array.from(clustersToHide));
 
   // Step 5: Create missing clusters
   for (const clusterId of clustersToShow) {
@@ -367,6 +367,7 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
       nodeManager.hideCluster(clusterId);
     } else if (clusterManager) {
       clusterManager.hideCluster(clusterId);
+      console.warn(`[SCENE] Sync: Using cluster manager instead of node manager`)
     }
   });
 
@@ -377,6 +378,8 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
   if (nodeManager) {
     nodeManager.cleanupUnusedBillboards();
   }
+
+  console.log(`[SCENE] Sync: final cluster list:`, Array.from(clusterManager.getVisibleClusters()));
 }
 
 /**
