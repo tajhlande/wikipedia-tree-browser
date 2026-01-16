@@ -13,7 +13,6 @@ import {
 } from "@babylonjs/core";
 import { NodeManager } from './nodeManager';
 import { ClusterManager } from './clusterManager';
-import { NavigationManager } from './navigationManager';
 import { ResourceManager } from './resourceManager';
 import { InteractionManager } from './interactionManager';
 import { dataStore } from '../stores/dataStore';
@@ -26,7 +25,6 @@ export let engine: Engine | null = null;
 export let camera: ArcRotateCamera | null = null;
 export let clusterManager: ClusterManager | null = null;
 export let nodeManager: NodeManager | null = null;
-export let navigationManager: NavigationManager | null = null;
 export let resourceManager: ResourceManager | null = null;
 export let interactionManager: InteractionManager | null = null;
 
@@ -116,14 +114,8 @@ export function initScene(canvasId: string) {
     // Initialize cluster-based managers
     clusterManager = new ClusterManager(scene);
     nodeManager = new NodeManager(scene, clusterManager);
-    navigationManager = new NavigationManager(clusterManager);
     resourceManager = new ResourceManager(clusterManager);
     interactionManager = new InteractionManager(scene);
-
-    // Set camera reference for navigation managers
-    if (camera) {
-      navigationManager.setCamera(camera);
-    }
 
     // Setup reactive updates for data store changes
     setupReactiveUpdates();
@@ -172,7 +164,6 @@ export function initScene(canvasId: string) {
       camera,
       clusterManager,
       nodeManager,
-      navigationManager,
       resourceManager,
       interactionManager
     };
@@ -186,7 +177,7 @@ export function initScene(canvasId: string) {
  * Setup reactive updates for data store changes
  */
 function setupReactiveUpdates() {
-  if (!scene || !nodeManager || !clusterManager || !navigationManager) {
+  if (!scene || !nodeManager || !clusterManager) {
     console.error("[SCENE] Cannot setup reactive updates - scene or managers not initialized");
     return;
   }
@@ -231,34 +222,7 @@ function setupReactiveUpdates() {
     }
   });
 
-  // Reactive effect for current node changes (camera positioning only)
-  createEffect(() => {
-    const currentNode = dataStore.state.currentNode;
-    if (currentNode && camera) {
-      console.log(`[SCENE] Current node changed to: ${currentNode.id} (${currentNode.label})`);
 
-      // Center camera on appropriate target based on view mode
-      if (currentNode.centroid) {
-        let targetPosition: Vector3;
-
-        // For regular view, focus on current node only
-        targetPosition = new Vector3(
-          currentNode.centroid[0] * 3.0, // Apply scene scaling
-          currentNode.centroid[1] * 3.0,
-          currentNode.centroid[2] * 3.0
-        );
-
-        // Small delay to ensure nodes are actually visible before positioning camera
-        setTimeout(() => {
-          if (camera) {
-            // Reset camera to consistent zoom level and position
-            resetCameraForNodeView(camera, targetPosition);
-            console.log(`[SCENE] Camera centered on node ${currentNode.id} at (${targetPosition.x}, ${targetPosition.y}, ${targetPosition.z})`);
-          }
-        }, 200); // 200ms delay to allow nodes to become visible
-      }
-    }
-  });
 }
 
 /**
@@ -346,13 +310,21 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
   console.log(`[SCENE] Sync: Clusters to show:`, Array.from(clustersToShow));
   console.log(`[SCENE] Sync: Clusters to hide:`, Array.from(clustersToHide));
 
-  // Step 5: Create missing clusters
+  // Step 5: PRE-REGISTER all target clusters as visible before creating them
+  // This ensures calculateRelativePosition() has the correct ancestor chain context
+  targetClusters.forEach(clusterId => {
+    if (clusterManager) {
+      clusterManager.preRegisterClusterAsVisible(clusterId);
+    }
+  });
+
+  // Step 6: Create missing clusters (now visibleClusters contains full ancestor chain)
   for (const clusterId of clustersToShow) {
     const nodeViewData = await dataStore.loadNodeView(namespace, clusterId);
     createNodeCluster(nodeViewData, clusterId);
   }
 
-  // Step 6: Show target clusters
+  // Step 7: Show target clusters (enable their meshes)
   targetClusters.forEach(clusterId => {
     if (nodeManager) {
       nodeManager.showCluster(clusterId);
@@ -387,7 +359,7 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
  * Using state synchronization approach
  */
 async function loadNodeView(namespace: string, nodeId: number) {
-  if (!scene || !nodeManager || !clusterManager || !navigationManager || !camera) {
+  if (!scene || !nodeManager || !clusterManager || !camera) {
     console.error("[SCENE] Cannot load node view - scene or managers not initialized");
     return;
   }
@@ -410,13 +382,9 @@ async function loadNodeView(namespace: string, nodeId: number) {
     // Position camera for the node view
     const nodeViewData = await dataStore.loadNodeView(namespace, nodeId);
     await new Promise(resolve => setTimeout(resolve, 100)); // Small delay for nodes to be visible
-    resetCameraForNodeView(camera,
-      new Vector3(
-        nodeViewData.currentNode.centroid[0] * 3.0,
-        nodeViewData.currentNode.centroid[1] * 3.0,
-        nodeViewData.currentNode.centroid[2] * 3.0
-      )
-    );
+
+    // Position camera after nodes are loaded and visible
+    positionCameraForNode(nodeId);
 
     console.log(`[SCENE] Successfully loaded node view for node ${nodeId}`);
 
@@ -473,117 +441,113 @@ function createNodeCluster(nodeViewData: {
   console.log(`[SCENE] Created cluster ${clusterNodeId} with ${1 + (nodeViewData.parent ? 1 : 0) + nodeViewData.children.length} nodes and billboards`);
 }
 
-/**
- * Reset camera for node view
- */
-function resetCameraForNodeView(camera: ArcRotateCamera, targetPosition: Vector3): void {
-  // Calculate appropriate camera distance based on view type
-  // Reduced to ensure billboards are within LOD visibility distance (20 units)
-  const baseDistance = 12;
+  /**
+   * Position camera for a specific node
+   */
+  function positionCameraForNode(nodeId: number): void {
+    if (!camera) {
+      console.warn(`[CAMERA] Cannot position camera - camera reference not set`);
+      return;
+    }
+    if (clusterManager == null) {
+      console.warn(`[CAMERA]  Cannot position camera - cluster manager not set`);
+      return;
+    }
+    console.debug(`[CAMERA] Positioning camera for node ${nodeId}`);
 
-  // Calculate bounds of all visible nodes for better camera positioning
-  if (!clusterManager) {
-    console.warn('[SCENE] ClusterManager not initialized for camera positioning');
-  } else {
+    // Get the node mesh to position camera
+    const nodeMesh = clusterManager.getNodeMesh(nodeId);
+
+    if (!nodeMesh) {
+      console.warn(`[CAMERA] Cannot position camera - node ${nodeId} mesh not found`);
+      return;
+    }
+
+    // Calculate bounds of visible nodes in the current cluster for better positioning
     const visibleClusters = clusterManager.getVisibleClusters();
-    if (visibleClusters && visibleClusters.size > 0) {
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
     let minZ = Infinity, maxZ = -Infinity;
 
-    // Get all nodes from visible clusters
-    visibleClusters.forEach(clusterNodeId => {
-      const nodesInCluster = clusterManager?.getNodesInCluster(clusterNodeId);
-      if (nodesInCluster) {
-        nodesInCluster.forEach(nodeId => {
-          const nodeMesh = clusterManager?.getNodeMesh(nodeId);
-          if (nodeMesh?.isEnabled()) {
-            const pos = nodeMesh.position;
-            minX = Math.min(minX, pos.x);
-            maxX = Math.max(maxX, pos.x);
-            minY = Math.min(minY, pos.y);
-            maxY = Math.max(maxY, pos.y);
-            minZ = Math.min(minZ, pos.z);
-            maxZ = Math.max(maxZ, pos.z);
-          }
-        });
-      }
-    });
+    if (visibleClusters && visibleClusters.size > 0) {
+      visibleClusters.forEach(clusterNodeId => {
+        const nodesInCluster = clusterManager?.getNodesInCluster(clusterNodeId);
+        if (nodesInCluster) {
+          nodesInCluster.forEach(nodeId => {
+            const mesh = clusterManager?.getNodeMesh(nodeId);
+            if (mesh?.isEnabled()) {
+              const pos = mesh.position;
+              minX = Math.min(minX, pos.x);
+              maxX = Math.max(maxX, pos.x);
+              minY = Math.min(minY, pos.y);
+              maxY = Math.max(maxY, pos.y);
+              minZ = Math.min(minZ, pos.z);
+              maxZ = Math.max(maxZ, pos.z);
+            }
+          });
+        }
+      });
+    }
+    console.debug(`[CAMERA] Bounding box of visible nodes: x:(${minX}, ${maxX}), y:(${minY}, ${maxY}), z:(${minZ}, ${maxZ})`);
 
-    if (minX !== Infinity) { // We found some enabled nodes
-      // Calculate center of all visible nodes
+    let targetPosition = nodeMesh.position;
+    let cameraDistance = 20; // Default distance
+
+    // If we found visible nodes, calculate better positioning
+    if (minX !== Infinity) {
+      console.debug(`[CAMERA] Computing camera positioning`);
       const centerX = (minX + maxX) / 2;
       const centerY = (minY + maxY) / 2;
       const centerZ = (minZ + maxZ) / 2;
 
-      // Calculate size of bounding box
       const sizeX = maxX - minX;
       const sizeY = maxY - minY;
       const sizeZ = maxZ - minZ;
       const maxSize = Math.max(sizeX, sizeY, sizeZ);
 
+      // Use the center of the cluster as target
+      targetPosition = new Vector3(centerX, centerY, centerZ);
+
       // Adjust camera distance based on cluster size
-      // Cap the distance to ensure billboards remain visible (LOD threshold is 20)
-      const adjustedDistance = Math.min(18, baseDistance + maxSize * 1.5);
-
-      // Position camera to see all nodes
-      const easingFrames = 90;
-      const timeoutDelay = 10;
-      const newPosition = new Vector3(
-        centerX,
-        centerY + maxSize * 0.5, // Slightly above the center
-        centerZ - adjustedDistance
-      )
-      // camera.setPosition(newPosition);
-      setTimeout(() => camera.position.easeTo("x", newPosition.x, easingFrames), timeoutDelay);
-      setTimeout(() => camera.position.easeTo("y", newPosition.y, easingFrames), timeoutDelay);
-      setTimeout(() => camera.position.easeTo("z", newPosition.z, easingFrames), timeoutDelay);
-
-      // Set target to center of all nodes
-      const newTarget = new Vector3(centerX, centerY, centerZ);
-      // camera.setTarget(newTarget);
-      setTimeout(() => camera.target.easeTo("x", newTarget.x, easingFrames), timeoutDelay);
-      setTimeout(() => camera.target.easeTo("y", newTarget.y, easingFrames), timeoutDelay);
-      setTimeout(() => camera.target.easeTo("z", newTarget.z, easingFrames), timeoutDelay);
-
-      // Adjust camera parameters
-      camera.radius = adjustedDistance;
-      // setTimeout(() => camera.easeTo("radius", adjustedDistance, easingFrames), timeoutDelay);
-      camera.alpha = Math.PI / 2; // Side view
-      camera.beta = Math.PI / 3; // Slightly above
-
-      console.log(`[SCENE] Adjusted camera for cluster: size=${maxSize.toFixed(2)}, distance=${adjustedDistance.toFixed(2)}`);
-      return;
+      cameraDistance = 5 + maxSize * 1.2;
+    } else {
+      console.warn(`[CAMERA] Not computing camera positioning because no nodes found`);
     }
-    }
+
+    // Position the camera
+    const easingFrames = 90;
+    const timeoutDelay = 10;
+    const newCameraPosition = new Vector3(
+      targetPosition.x,
+      targetPosition.y + 5, // Slightly elevated
+      targetPosition.z - cameraDistance
+    );
+
+    console.debug(`[CAMERA] Target position: (${newCameraPosition.x}. ${newCameraPosition.y}, ${newCameraPosition.z}), distance: ${cameraDistance}`);
+
+    camera.setPosition(newCameraPosition);
+    // setTimeout(() => camera?.position.easeTo("x", newCameraPosition.x, easingFrames), timeoutDelay);
+    // setTimeout(() => camera?.position.easeTo("y", newCameraPosition.y, easingFrames), timeoutDelay);
+    // setTimeout(() => camera?.position.easeTo("z", newCameraPosition.z, easingFrames), timeoutDelay);
+
+
+    camera.setTarget(targetPosition);
+    // setTimeout(() => camera?.target.easeTo("x", targetPosition.x, easingFrames), timeoutDelay);
+    // setTimeout(() => camera?.target.easeTo("y", targetPosition.y, easingFrames), timeoutDelay);
+    // setTimeout(() => camera?.target.easeTo("z", targetPosition.z, easingFrames), timeoutDelay);
+
+    camera.radius = cameraDistance;
+    camera.alpha = Math.PI / 2; // Side view
+    camera.beta = Math.PI / 4; // Slightly above
+    // setTimeout(() => camera?.easeTo("radius", cameraDistance, easingFrames), timeoutDelay);
+    // setTimeout(() => camera?.easeTo("alpha", Math.PI / 2, easingFrames), timeoutDelay);
+    // setTimeout(() => camera?.easeTo("beta",  Math.PI / 4, easingFrames), timeoutDelay);
+
+    console.log(`[NAV] Positioned camera for node ${nodeId} at (${targetPosition.x}, ${targetPosition.y}, ${targetPosition.z}) with distance ${cameraDistance}`);
   }
 
-  // Fallback to original positioning if no nodes found
-  console.warn('[SCENE] No enabled nodes found for camera positioning, using fallback');
 
-  // Use a more robust fallback that ensures nodes are visible
-  // Position camera within LOD threshold to ensure billboards are visible
-  const fallbackDistance = Math.min(18, baseDistance * 1.2);
 
-  // Position camera
-  camera.setPosition(new Vector3(
-    targetPosition.x,
-    targetPosition.y + 5, // Slightly elevated for better view
-    targetPosition.z - fallbackDistance
-  ));
-
-  // Set target
-  camera.setTarget(targetPosition);
-
-  // Adjust camera parameters for better viewing
-  camera.radius = fallbackDistance;
-  camera.alpha = Math.PI / 2; // Side view
-  camera.beta = Math.PI / 4; // More elevated view
-
-  // Ensure camera doesn't get too close
-  camera.lowerRadiusLimit = 10;
-  camera.upperRadiusLimit = 200;
-}
 
 /**
  * Clean up resources when component unmounts
@@ -591,10 +555,6 @@ function resetCameraForNodeView(camera: ArcRotateCamera, targetPosition: Vector3
 export function cleanupScene() {
   if (resourceManager) {
     resourceManager.dispose();
-  }
-
-  if (navigationManager) {
-    navigationManager.dispose();
   }
 
   if (nodeManager) {

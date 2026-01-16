@@ -1,4 +1,4 @@
-import { Scene, Mesh, Vector3, MeshBuilder, StandardMaterial, Color3, Quaternion, TransformNode } from "@babylonjs/core";
+ import { Scene, Mesh, Vector3, MeshBuilder, StandardMaterial, Color3, Quaternion, TransformNode } from "@babylonjs/core";
 import type { ClusterNode } from '../types';
 
 export class ClusterManager {
@@ -124,8 +124,8 @@ export class ClusterManager {
     }
 
     const [x, y, z] = node.centroid;
-    const viewScaleFactor = 3.0
-    const nodeAbsolutePos = new Vector3(x *viewScaleFactor, y * viewScaleFactor, z * viewScaleFactor);
+    const viewScaleFactor = 3.0;
+    const nodeAbsolutePos = new Vector3(x * viewScaleFactor, y * viewScaleFactor, z * viewScaleFactor);
 
     // Root node (depth 0 or no parent) is always at origin
     if (!node.parent_id || node.parent_id === 0 || node.depth === 0) {
@@ -136,18 +136,39 @@ export class ClusterManager {
     // All other nodes: position relative to their parent
     const parentNodeData = this.clusterNodeData.get(node.parent_id);
     if (parentNodeData && parentNodeData.centroid && parentNodeData.centroid.length === 3) {
-      const [px, py, pz] = parentNodeData.centroid;
-      const parentScaleFactor = 3.0;
-      const parentAbsolutePos = new Vector3(px * parentScaleFactor, py * parentScaleFactor, pz * parentScaleFactor);
+      // **CRITICAL FIX: Recursively calculate parent's position**
+      // This ensures children move with their parents when parents are 3x spaced
+      const parentAbsolutePos = this.calculateRelativePosition(parentNodeData, clusterNodeId);
 
-      // Calculate position relative to parent (child offset from parent position)
-      const relativePos = parentAbsolutePos.add(nodeAbsolutePos);
-      console.log(`[CLUSTERMANAGER] Node ${node.id} (depth ${node.depth}) offset from parent ${node.parent_id}: (${relativePos.x.toFixed(2)}, ${relativePos.y.toFixed(2)}, ${relativePos.z.toFixed(2)})`);
+      // **NEW: Check if this is an ancestor link**
+      // A link is an ancestor link if both endpoints are in visibleClusters
+      // This ensures consistent positioning across all cluster contexts
+      const isAncestorLink =
+        this.visibleClusters.has(node.id) &&
+        this.visibleClusters.has(node.parent_id);
+
+      // Apply 3x spacing multiplier for ancestor chain links
+      const spacingMultiplier = isAncestorLink ? 3.0 : 1.0;
+
+      // Calculate position relative to parent with spacing multiplier
+      const offsetVector = nodeAbsolutePos.scale(spacingMultiplier);
+      const relativePos = parentAbsolutePos.add(offsetVector);
+
+      console.log(
+        `[CLUSTERMANAGER] Node ${node.id} (depth ${node.depth}) in cluster ${clusterNodeId} ` +
+        `offset from parent ${node.parent_id}: ` +
+        `(${relativePos.x.toFixed(2)}, ${relativePos.y.toFixed(2)}, ${relativePos.z.toFixed(2)}) ` +
+        `[inVisibleClusters: ${this.visibleClusters.has(node.id)}, ancestor link: ${isAncestorLink}, multiplier: ${spacingMultiplier}x]`
+      );
+
       return relativePos;
     }
 
     // Fallback: no parent data available, use absolute position
-    console.warn(`[CLUSTERMANAGER] Node ${node.id} parent_id=${node.parent_id} not found, using absolute position`);
+    console.warn(
+      `[CLUSTERMANAGER] Node ${node.id} parent_id=${node.parent_id} not found, ` +
+      `using absolute position`
+    );
     return nodeAbsolutePos;
   }
 
@@ -364,15 +385,33 @@ export class ClusterManager {
     return linkMesh;
   }
 
+  // Pre-register a cluster as visible (before meshes are created)
+  // This ensures calculateRelativePosition() has correct context during cluster creation
+  preRegisterClusterAsVisible(clusterNodeId: number): void {
+    this.visibleClusters.add(clusterNodeId);
+    console.log(`[CLUSTERMANAGER] Pre-registered cluster ${clusterNodeId} as visible`);
+  }
+
   // Show a cluster (make all its nodes and links visible)
   showCluster(clusterNodeId: number): void {
     this.visibleClusters.add(clusterNodeId);
 
-    // Make all nodes in this cluster visible
+    // Make all nodes in this cluster visible, but prioritize focal cluster for each node
     const nodeIds = this.nodeClusterMembers.get(clusterNodeId);
     nodeIds?.forEach(nodeId => {
+      // If this node's focal cluster (where nodeId === clusterNodeId) is visible,
+      // only show it there. Otherwise, show it in this cluster.
+      const nodeFocalClusterVisible = this.visibleClusters.has(nodeId);
+      const shouldShowInThisCluster = !nodeFocalClusterVisible || nodeId === clusterNodeId;
+
       const clusterNodeKey = this.getClusterNodeKey(clusterNodeId, nodeId);
-      this.clusterNodeMeshes.get(clusterNodeKey)?.setEnabled(true);
+      const mesh = this.clusterNodeMeshes.get(clusterNodeKey);
+      if (mesh) {
+        mesh.setEnabled(shouldShowInThisCluster);
+        console.log(`[CLUSTERMANAGER] Node ${nodeId} in cluster ${clusterNodeId}: ` +
+          `focalClusterVisible=${nodeFocalClusterVisible}, isFocal=${nodeId === clusterNodeId}, ` +
+          `enabled=${shouldShowInThisCluster}`);
+      }
     });
 
     // Make all links in this cluster visible
@@ -480,6 +519,12 @@ export class ClusterManager {
       }
     }
     return undefined;
+  }
+
+  // Get a node mesh from a specific cluster
+  getNodeMeshFromCluster(nodeId: number, clusterNodeId: number): Mesh | undefined {
+    const clusterNodeKey = this.getClusterNodeKey(clusterNodeId, nodeId);
+    return this.clusterNodeMeshes.get(clusterNodeKey);
   }
 
   // Get all node meshes

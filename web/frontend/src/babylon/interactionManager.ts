@@ -1,7 +1,5 @@
 import {
   Scene,
-  Mesh,
-  Vector3,
   PointerEventTypes,
   Observer,
   PointerInfo,

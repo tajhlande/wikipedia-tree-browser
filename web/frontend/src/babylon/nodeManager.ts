@@ -30,8 +30,8 @@ export class NodeManager {
   private billboardMaterials: Map<number, StandardMaterial> = new Map();
 
   // LOD (Level of Detail) settings for label visibility
-  private readonly LABEL_VISIBILITY_DISTANCE: number = 20;
-  private readonly LABEL_FADE_START: number = 15;
+  private readonly LABEL_VISIBILITY_DISTANCE: number = 25;
+  private readonly LABEL_FADE_START: number = 20;
 
   constructor(scene: Scene, clusterManager: ClusterManager) {
     this.scene = scene;
@@ -190,20 +190,31 @@ export class NodeManager {
    * Create a billboard label for a node (public method for external access)
    */
   public createBillboardForNode(nodeId: number, node: ClusterNode, clusterNodeId?: number): void {
-    const nodeMesh = this.clusterManager.getNodeMesh(nodeId);
+    // Get the node mesh from the specific cluster context if provided
+    const nodeMesh = clusterNodeId !== undefined
+      ? this.clusterManager.getNodeMeshFromCluster(nodeId, clusterNodeId)
+      : this.clusterManager.getNodeMesh(nodeId);
+
     if (!nodeMesh) {
-      console.warn(`[NODEMANAGER] Cannot create billboard for node ${nodeId}: mesh not found`);
+      console.warn(`[NODEMANAGER] Cannot create billboard for node ${nodeId}: mesh not found in cluster ${clusterNodeId}`);
       return;
     }
 
-    // Check if billboard already exists
-    if (this.nodeBillboards.has(nodeId)) {
-      console.log(`[NODEMANAGER] Billboard for node ${nodeId} already exists, skipping`);
+    // If billboard already exists, update its position for the new cluster context
+    const existingBillboard = this.nodeBillboards.get(nodeId);
+    if (existingBillboard) {
+      // Update billboard parent and position to match current node mesh from this cluster
+      if (nodeMesh.parent) {
+        existingBillboard.setParent(nodeMesh.parent);
+      }
+      const labelPosition = this.calculateBillboardPosition(node, nodeMesh);
+      existingBillboard.position = labelPosition;
+      console.log(`[NODEMANAGER] Updated billboard position for node ${nodeId} in cluster ${clusterNodeId} to (${labelPosition.x.toFixed(2)}, ${labelPosition.y.toFixed(2)}, ${labelPosition.z.toFixed(2)})`);
       return;
     }
 
     this.createBillboardLabel(node, nodeMesh, clusterNodeId);
-    console.log(`[NODEMANAGER] Created billboard for node ${nodeId} (${node.label})`);
+    console.log(`[NODEMANAGER] Created billboard for node ${nodeId} (${node.label}) in cluster ${clusterNodeId}`);
   }
 
   /**
