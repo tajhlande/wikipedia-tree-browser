@@ -67,6 +67,7 @@ export function initScene(canvasId: string) {
     scene = new Scene(engine);
 
     // Setup camera with better initial positioning
+    console.log(`[INIT] Creating new ArcRotateCamera`);
     camera = new ArcRotateCamera(
       "camera",
       Math.PI / 2,
@@ -307,10 +308,19 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
     }
   });
 
+  // Step 5: Determine clusters that remain visible
+  const clustersRemainingVisible = new Set(targetClusters).intersection(currentlyVisible);
+  if (clustersRemainingVisible.intersection(clustersToShow).size != 0) {
+    console.warn(`[SCENE] Clusters remaining visible somehow intersects with clusters to show. `,
+      `Clusters remaining visible: `, Array(clustersRemainingVisible),
+      ` Clusters to show: `, Array(clustersToShow)
+    );
+  }
+
   console.log(`[SCENE] Sync: Clusters to show:`, Array.from(clustersToShow));
   console.log(`[SCENE] Sync: Clusters to hide:`, Array.from(clustersToHide));
 
-  // Step 5: PRE-REGISTER all target clusters as visible before creating them
+  // Step 6: PRE-REGISTER all target clusters as visible before creating them
   // This ensures calculateRelativePosition() has the correct ancestor chain context
   targetClusters.forEach(clusterId => {
     if (clusterManager) {
@@ -318,13 +328,13 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
     }
   });
 
-  // Step 6: Create missing clusters (now visibleClusters contains full ancestor chain)
+  // Step 7: Create missing clusters (now visibleClusters contains full ancestor chain)
   for (const clusterId of clustersToShow) {
     const nodeViewData = await dataStore.loadNodeView(namespace, clusterId);
     createNodeCluster(nodeViewData, clusterId);
   }
 
-  // Step 7: Show target clusters (enable their meshes)
+  // Step 8: Show target clusters (enable their meshes)
   targetClusters.forEach(clusterId => {
     if (nodeManager) {
       nodeManager.showCluster(clusterId);
@@ -333,7 +343,7 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
     }
   });
 
-  // Step 7: Hide non-target clusters
+  // Step 9: Hide non-target clusters
   clustersToHide.forEach(clusterId => {
     if (nodeManager) {
       nodeManager.hideCluster(clusterId);
@@ -343,13 +353,25 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
     }
   });
 
+  // Step 10: Ensure node meshes are not hidden for clusters remaining visible
+  clustersRemainingVisible.forEach(clusterId => {
+    console.log(`[SCENE] Refreshing visibility for cluster ${clusterId}`);
+    if (clusterManager != null) {
+      clusterManager.ensureClusterVisibility(clusterId);
+    }
+  });
+
   // Step 8: Clean up unused resources
-  console.log(`[SCENE] Cleaning up unused nodes, links, and billboards`);
+  // console.log(`[SCENE] DEBUG: Before cleanup - Visible clusters:`, Array.from(clusterManager.getVisibleClusters()));
+  // console.log(`[SCENE] Cleaning up unused nodes, links, and billboards`);
   clusterManager.cleanupUnusedNodes();
   clusterManager.cleanupUnusedLinks();
   if (nodeManager) {
+    // console.log(`[SCENE] DEBUG: Before billboard cleanup - Billboard count:`, nodeManager['nodeBillboards']?.size || 'unknown');
     nodeManager.cleanupUnusedBillboards();
+    // console.log(`[SCENE] DEBUG: After billboard cleanup - Billboard count:`, nodeManager['nodeBillboards']?.size || 'unknown');
   }
+  // console.log(`[SCENE] DEBUG: After cleanup - Visible clusters:`, Array.from(clusterManager.getVisibleClusters()));
 
   // Step 9: Update all billboard positions after node movement is complete
   // This ensures billboards are properly positioned after ancestor chain calculations

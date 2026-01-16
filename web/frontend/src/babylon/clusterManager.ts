@@ -1,5 +1,6 @@
  import { Scene, Mesh, Vector3, MeshBuilder, StandardMaterial, Color3, Quaternion, TransformNode } from "@babylonjs/core";
 import type { ClusterNode } from '../types';
+import { dataStore } from "../stores/dataStore";
 
 export class ClusterManager {
   private scene: Scene;
@@ -216,7 +217,7 @@ export class ClusterManager {
     try {
       // Root node (depth 0) - red500
       if (node.depth === 0) {
-        return Color3.FromHexString('#f54739');
+        return Color3.FromHexString('#f52719');
       }
 
       // Leaf nodes - blue700
@@ -394,6 +395,7 @@ export class ClusterManager {
 
   // Show a cluster (make all its nodes and links visible)
   showCluster(clusterNodeId: number): void {
+    console.log(`[CLUSTERMANAGER] Showing cluster `, clusterNodeId, `current visible clusters:`, Array.from(this.visibleClusters));
     this.visibleClusters.add(clusterNodeId);
 
     // Make all nodes in this cluster visible, but prioritize focal cluster for each node
@@ -428,21 +430,68 @@ export class ClusterManager {
   hideCluster(clusterNodeId: number): void {
     if (clusterNodeId === this.rootNodeId) return; // Don't hide root
 
+    console.log(`[CLUSTERMANAGER] Hiding cluster ${clusterNodeId}, current visible clusters:`, Array.from(this.visibleClusters));
     this.visibleClusters.delete(clusterNodeId);
 
     // Make all nodes in this cluster invisible
     const nodeIds = this.nodeClusterMembers.get(clusterNodeId);
+    // console.log(`[CLUSTERMANAGER] DEBUG: Nodes in cluster ${clusterNodeId}:`, nodeIds ? Array.from(nodeIds) : 'none');
     nodeIds?.forEach(nodeId => {
       const clusterNodeKey = this.getClusterNodeKey(clusterNodeId, nodeId);
-      this.clusterNodeMeshes.get(clusterNodeKey)?.setEnabled(false);
+      const mesh = this.clusterNodeMeshes.get(clusterNodeKey);
+      if (mesh) {
+        const prevEnabled = mesh.isEnabled();
+        mesh.setEnabled(false);
+        // console.log(`[CLUSTERMANAGER] DEBUG: Hiding node ${nodeId} in cluster ${clusterNodeId}, enabled ${prevEnabled} -> ${mesh.isEnabled()}`);
+      } else {
+        console.warn(`[CLUSTERMANAGER] DEBUG: No mesh found for node ${nodeId} in cluster ${clusterNodeId} while hiding`);
+      }
     });
 
     // Make all links in this cluster invisible
     const linkKeys = this.clusterLinks.get(clusterNodeId);
+    // console.log(`[CLUSTERMANAGER] DEBUG: Links in cluster ${clusterNodeId}:`, linkKeys ? Array.from(linkKeys) : 'none');
     linkKeys?.forEach(linkKey => {
       const [parentId, childId] = linkKey.split('_').map(Number);
       const clusterLinkKey = this.getClusterLinkKey(clusterNodeId, parentId, childId);
-      this.clusterLinkMeshes.get(clusterLinkKey)?.setEnabled(false);
+      const linkMesh = this.clusterLinkMeshes.get(clusterLinkKey);
+      if (linkMesh) {
+        // console.log(`[CLUSTERMANAGER] DEBUG: Hiding link ${parentId}-${childId} in cluster ${clusterNodeId}, enabled before:`, linkMesh.isEnabled());
+        linkMesh.setEnabled(false);
+        // console.log(`[CLUSTERMANAGER] DEBUG: Hiding link ${parentId}-${childId} in cluster ${clusterNodeId}, enabled after:`, linkMesh.isEnabled());
+      } else {
+        console.warn(`[CLUSTERMANAGER] DEBUG: No mesh found for link ${parentId}-${childId} in cluster ${clusterNodeId} while hiding`);
+      }
+    });
+  }
+
+  // Ensure that all nodes and links in this cluster are still visible
+  ensureClusterVisibility(clusterNodeId: number): void {
+    console.log(`[CLUSTERMANAGER] Ensuring cluster visibility for cluster `, clusterNodeId, `. Current node: `, dataStore.state.currentNode);
+    const nodeIds = this.nodeClusterMembers.get(clusterNodeId);
+    nodeIds?.forEach(nodeId => {
+      // If this node's focal cluster (where nodeId === clusterNodeId) is visible,
+      // only show it there. Otherwise, show it in this cluster.
+      const nodeFocalClusterVisible = this.visibleClusters.has(nodeId);
+      const shouldShowInThisCluster = !nodeFocalClusterVisible || nodeId === clusterNodeId;
+
+      const clusterNodeKey = this.getClusterNodeKey(clusterNodeId, nodeId);
+      const mesh = this.clusterNodeMeshes.get(clusterNodeKey);
+      if (mesh) {
+        mesh.setEnabled(shouldShowInThisCluster);
+        // console.log(`[CLUSTERMANAGER] Node ${nodeId} in cluster ${clusterNodeId}: ` +
+        //   `focalClusterVisible=${nodeFocalClusterVisible}, isFocal=${nodeId === clusterNodeId}, ` +
+        //   `enabled=${shouldShowInThisCluster}`);
+      }
+    });
+
+    // Make all links in this cluster visible
+    const linkKeys = this.clusterLinks.get(clusterNodeId);
+    linkKeys?.forEach(linkKey => {
+      // linkKey is in format "parentId_childId"
+      const [parentId, childId] = linkKey.split('_').map(Number);
+      const clusterLinkKey = this.getClusterLinkKey(clusterNodeId, parentId, childId);
+      this.clusterLinkMeshes.get(clusterLinkKey)?.setEnabled(true);
     });
   }
 

@@ -3,13 +3,12 @@ import {
   Mesh,
   StandardMaterial,
   Color3,
-  Color4,
   Vector3,
   MeshBuilder,
   TransformNode,
   DynamicTexture,
-  Camera,
-  Engine
+  Engine,
+  ArcRotateCamera
 } from "@babylonjs/core";
 import type { ClusterNode } from '../types';
 import { ClusterManager } from './clusterManager';
@@ -29,9 +28,9 @@ export class NodeManager {
   private nodeBillboards: Map<number, Mesh> = new Map();
   private billboardMaterials: Map<number, StandardMaterial> = new Map();
 
-  // LOD (Level of Detail) settings for label visibility
-  private readonly LABEL_VISIBILITY_DISTANCE: number = 25;
-  private readonly LABEL_FADE_START: number = 20;
+  // LOD (Level of Detail) settings for label visibility, starting out
+  private readonly LABEL_VISIBILITY_DISTANCE: number = 15;
+  private readonly LABEL_FADE_START: number = 10;
 
   constructor(scene: Scene, clusterManager: ClusterManager) {
     this.scene = scene;
@@ -221,9 +220,15 @@ export class NodeManager {
    * Create a billboard label for a node
    */
   private createBillboardLabel(node: ClusterNode, nodeMesh: Mesh, clusterNodeId?: number): void {
-    const maxLineWidth = 450;
+    const maxLineWidth = 405;
     const fontSize = 48;
-    const textLines = this.wrapText(node.label, maxLineWidth, fontSize);
+    let displayText = node.label;
+    if (node.is_leaf) {
+      displayText =  '🌐 ' + displayText;
+    } else {
+      displayText = '✳️ ' + displayText;
+    }
+    const textLines = this.wrapText(displayText, maxLineWidth, fontSize);
 
     const lineHeight3D = 0.30;
     const billboardHeight = Math.max(0.5, textLines.length * lineHeight3D);
@@ -384,20 +389,26 @@ export class NodeManager {
    */
   public cleanupUnusedBillboards(): void {
     const visibleClusters = this.clusterManager.getVisibleClusters();
+    // console.log(`[NODEMANAGER] DEBUG: Cleanup check - Visible clusters:`, Array.from(visibleClusters));
     const usedNodeIds = new Set<number>();
 
     // Collect all node IDs from visible clusters
     visibleClusters.forEach(clusterNodeId => {
       const nodeIds = this.clusterManager.getNodesInCluster(clusterNodeId);
+      // console.log(`[NODEMANAGER] DEBUG: Nodes in visible cluster ${clusterNodeId}:`, nodeIds ? Array.from(nodeIds) : 'none');
       if (nodeIds) {
         nodeIds.forEach(nodeId => usedNodeIds.add(nodeId));
       }
     });
 
+    // console.log(`[NODEMANAGER] DEBUG: Total billboards before cleanup:`, this.nodeBillboards.size);
+    // console.log(`[NODEMANAGER] DEBUG: Used node IDs for billboards:`, Array.from(usedNodeIds));
+
     // Remove billboards for nodes not in any visible cluster
     const billboardsToRemove: number[] = [];
     this.nodeBillboards.forEach((billboard, nodeId) => {
       if (!usedNodeIds.has(nodeId)) {
+        // console.log(`[NODEMANAGER] DEBUG: Billboard ${nodeId} marked for removal, enabled:`, billboard.isEnabled());
         billboardsToRemove.push(nodeId);
       }
     });
@@ -406,9 +417,10 @@ export class NodeManager {
       this.removeBillboardLabel(nodeId);
     });
 
-    if (billboardsToRemove.length > 0) {
-      console.log(`[NODEMANAGER] Cleaned up ${billboardsToRemove.length} unused billboards`);
-    }
+    // if (billboardsToRemove.length > 0) {
+    //   console.log(`[NODEMANAGER] DEBUG: Cleaned up ${billboardsToRemove.length} unused billboards`);
+    // }
+    // console.log(`[NODEMANAGER] DEBUG: Total billboards after cleanup:`, this.nodeBillboards.size);
   }
 
   /**
@@ -433,7 +445,7 @@ export class NodeManager {
         if (nodesInCluster && nodesInCluster.has(nodeId)) {
           const nodeMesh = this.clusterManager.getNodeMeshFromCluster(nodeId, clusterNodeId);
           if (nodeMesh) {
-            const nodePromise = dataStore.getNodeById(dataStore.state.currentNamespace,nodeId);
+            const nodePromise = dataStore.getNodeById(dataStore.state.currentNamespace!, nodeId);
             nodePromise.then((node) => {
               if (node) {
                 const labelPosition = this.calculateBillboardPosition(node, nodeMesh);
@@ -474,7 +486,7 @@ export class NodeManager {
         // Update billboard position when showing it to ensure it's correctly positioned
         const nodeMesh = this.clusterManager.getNodeMeshFromCluster(nodeId, clusterNodeId);
         if (nodeMesh && dataStore.state.currentNamespace != null) {
-          const nodePromise = dataStore.getNodeById(dataStore.state.currentNamespace, nodeId);
+          const nodePromise = dataStore.getNodeById(dataStore.state.currentNamespace!, nodeId);
           nodePromise.then((node) => {
               if (node) {
                 const labelPosition = this.calculateBillboardPosition(node, nodeMesh);
@@ -495,21 +507,28 @@ export class NodeManager {
    */
   public hideBillboardsForCluster(clusterNodeId: number): void {
     const nodeIds = this.clusterManager.getNodesInCluster(clusterNodeId);
+    console.log(`[NODEMANAGER] DEBUG: Hiding billboards for cluster ${clusterNodeId}, nodes:`, nodeIds ? Array.from(nodeIds) : 'none');
     if (!nodeIds) return;
 
+    let hiddenCount = 0;
     nodeIds.forEach(nodeId => {
       const billboard = this.nodeBillboards.get(nodeId);
       if (billboard) {
+        const prevEnabled = billboard.isEnabled();
         billboard.setEnabled(false);
+        // console.log(`[NODEMANAGER] DEBUG: Hiding billboard for node ${nodeId}, enabled: ${prevEnabled} -> ${billboard.isEnabled()}`);
+        hiddenCount++;
+      } else {
+        console.warn(`[NODEMANAGER] DEBUG: No billboard found for node ${nodeId}`);
       }
     });
-    console.log(`[NODEMANAGER] Disabled billboards for cluster ${clusterNodeId}`);
+    // console.log(`[NODEMANAGER] DEBUG: Disabled ${hiddenCount} billboards for cluster ${clusterNodeId}`);
   }
 
   /**
    * Update label visibility based on camera distance (LOD)
    */
-  public updateLabelVisibility(camera: Camera, currentNodeId: number): void {
+  public updateLabelVisibility(camera: ArcRotateCamera, currentNodeId: number): void {
     if (!camera) return;
 
     // If billboards are globally disabled, hide all and return
@@ -552,14 +571,23 @@ export class NodeManager {
       const nodeAbsolutePos = nodeMesh.getAbsolutePosition();
       const distance = Vector3.Distance(cameraPosition, nodeAbsolutePos);
 
-      if (distance > this.LABEL_VISIBILITY_DISTANCE) {
+      // Compute label visibility and fade distances based on camera distance
+      const label_fade_start = camera.radius * 0.8;
+      const label_visibility_distance = label_fade_start * 1.8;
+      // console.debug(`[BILLBOARD_LOD] Billboard: '${billboard.id}'`,
+      //   `Camera radius:`, camera.radius,
+      //   `, label fade start: `, label_fade_start,
+      //   `, label visibility distance: `, label_visibility_distance
+      // );
+
+      if (distance > label_visibility_distance) {
         billboard.setEnabled(false);
       } else {
         billboard.setEnabled(true);
 
-        if (distance > this.LABEL_FADE_START) {
-          const fadeRange = this.LABEL_VISIBILITY_DISTANCE - this.LABEL_FADE_START;
-          const fadeAmount = (distance - this.LABEL_FADE_START) / fadeRange;
+        if (distance > label_fade_start) {
+          const fadeRange = label_visibility_distance - label_fade_start;
+          const fadeAmount = (distance - label_fade_start) / fadeRange;
           const opacity = 1.0 - fadeAmount;
 
           if (billboard.material) {
