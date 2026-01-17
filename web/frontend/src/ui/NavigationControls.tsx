@@ -1,5 +1,6 @@
 import { Component, Show } from "solid-js";
 import { dataStore } from '../stores/dataStore';
+import { ZoomControl } from './ZoomControl';
 
 /**
  * Navigation Controls Component
@@ -67,6 +68,8 @@ export const NavigationControls: Component = () => {
         </button>
 
       </div>
+
+      <ZoomControl />
     </Show>
   );
 };

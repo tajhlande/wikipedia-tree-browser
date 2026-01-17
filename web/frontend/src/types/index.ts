@@ -59,6 +59,7 @@ export type AppState = {
   leafNode: ClusterNode | null;
   leafNodeInfoVisible: boolean; // whether leaf node info is showing or not
   error: string | null;
+  cameraStartDistance: number;
 };
 
 export type NodeCache = {

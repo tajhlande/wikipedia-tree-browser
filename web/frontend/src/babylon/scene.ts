@@ -566,6 +566,7 @@ function createNodeCluster(nodeViewData: {
     // setTimeout(() => camera?.target.easeTo("z", targetPosition.z, easingFrames), timeoutDelay);
 
     camera.radius = cameraDistance;
+    dataStore.setState('cameraStartDistance',cameraDistance);
     camera.alpha = Math.PI / 2; // Side view
     camera.beta = Math.PI / 4; // Slightly above
     // setTimeout(() => camera?.easeTo("radius", cameraDistance, easingFrames), timeoutDelay);

@@ -64,6 +64,7 @@ export const createDataStore = () => {
     error: null,
     leafNode: null,
     leafNodeInfoVisible: false,
+    cameraStartDistance: 25,
   });
 
   const [nodeCache, setNodeCache] = createStore<NodeCache>({});
