@@ -11,21 +11,50 @@ import { Button } from "@kobalte/core";
 export const LeafNodeOverlay: Component = () => {
   const [pages, setPages] = createSignal<Page[]>([]);
   const [isLoading, setIsLoading] = createSignal<boolean>(false);
+  const [currentPage, setCurrentPage] = createSignal<number>(1);
+  const [hasMorePages, setHasMorePages] = createSignal<boolean>(true);
+  const pageSize = 50;
 
 
-    const loadPages = async () => {
-      const currentNamespace = dataStore.state.currentNamespace;
-      const leafNodeId = dataStore.state.leafNode?.id;
-      console.debug(`[LEAF_OVERLAY] loadPages() Loading pages for namespace ${currentNamespace} and node ${leafNodeId}`)
-      setIsLoading(true);
-      try {
-        const pages = await dataStore.loadPagesForNode(currentNamespace, leafNodeId, 1, 50);
-        console.debug(`[LEAF_OVERLAY] loadPages() Got ${pages.length} pages. Setting pages in signal`)
-        setPages(pages);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const loadPages = async (page: number = 1) => {
+    const currentNamespace = dataStore.state.currentNamespace;
+    const leafNodeId = dataStore.state.leafNode?.id;
+    const leafNode = dataStore.state.leafNode;
+    console.debug(`[LEAF_OVERLAY] loadPages() Loading pages for namespace ${currentNamespace} and node ${leafNodeId}, page ${page}`)
+    setIsLoading(true);
+    try {
+      // Convert page number to offset (page 1 = offset 0, page 2 = offset 50, etc.)
+      const offset = (page - 1) * pageSize;
+      const pages = await dataStore.loadPagesForNode(currentNamespace, leafNodeId, offset, pageSize);
+      console.debug(`[LEAF_OVERLAY] loadPages() Got ${pages.length} pages. Setting pages in signal`)
+      setPages(pages);
+      setCurrentPage(page);
+
+      // Calculate if there are more pages based on the leaf node's size
+      const totalPages = leafNode?.size ? Math.ceil(leafNode.size / pageSize) : 1;
+      const currentOffset = offset;
+      const hasMore = leafNode?.size ? currentOffset + pages.length < leafNode.size : pages.length === pageSize;
+
+      setHasMorePages(hasMore);
+
+      console.debug(`[LEAF_OVERLAY] Total pages available: ${totalPages}, current page: ${page}, has more: ${hasMore}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const goToPreviousPage = () => {
+    const prevPage = currentPage() - 1;
+    if (prevPage >= 1) {
+      loadPages(prevPage);
+    }
+  };
+
+  const goToNextPage = () => {
+    if (hasMorePages()) {
+      loadPages(currentPage() + 1);
+    }
+  };
 
   /**
    * Load pages when current node changes
@@ -39,7 +68,7 @@ export const LeafNodeOverlay: Component = () => {
 
     if (isVisible && leafNode != null && currentNamespace != null) {
       console.debug(`[LEAF_OVERLAY] Effect trigger is loading pages for node ${leafNode.id}`);
-      loadPages();
+      loadPages(1); // Reset to page 1 when node changes
     } else if (isVisible && leafNode) {
       console.warn(`[LEAF_OVERLAY] Can't load pages. No currentNamespace but leaf node is present`)
     } else {
@@ -57,7 +86,7 @@ export const LeafNodeOverlay: Component = () => {
           <h3 class="text-lg font-bold mb-1">{dataStore.state.leafNode?.label ?? "[missing cluster label]"} </h3>
           <div id="leaf-node-deferred-load">
             <p class="text-sm font-bold mb-2">🌐 View on Wikipedia</p>
-            <div class="h-64 max-h-96 overflow-y-auto">
+            <div class="h-64 max-h-96 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-500 scrollbar-track-gray-300 hover:scrollbar-thumb-gray-600">
               <Show when={isLoading()}>
                 <div class="flex flex-col items-center justify-center h-full">
                   <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -81,12 +110,33 @@ export const LeafNodeOverlay: Component = () => {
             </div>
           </div>
         </div>
-        <Button.Root
-          onClick={() => {dataStore.setState('leafNodeInfoVisible', false);}}
-          class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm mt-2"
-        >
-          Close
-        </Button.Root>
+        <div class="flex justify-between items-center mt-2">
+          <div class="flex gap-2">
+            <Button.Root
+              onClick={goToPreviousPage}
+              disabled={currentPage() <= 1}
+              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm disabled:bg-gray-700 disabled:cursor-not-allowed"
+            >
+              Previous
+            </Button.Root>
+            <Button.Root
+              onClick={goToNextPage}
+              disabled={!hasMorePages()}
+              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm disabled:bg-gray-700 disabled:cursor-not-allowed"
+            >
+              Next
+            </Button.Root>
+          </div>
+          <Button.Root
+            onClick={() => { dataStore.setState('leafNodeInfoVisible', false); }}
+            class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
+          >
+            Close
+          </Button.Root>
+        </div>
+        <div class="text-sm text-gray-300 mt-2">
+          Page {currentPage()} of {dataStore.state.leafNode?.size ? Math.ceil(dataStore.state.leafNode.size / pageSize) : 1}
+        </div>
 
       </div>
     </Show>
