@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '../types';
+import { getApiBaseUrl } from '../util';
 import type {
   Namespace,
   ClusterNode,
@@ -18,7 +18,7 @@ export class ApiClient {
   private lastCacheTime: number = 0;
   private cacheTTL: number = 300000; // 5 minutes
 
-  constructor(baseUrl: string = API_BASE_URL) {
+  constructor(baseUrl: string = getApiBaseUrl()) {
     this.baseUrl = baseUrl;
   }
 

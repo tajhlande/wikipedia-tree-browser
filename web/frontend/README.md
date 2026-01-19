@@ -22,6 +22,35 @@ The first phase of implementation has been completed, providing the foundational
 - Type-safe data structures throughout the codebase
 - Convenience methods for common operations
 
+## Configuration
+
+The application supports flexible API URL configuration through environment variables:
+
+### Environment Variables
+
+Create a `.env` file in the frontend directory with the following variables:
+
+```env
+# API Base URL - Overrides the default API endpoint
+VITE_API_BASE_URL=http://your-api-server:port/api
+```
+
+Or copy the example file:
+
+```bash
+cp env.example .env
+```
+
+### API URL Resolution Strategy
+
+The application determines the API URL using this fallback strategy:
+
+1. **Environment Variable**: Uses `VITE_API_BASE_URL` if defined
+2. **Hostname Construction**: Constructs URL from current hostname (e.g., `https://current-host:8000/api`)
+3. **Default**: Falls back to `http://localhost:8000/api`
+
+This allows for flexible deployment scenarios including development, staging, and production environments.
+
 ## Usage
 
 Those templates dependencies are maintained via [pnpm](https://pnpm.io) via `pnpm up -Lri`.
@@ -74,7 +103,12 @@ Your app is ready to be deployed!
 - Application state types and constants
 - Color schemes and mesh settings configuration
 
-**4. Demonstration Component (`src/demo/phase1Demo.tsx`)**
+**4. Environment Utilities (`src/util/environment.ts`)**
+- Dynamic API URL resolution with fallback strategy
+- Environment variable support for flexible deployment
+- Hostname-based URL construction for different environments
+
+**5. Demonstration Component (`src/demo/phase1Demo.tsx`)**
 - Interactive showcase of Phase 1 functionality
 - Tests API client, data store, and type definitions
 - Provides visual feedback on implementation status
@@ -85,7 +119,7 @@ Your app is ready to be deployed!
 
 The API client provides a robust interface to the backend with:
 
-- **Base URL Configuration**: Defaults to `http://localhost:8000/api` but configurable
+- **Dynamic Base URL Configuration**: Automatically determines API URL using environment variables, hostname construction, or falls back to `http://localhost:8000/api`
 - **Error Handling**: Comprehensive try-catch blocks with detailed logging
 - **Caching**: Namespace caching with configurable TTL
 - **Methods**: All backend endpoints implemented with proper typing
