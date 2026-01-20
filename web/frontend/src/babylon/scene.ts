@@ -199,6 +199,12 @@ function setupReactiveUpdates() {
         (scene as any).demoBox = null;
       }
 
+      // Ensure interaction manager exists - recreate if it was disposed
+      if (!interactionManager && scene) {
+        console.log("[SCENE EFFECT] Recreating InteractionManager after namespace switch");
+        interactionManager = new InteractionManager(scene);
+      }
+
       // Set root node ID on first load (always visible)
       if (rootNodeId === null) {
         rootNodeId = currentNode.id;
@@ -436,6 +442,12 @@ function createNodeCluster(nodeViewData: {
     return;
   }
 
+  // Ensure interaction manager exists - recreate if it was disposed
+  if (!interactionManager && scene) {
+    console.log("[SCENE] Recreating InteractionManager after namespace switch");
+    interactionManager = new InteractionManager(scene);
+  }
+
   const mgr = clusterManager; // Capture for use in forEach
   const nodeMgr = nodeManager; // Capture for use in forEach
 
@@ -598,7 +610,10 @@ export function cleanupScene() {
   }
 
   if (interactionManager) {
-    interactionManager.dispose();
+    // Don't dispose the interaction manager completely - just clear its node registrations
+    // This preserves the interaction manager for hover/click events when switching namespaces
+    interactionManager.clearAllNodes();
+    console.log('[SCENE][CLEANUP] Cleared interaction manager node registrations (preserving manager for namespace switching)');
   }
 
   // if (engine) {
