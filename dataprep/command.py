@@ -1180,11 +1180,6 @@ class TopicsCommand(Command):
             logger.debug("Sorting pass 3 worklist to go from higher depth to lower depth")
             pass_3_work_list = sorted(pass_3_work_list, reverse=True, key=lambda node: node.depth)
 
-            # validate that the sorting worked as expected
-            # TODO delete or comment out this later once we are convinced that it works
-            for previous, current in zip(pass_3_work_list, pass_3_work_list[1:]):
-                assert previous.depth >= current.depth, "Depth sorting did not work"
-
             if pass_3_work_list:
                 work_list_length = len(pass_3_work_list)
                 logger.debug("Executing pass 3: naive generation of stem cluster node topics")
@@ -1216,7 +1211,9 @@ class TopicsCommand(Command):
             logger.debug("Total processed after pass 3: %d", total_clusters_processed)
 
             # Pass 4: Adversarial label for non-leaf nodes
-            pass_4_work_list = pass_3_work_list.copy()
+            pass_4_work_list = [
+                node for node in cluster_node_list if not node.final_label and node.parent_id and not node.is_leaf
+            ]
             logger.debug("Sorting pass 4 worklist to go from higher depth to lower depth")
             pass_4_work_list = sorted(pass_4_work_list, reverse=True, key=lambda node: node.depth)
 
