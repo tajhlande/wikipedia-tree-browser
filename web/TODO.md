@@ -2,6 +2,7 @@
 
 ## Bugs
 
+* "Loading" on leaf node detail / link list doesn't work, so stale content is shown until links load
 * Fix broken tests
 
 ## Usability improvements
@@ -17,7 +18,20 @@
 
 ## Technical improvements
 
+* Convert native buttons to Kobalte buttons
+
+    Files with Standard Buttons:
+    1. Loading.tsx - 1 button in the ErrorDisplay component
+    2. ErrorOverlay.tsx - 3 buttons (dismiss, back to namespaces, retry)
+    3. NavigationControls.tsx - 4 buttons (parent, home, billboard toggle, back to namespace selection)
+    4. PerformanceMonitor.tsx - 1 button (toggle monitor)
+
+    Files Already Using Kobalte Buttons:
+    1. LeafNodeOverlay.tsx - 3 Kobalte buttons (previous, next, close)
+    2. NamespaceSelector.tsx - 1 Kobalte button (retry)
+
 * Migrate to real db backend
+* If not that, add indexes on sqlitedb
 
 ## Aesthetic improvements
 
