@@ -9,6 +9,7 @@ import { NodeViewLoading } from "./ui/NodeViewLoading";
 import { ErrorOverlay } from "./ui/ErrorOverlay";
 import { PerformanceMonitor } from "./ui/PerformanceMonitor";
 import { LeafNodeOverlay } from "./ui/LeafNodeOverlay";
+import { WikiTitleOverlay } from "./ui/WikiTitleOverlay";
 import { dataStore } from './stores/dataStore';
 
 const App: Component = () => {
@@ -40,6 +41,9 @@ const App: Component = () => {
 
       {/* Error Overlay */}
       <ErrorOverlay />
+
+      {/* Wiki Title Overlay - shown in node view */}
+      <WikiTitleOverlay />
 
       {/* Performance Monitor */}
       <PerformanceMonitor />

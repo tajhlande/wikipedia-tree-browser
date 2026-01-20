@@ -53,6 +53,7 @@ export interface PaginatedResponse<T> {
 export type AppState = {
   currentView: 'namespace_selection' | 'node_view';
   currentNamespace: string | null;
+  currentWikiName: string | null;
   currentNode: ClusterNode | null;
   showBillboards: boolean; // Whether billboard labels are visible
   loading: boolean;

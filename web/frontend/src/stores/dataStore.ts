@@ -59,6 +59,7 @@ export const createDataStore = () => {
   const [state, setState] = createStore<AppState>({
     currentView: 'namespace_selection',
     currentNamespace: null,
+    currentWikiName: null,
     currentNode: null,
     showBillboards: true,
     loading: false,
@@ -105,6 +106,13 @@ export const createDataStore = () => {
    */
   const setCurrentNamespace = (namespace: string | null) => {
     setState('currentNamespace', namespace);
+    if (namespace == null) {
+      setState('currentWikiName', null);
+    } else {
+      console.log('[DATA]')
+      const wikiName = getCachedNamespace(namespace)?.display_name ?? "Unknown Wiki";
+      setState('currentWikiName', wikiName);
+    }
   };
 
   /**
@@ -145,6 +153,7 @@ export const createDataStore = () => {
    * Cache namespaces
    */
   const cacheNamespaces = (namespaces: Namespace[]) => {
+    console.log('[DATA][CACHE] Caching namespaces: ', namespaces.map(n => n.name));
     setNamespaceCache(namespaces);
   };
 
@@ -152,6 +161,7 @@ export const createDataStore = () => {
    * Get cached namespace by name
    */
   const getCachedNamespace = (namespaceName: string): Namespace | undefined => {
+    console.log('[DATA][CACHE] Getting cached namespace: ', namespaceName);
     return namespaceCache.find(n => n.name === namespaceName);
   };
 
