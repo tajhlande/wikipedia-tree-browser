@@ -1,5 +1,6 @@
 import { Component, Show, createEffect } from "solid-js";
 import { dataStore } from '../stores/dataStore';
+import { Button } from "@kobalte/core";
 
 /**
  * Error Overlay Component
@@ -12,19 +13,19 @@ export const ErrorOverlay: Component = () => {
         <div class="bg-red-600 text-white p-4 rounded-lg shadow-lg border-l-4 border-red-800">
           <div class="flex justify-between items-start">
             <h3 class="font-bold text-lg">Error</h3>
-            <button
+            <Button.Root
               onClick={() => dataStore.setError(null)}
               class="text-white hover:text-gray-200 ml-2"
               title="Dismiss error"
             >
               ✕
-            </button>
+            </Button.Root>
           </div>
           <p class="mt-2 text-sm">
             {dataStore.state.error}
           </p>
           <div class="mt-3 flex gap-2">
-            <button
+            <Button.Root
               onClick={() => {
                 // Try to recover by going back to namespace selection
                 dataStore.navigateToNamespaceSelection();
@@ -33,8 +34,8 @@ export const ErrorOverlay: Component = () => {
               class="bg-red-800 hover:bg-red-900 px-3 py-1 rounded text-sm transition-colors"
             >
               Back to Namespaces
-            </button>
-            <button
+            </Button.Root>
+            <Button.Root
               onClick={() => {
                 // Try to reload the current view
                 const currentNamespace = dataStore.state.currentNamespace;
@@ -47,7 +48,7 @@ export const ErrorOverlay: Component = () => {
               class="bg-gray-700 hover:bg-gray-800 px-3 py-1 rounded text-sm transition-colors"
             >
               Retry
-            </button>
+            </Button.Root>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { Component, Show } from "solid-js";
 import { dataStore } from '../stores/dataStore';
 import { ZoomControl } from './ZoomControl';
+import { Button } from "@kobalte/core";
 
 /**
  * Navigation Controls Component
@@ -11,7 +12,7 @@ export const NavigationControls: Component = () => {
     <Show when={dataStore.state.currentView === 'node_view' && dataStore.state.currentNode}>
       <div class="fixed top-4 right-4 z-50 flex flex-col gap-2">
         {/* Parent Button */}
-        <button
+        <Button.Root
           onClick={() => {
             const currentNode = dataStore.state.currentNode;
             if (currentNode && currentNode.parent_id) {
@@ -27,10 +28,10 @@ export const NavigationControls: Component = () => {
           title={dataStore.state.currentNode?.parent_id ? 'Go to parent node' : 'No parent node'}
         >
           ← Parent
-        </button>
+        </Button.Root>
 
         {/* Home Button */}
-        <button
+        <Button.Root
           onClick={() => {
             dataStore.navigateToRoot();
           }}
@@ -38,11 +39,11 @@ export const NavigationControls: Component = () => {
           title="Return to root node"
         >
           🏠 Home
-        </button>
+        </Button.Root>
 
 
         {/* Billboard Toggle */}
-        <button
+        <Button.Root
           onClick={() => {
             dataStore.toggleBillboards();
           }}
@@ -54,10 +55,10 @@ export const NavigationControls: Component = () => {
           title={dataStore.state.showBillboards ? 'Hide billboard labels' : 'Show billboard labels'}
         >
           {dataStore.state.showBillboards ? '🏷️ Hide Labels' : '🏷️ Show Labels'}
-        </button>
+        </Button.Root>
 
         {/* Back to Namespace Selection */}
-        <button
+        <Button.Root
           onClick={() => {
             dataStore.navigateToNamespaceSelection();
           }}
@@ -65,7 +66,7 @@ export const NavigationControls: Component = () => {
           title="Back to wiki selection"
         >
           🔙 Choose a wiki
-        </button>
+        </Button.Root>
 
       </div>
 

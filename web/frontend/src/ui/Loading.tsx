@@ -1,4 +1,5 @@
 import type { Component } from 'solid-js';
+import { Button } from "@kobalte/core";
 
 /**
  * Loading Spinner Component
@@ -44,12 +45,12 @@ export const ErrorDisplay: Component<{
         <span class="text-red-300 flex-1">{props.message}</span>
       </div>
       {props.onRetry && (
-        <button
+        <Button.Root
           onClick={props.onRetry}
           class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors"
         >
           Retry
-        </button>
+        </Button.Root>
       )}
     </div>
   );

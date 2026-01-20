@@ -1,6 +1,7 @@
 import { Component, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { dataStore } from '../stores/dataStore';
 import { engine } from '../babylon/scene';
+import { Button } from "@kobalte/core";
 
 /**
  * Performance Monitor Component
@@ -33,13 +34,13 @@ export const PerformanceMonitor: Component = () => {
   return (
     <Show when={dataStore.state.currentView === 'node_view'}>
       {/* Toggle button */}
-      <button
+      <Button.Root
         onClick={toggleMonitor}
         class="fixed bottom-4 left-4 z-50 bg-black/65 text-white p-2 rounded-lg hover:bg-opacity-70 transition-all"
         title="Toggle performance monitor"
       >
         ⚡
-      </button>
+      </Button.Root>
 
       {/* Performance monitor display */}
       <Show when={showMonitor()}>
