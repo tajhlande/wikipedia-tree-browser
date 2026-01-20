@@ -137,6 +137,7 @@ async def get_cluster_node_parent(
             status_code=500, detail=f"Error retrieving cluster parent: {str(e)}"
         )
 
+
 @router.get("/namespace/{namespace}/node_id/{node_id}/ancestors")
 async def get_cluster_node_ancestors(
     namespace: Annotated[str, Path(title="Wikipedia namespace")],
