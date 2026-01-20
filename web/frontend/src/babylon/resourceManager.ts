@@ -60,11 +60,11 @@ export class ResourceManager {
    */
   public periodicCleanup(): void {
     console.log('[RESOURCE] Running periodic cleanup');
-    
+
     // Check if we need aggressive cleanup
     const visibleClusters = this.clusterManager.getVisibleClusters();
     const allClusters = this.clusterManager.getAllClusters();
-    
+
     if (allClusters.size > this.aggressiveCleanupThreshold) {
       console.log(`[RESOURCE] Aggressive cleanup triggered (${allClusters.size} clusters > ${this.aggressiveCleanupThreshold} threshold)`);
       this.aggressiveCleanup();
@@ -112,11 +112,11 @@ export class ResourceManager {
   /**
    * Get memory usage statistics
    */
-  public getMemoryStats(): { 
-    visibleClusters: number, 
-    totalClusters: number, 
-    nodeCount: number, 
-    linkCount: number 
+  public getMemoryStats(): {
+    visibleClusters: number,
+    totalClusters: number,
+    nodeCount: number,
+    linkCount: number
   } {
     const visibleClusters = this.clusterManager.getVisibleClusters();
     const allClusters = this.clusterManager.getAllClusters();
@@ -135,7 +135,7 @@ export class ResourceManager {
    * Dispose resources
    */
   public dispose(): void {
+    console.log('[CLEANUP] Disposing ResourceManager');
     this.stopPeriodicCleanup();
-    console.log('[RESOURCE] ResourceManager disposed');
   }
 }

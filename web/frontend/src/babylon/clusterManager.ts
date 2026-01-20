@@ -634,6 +634,7 @@ export class ClusterManager {
 
   // Clear all clusters and resources
   clearAll(): void {
+    console.log('[CLEANUP] ClusterManager clearing all clusters and resources');
     // Dispose all cluster-specific node meshes
     this.clusterNodeMeshes.forEach(nodeMesh => nodeMesh.dispose());
     this.clusterNodeMeshes.clear();

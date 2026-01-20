@@ -583,6 +583,8 @@ function createNodeCluster(nodeViewData: {
  * Clean up resources when component unmounts
  */
 export function cleanupScene() {
+  console.log('[SCENE][CLEANUP] Cleaning up all managers for scene');
+
   if (resourceManager) {
     resourceManager.dispose();
   }
@@ -599,9 +601,9 @@ export function cleanupScene() {
     interactionManager.dispose();
   }
 
-  if (engine) {
-    engine.dispose();
-  }
+  // if (engine) {
+  //   engine.dispose();
+  // }
 
   // Reset tracking variables
   currentNodeId = null;

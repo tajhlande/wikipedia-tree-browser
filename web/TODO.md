@@ -2,7 +2,6 @@
 
 ## Bugs
 
-* Navigating to German namespace, then back to namespace chooser, then to English still shows German graph
 * Fix broken tests
 
 ## Usability improvements

@@ -627,6 +627,7 @@ export class NodeManager {
    * Dispose all resources
    */
   public dispose(): void {
+    console.log('[CLEANUP] Disposing NodeManager');
     this.clearAllNodes();
     this.nodeMaterials.forEach((material) => {
       material.dispose();

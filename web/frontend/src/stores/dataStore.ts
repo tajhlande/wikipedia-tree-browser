@@ -9,6 +9,7 @@ import type {
   Vector3D
 } from '../types';
 import { apiClient } from '../services/apiClient';
+import { cleanupScene } from '../babylon/scene';
 
 /**
  * Data Store for WP Embeddings Visualization
@@ -186,6 +187,7 @@ export const createDataStore = () => {
    * Clear all caches
    */
   const clearAllCaches = () => {
+    console.log('[CLEANUP] Clearing all caches');
     setNodeCache({});
     setPageCache({});
     setNamespaceCache([]);
@@ -404,10 +406,17 @@ export const createDataStore = () => {
    * Navigate to namespace selection
    */
   const navigateToNamespaceSelection = (): void => {
+    console.log("[DATA] Navigating to Namespace Selection page");
     setCurrentView('namespace_selection');
     setCurrentNamespace(null);
     setCurrentNode(null);
     clearError();
+
+    // Clear all caches to ensure clean state when switching namespaces
+    clearAllCaches();
+
+    // Clean up Babylon.js scene to remove old clusters and meshes
+    cleanupScene();
   };
 
   /**

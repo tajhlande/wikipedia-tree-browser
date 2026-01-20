@@ -229,6 +229,7 @@ export class InteractionManager {
    * Dispose all resources
    */
   public dispose(): void {
+    console.log('[CLEANUP] Disposing InteractionManager');
     if (this.hoverObserver) {
       this.scene.onPointerObservable.remove(this.hoverObserver);
       this.hoverObserver = null;
