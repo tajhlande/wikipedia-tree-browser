@@ -27,7 +27,7 @@ export const NodeInfoOverlay: Component = () => {
 
   return (
     <Show when={dataStore.state.currentView === 'node_view' && dataStore.state.currentNode}>
-      <div class="fixed bottom-4 right-4 z-50 bg-black bg-opacity-70 text-white p-4 rounded-lg max-w-xs">
+      <div class="fixed bottom-4 right-4 z-50 bg-black/65 text-white p-4 rounded-lg max-w-xs">
         {/* Current Node Info */}
         <div class="mb-3">
           <h3 class="text-lg font-bold mb-1">Current Node</h3>

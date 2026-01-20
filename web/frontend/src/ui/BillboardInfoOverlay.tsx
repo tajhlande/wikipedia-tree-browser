@@ -63,7 +63,7 @@ export const BillboardInfoOverlay: Component = () => {
   return (
     <Show when={billboardHoverInfo()}>
       {/* {console.log(`[UI] BillboardInfoOverlay: Rendering with data`, billboardHoverInfo())} */}
-      <div class="fixed bottom-4 left-4 z-50 bg-black bg-opacity-70 text-white p-4 rounded-lg max-w-xs border-2 border-blue-500">
+      <div class="fixed bottom-4 left-4 z-50 bg-black/65 text-white p-4 rounded-lg max-w-xs border-2 border-blue-500">
         <h3 class="text-lg font-bold mb-2">Node Information</h3>
         <p class="text-sm">
           <strong>ID:</strong> {billboardHoverInfo()?.nodeId}<br/>
