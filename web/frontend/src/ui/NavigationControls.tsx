@@ -62,9 +62,9 @@ export const NavigationControls: Component = () => {
             dataStore.navigateToNamespaceSelection();
           }}
           class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-all duration-200"
-          title="Back to namespace selection"
+          title="Back to wiki selection"
         >
-          🔙 Namespaces
+          🔙 Choose a wiki
         </button>
 
       </div>

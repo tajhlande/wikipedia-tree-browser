@@ -30,6 +30,7 @@ export const NamespaceSelector = () => {
       }
 
       setNamespaces(result.data);
+      dataStore.cacheNamespaces(result.data);
     } catch (error) {
       console.error('Failed to load namespaces:', error);
       let errorMessage = 'Unknown error loading namespaces';
@@ -123,7 +124,7 @@ export const NamespaceSelector = () => {
         <div class="mb-6">
           <input
             type="text"
-            placeholder="Search namespaces..."
+            placeholder="Search wikis..."
             value={searchQuery()}
             onInput={(e) => setSearchQuery(e.currentTarget.value)}
             class="w-full p-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:border-blue-500 focus:outline-none"
