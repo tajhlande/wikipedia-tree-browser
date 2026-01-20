@@ -39,7 +39,7 @@ export const ErrorDisplay: Component<{
   class?: string;
 }> = (props) => {
   return (
-    <div class={`error-display bg-red-900 bg-opacity-50 border border-red-700 rounded-lg p-4 ${props.class || ''}`}>
+    <div class={`error-display bg-red-900/50 border border-red-700 rounded-lg p-4 ${props.class || ''}`}>
       <div class="flex items-start mb-3">
         <span class="text-red-400 mr-2 mt-1">⚠️</span>
         <span class="text-red-300 flex-1">{props.message}</span>
@@ -64,7 +64,7 @@ export const LoadingOverlay: Component<{
   message?: string;
 }> = (props) => {
   return (
-    <div class="loading-overlay fixed inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-50">
+    <div class="loading-overlay fixed inset-0 bg-gray-900/80 flex items-center justify-center z-50">
       <div class="text-center">
         <LoadingSpinner size="large" />
         {props.message && (

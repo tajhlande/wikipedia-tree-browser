@@ -79,7 +79,7 @@ export const LeafNodeOverlay: Component = () => {
 
   return (
     <Show when={dataStore.state.currentView === 'node_view' && dataStore.state.currentNode && dataStore.state.leafNodeInfoVisible}>
-      <div class="fixed bottom-4 left-4 z-50 bg-black bg-opacity-70 text-white p-4 rounded-lg w-5/12 max-w-8/12 max-h-fit">
+      <div class="fixed bottom-4 left-4 z-50 bg-black/85 text-white p-4 rounded-lg w-5/12 max-w-8/12 max-h-fit">
         {/* Current Node Info */}
 
         <div class="mb-3">

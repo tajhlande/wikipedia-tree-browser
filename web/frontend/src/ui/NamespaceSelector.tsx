@@ -110,7 +110,7 @@ export const NamespaceSelector = () => {
   });
 
   return (
-    <div class="namespace-selector fixed inset-0 bg-gray-900 bg-opacity-90 z-50 p-6 overflow-y-auto">
+    <div class="namespace-selector fixed inset-0 bg-gray-900/90 z-50 p-6 overflow-y-auto">
       <div class="max-w-6xl mx-auto">
         {/* Header */}
         <div class="flex justify-between items-center mb-6">
@@ -141,7 +141,7 @@ export const NamespaceSelector = () => {
 
         {/* Error State */}
         <Show when={error()}>
-          <div class="error-state bg-red-900 bg-opacity-50 border border-red-700 rounded-lg p-4 mb-6">
+          <div class="error-state bg-red-900/50 border border-red-700 rounded-lg p-4 mb-6">
             <div class="flex items-center mb-2">
               <span class="text-red-400 mr-2">⚠️</span>
               <span class="text-red-300">{error()}</span>
