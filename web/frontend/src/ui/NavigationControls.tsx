@@ -68,8 +68,24 @@ export const NavigationControls: Component = () => {
           🔙 Choose a wiki
         </Button.Root>
 
+        {/* Toggle bounding box visibility */}
+        <Button.Root
+          onClick={() => {
+            dataStore.toggleBoundingBox();
+          }}
+          class={`px-4 py-2 rounded-lg text-white font-medium transition-all duration-200 ${
+            dataStore.state.showBoundingBox
+              ? 'bg-teal-600 hover:bg-teal-700'
+              : 'bg-gray-600 hover:bg-gray-700'
+          }`}
+          title={dataStore.state.showBoundingBox ? 'Hide bounding box' : 'Show bounding box'}
+        >
+          {dataStore.state.showBoundingBox ? '📦 Hide Bounding Box' : '📦 Show  Bounding Box'}
+        </Button.Root>
+
       </div>
 
+      {/* Zoom slider  */}
       <ZoomControl />
     </Show>
   );

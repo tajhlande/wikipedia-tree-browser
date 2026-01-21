@@ -10,6 +10,7 @@ import {
   CubicEase,
   EasingFunction,
   Animation,
+  LinesMesh,
 } from "@babylonjs/core";
 import { NodeManager } from './nodeManager';
 import { ClusterManager } from './clusterManager';
@@ -32,27 +33,6 @@ export let interactionManager: InteractionManager | null = null;
 let currentNodeId: number | null = null;
 let rootNodeId: number | null = null;
 
-declare module "@babylonjs/core" {
-  interface ArcRotateCamera {
-    easeTo(whichprop: string, targetval: number, speed: number): void;
-  }
-  interface Vector3 {
-    easeTo(whichprop: string, targetval: number, speed: number): void;
-  }
-}
-
-ArcRotateCamera.prototype.easeTo = function (whichprop: string, targetval: number, frames: number, fps=60) {
-    const ease = new CubicEase();
-    ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
-  Animation.CreateAndStartAnimation('at4', this, whichprop, frames, 60, (this as any)[whichprop], targetval, 0, ease);
-  // console.debug(`[CAMERA] Easing camera.${whichprop} to ${targetval} in ${frames} frames`)
-};
-Vector3.prototype.easeTo = function (whichprop: string, targetval: number, frames: number, fps=60) {
-    const ease = new CubicEase();
-    ease.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
-  Animation.CreateAndStartAnimation('at4', this, whichprop, frames, 60, (this as any)[whichprop], targetval, 0, ease);
-  // console.debug(`[CAMERA] Easing vector.${whichprop} to ${targetval} in ${frames} frames`)
-};
 
 export function initScene(canvasId: string) {
   try {
@@ -121,13 +101,6 @@ export function initScene(canvasId: string) {
     // Setup reactive updates for data store changes
     setupReactiveUpdates();
 
-    // Create a simple box for initial demo (will be removed when nodes are loaded)
-    const demoBox = MeshBuilder.CreateBox("demoBox", { size: 1 }, scene);
-    demoBox.position = new Vector3(0, 0, 0);
-
-    // Store reference to remove later
-    (scene as any).demoBox = demoBox;
-
     // Ensure canvas has focus for camera controls
     canvas.focus();
     canvas.tabIndex = 1; // Make canvas focusable
@@ -193,12 +166,6 @@ function setupReactiveUpdates() {
     console.log(`[SCENE EFFECT] View: ${currentView}, Node: ${currentNode?.id}`);
 
     if (currentView === 'node_view' && currentNode && currentNamespace && clusterManager) {
-      // Remove demo box if it exists
-      if ((scene as any).demoBox) {
-        (scene as any).demoBox.dispose();
-        (scene as any).demoBox = null;
-      }
-
       // Ensure interaction manager exists - recreate if it was disposed
       if (!interactionManager && scene) {
         console.log("[SCENE EFFECT] Recreating InteractionManager after namespace switch");
@@ -229,7 +196,13 @@ function setupReactiveUpdates() {
     }
   });
 
+  // Reactive effect for bounding box visibility toggle
+  createEffect(() => {
+    const showBoundingBox = dataStore.state.showBoundingBox;
+    console.log(`[SCENE EFFECT] Boundingbox visibility changed: ${showBoundingBox}`);
 
+    updateBoundingBoxVisibility(showBoundingBox)
+  });
 }
 
 /**
@@ -279,6 +252,101 @@ async function computeTargetClusters(namespace: string, nodeId: number, includeA
   }
 
   return targetClusters;
+}
+
+const bbNodeName = "scene-bounding-box";
+
+/**
+ * Add a bounding box around all the clusters in the scene
+ *
+ * @param scene the scene to add to
+ * @param clusterManager the source of cluster info
+ */
+function setupBoundingBox(scene: Scene, clusterManager: ClusterManager): void {
+  console.debug('[BOUNDINGBOX] Setting up bounding box');
+
+
+  // determine bounds
+  const visibleClusters = clusterManager.getVisibleClusters();
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+
+  if (visibleClusters && visibleClusters.size > 0) {
+    visibleClusters.forEach(clusterNodeId => {
+      const nodesInCluster = clusterManager?.getNodesInCluster(clusterNodeId);
+      if (nodesInCluster) {
+        nodesInCluster.forEach(nodeId => {
+          const mesh = clusterManager?.getNodeMesh(nodeId);
+          if (mesh?.isEnabled()) {
+            const pos = mesh.position;
+            minX = Math.min(minX, pos.x);
+            maxX = Math.max(maxX, pos.x);
+            minY = Math.min(minY, pos.y);
+            maxY = Math.max(maxY, pos.y);
+            minZ = Math.min(minZ, pos.z);
+            maxZ = Math.max(maxZ, pos.z);
+          }
+        });
+      }
+    });
+  }
+  console.debug('[BOUNDINGBOX] Range: (', minX, ', ', minY, ', ', minZ, ') to (', maxX, ', ', maxY, ', ', maxZ, ')');
+
+
+  // create line paths
+  // each step should change only one of the 3 dimensions
+
+  const linePath1 = Array<Vector3>();
+  linePath1.push(new Vector3(minX, minY, minZ));
+  linePath1.push(new Vector3(maxX, minY, minZ));
+  linePath1.push(new Vector3(maxX, minY, maxZ));
+  linePath1.push(new Vector3(minX, minY, maxZ));
+
+  const linePath2 = Array<Vector3>();
+  linePath2.push(new Vector3(maxX, maxY, minZ));
+  linePath2.push(new Vector3(minX, maxY, minZ));
+  linePath2.push(new Vector3(minX, maxY, maxZ));
+  linePath2.push(new Vector3(maxX, maxY, maxZ));
+
+  const linePath3 = Array<Vector3>();
+  linePath3.push(new Vector3(minX, maxY, minZ));
+  linePath3.push(new Vector3(minX, minY, minZ));
+  linePath3.push(new Vector3(minX, minY, maxZ));
+  linePath3.push(new Vector3(minX, maxY, maxZ));
+
+  const linePath4 = Array<Vector3>();
+  linePath4.push(new Vector3(maxX, minY, maxZ));
+  linePath4.push(new Vector3(maxX, maxY, maxZ));
+  linePath4.push(new Vector3(maxX, maxY, minZ));
+  linePath4.push(new Vector3(maxX, minY, minZ));
+  const bbLines = [linePath1, linePath2, linePath3, linePath4];
+
+  // create the parent node if it doesn't exist, and update the lines in it
+  let fetchedNode = scene.getNodeByName(bbNodeName);
+  let bbLineSystem: LinesMesh | null;
+  if (fetchedNode != null && fetchedNode instanceof LinesMesh) {
+    console.debug('[BOUNDINGBOX] Found existing LinesMesh');
+    bbLineSystem = fetchedNode as LinesMesh;
+    bbLineSystem = MeshBuilder.CreateLineSystem(bbNodeName, {lines: bbLines, updatable: true, instance: bbLineSystem, });
+  } else {
+    console.debug('[BOUNDINGBOX] Creating new LinesMesh');
+    bbLineSystem =  MeshBuilder.CreateLineSystem(bbNodeName, {lines: bbLines, updatable: true, }, scene);
+    bbLineSystem.color = Color3.White();
+  }
+
+  bbLineSystem.setEnabled(dataStore.state.showBoundingBox);
+
+}
+
+function updateBoundingBoxVisibility(showBoundingBox: boolean) {
+  let fetchedNode = scene?.getNodeByName(bbNodeName);
+  if (fetchedNode != null && fetchedNode instanceof LinesMesh) {
+    console.debug('[BOUNDINGBOX] Found existing LinesMesh to toggle bounding box visibility');
+    fetchedNode.setEnabled(showBoundingBox);
+  } else {
+    console.warn('[BOUNDINGBOX] Did not find existing LinesMesh to toggle bounding box visibility');
+  }
 }
 
 /**
@@ -367,7 +435,7 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
     }
   });
 
-  // Step 8: Clean up unused resources
+  // Step 11: Clean up unused resources
   // console.log(`[SCENE] DEBUG: Before cleanup - Visible clusters:`, Array.from(clusterManager.getVisibleClusters()));
   // console.log(`[SCENE] Cleaning up unused nodes, links, and billboards`);
   clusterManager.cleanupUnusedNodes();
@@ -379,12 +447,18 @@ async function syncSceneToTargetState(namespace: string, nodeId: number, include
   }
   // console.log(`[SCENE] DEBUG: After cleanup - Visible clusters:`, Array.from(clusterManager.getVisibleClusters()));
 
-  // Step 9: Update all billboard positions after node movement is complete
+  // Step 12: Update all billboard positions after node movement is complete
   // This ensures billboards are properly positioned after ancestor chain calculations
   if (nodeManager) {
     console.log(`[SCENE] Updating all billboard positions after node movement`);
     nodeManager.updateAllBillboardPositions();
   }
+
+  // Step 13: Draw a bounding box around the entire set of nodes
+  if (clusterManager && scene) {
+    setupBoundingBox(scene, clusterManager);
+  }
+
 
   console.log(`[SCENE] Sync: final cluster list:`, Array.from(clusterManager.getVisibleClusters()));
 }
@@ -401,12 +475,6 @@ async function loadNodeView(namespace: string, nodeId: number) {
 
   try {
     console.log(`[SCENE] Loading node view for node ${nodeId} in namespace ${namespace}`);
-
-    // Remove demo box if it exists
-    if ((scene as any).demoBox) {
-      (scene as any).demoBox.dispose();
-      (scene as any).demoBox = null;
-    }
 
     // Synchronize scene to target state
     await syncSceneToTargetState(namespace, nodeId, false);
@@ -494,7 +562,7 @@ function createNodeCluster(nodeViewData: {
       console.warn(`[CAMERA]  Cannot position camera - cluster manager not set`);
       return;
     }
-    console.debug(`[CAMERA] Positioning camera for node ${nodeId}`);
+    console.debug(`[CAMERA][POSITION] Positioning camera for node ${nodeId}`);
 
     // Get the node mesh to position camera
     const nodeMesh = clusterManager.getNodeMesh(nodeId);
@@ -529,14 +597,15 @@ function createNodeCluster(nodeViewData: {
         }
       });
     }
-    console.debug(`[CAMERA] Bounding box of visible nodes: x:(${minX}, ${maxX}), y:(${minY}, ${maxY}), z:(${minZ}, ${maxZ})`);
+    console.debug(`[CAMERA][POSITION] Bounding box of visible nodes: (`, minX.toFixed(3), `, `, minY.toFixed(3), `, `, minZ.toFixed(3), `) to (`, maxX.toFixed(3), `, `, maxY.toFixed(3), `, `, maxZ.toFixed(3), `)`);
 
-    let targetPosition = nodeMesh.position;
+    // Calculate cluster center - this is what the camera will look at
+    let targetPosition = nodeMesh.position.clone();
     let cameraDistance = 20; // Default distance
 
-    // If we found visible nodes, calculate better positioning
+    // If we found visible nodes, calculate cluster center for camera target
     if (minX !== Infinity) {
-      console.debug(`[CAMERA] Computing camera positioning`);
+      console.debug(`[CAMERA] Computing cluster center for camera target`);
       const centerX = (minX + maxX) / 2;
       const centerY = (minY + maxY) / 2;
       const centerZ = (minZ + maxZ) / 2;
@@ -546,49 +615,174 @@ function createNodeCluster(nodeViewData: {
       const sizeZ = maxZ - minZ;
       const maxSize = Math.max(sizeX, sizeY, sizeZ);
 
-      // Use the center of the cluster as target
+      // Use the center of the cluster as camera target
       targetPosition = new Vector3(centerX, centerY, centerZ);
+      console.debug(`[CAMERA][POSITION] Cluster center for target position is now (`, centerX, `, `, centerY, `, `, centerZ, `)`);
 
       // Adjust camera distance based on cluster size
-      cameraDistance = 5 + maxSize * 1.2;
+      cameraDistance = 5 + maxSize * 1.4;
     } else {
-      console.warn(`[CAMERA] Not computing camera positioning because no nodes found`);
+      console.warn(`[CAMERA] Not computing cluster center because no nodes found`);
+      console.debug(`[CAMERA][POSITION] Cluster center for target position is now (`, targetPosition.x, `, `, targetPosition.y, `, `, targetPosition.z, `)`);
     }
 
-    // Position the camera
-    const easingFrames = 90;
-    const timeoutDelay = 10;
-    const newCameraPosition = new Vector3(
+    console.log(`[CAMERA][POSITION] Hacking target position to node mesh: (`, nodeMesh.position.x, `, `, nodeMesh.position.y, `, `, nodeMesh.position.z, `)`);
+
+    // Position the camera using spherical coordinates (alpha, beta, radius)
+    const easingFrames = 60;
+    const fps = 30;
+
+    // If we're at the root node, use a generic position
+    // otherwise use a position collinear with the target position and the current node
+    const currentNodeMesh = currentNodeId == null ? null : clusterManager?.getNodeMesh(currentNodeId);
+    const standardNewCameraPosition = new Vector3(
       targetPosition.x,
       targetPosition.y + 5, // Slightly elevated
       targetPosition.z - cameraDistance
     );
+    console.log(`[CAMERA][POSITION] Standard new camera position `, standardNewCameraPosition);
+    // Calculate camera spherical coordinates to point at the selected node with cluster behind it
+    let alpha, beta, radius;
 
-    console.debug(`[CAMERA] Target position: (${newCameraPosition.x}. ${newCameraPosition.y}, ${newCameraPosition.z}), distance: ${cameraDistance}`);
+    if (currentNodeId != rootNodeId && currentNodeId != null && currentNodeMesh != null) {
+      const currentNodeMesh = clusterManager?.getNodeMesh(currentNodeId);
+      if (currentNodeMesh) {
+        console.log(`[CAMERA][POSITION] Camera target (cluster center)`, targetPosition);
+        console.log(`[CAMERA][POSITION] Selected node position`, currentNodeMesh.position);
 
-    camera.setPosition(newCameraPosition);
-    // setTimeout(() => camera?.position.easeTo("x", newCameraPosition.x, easingFrames), timeoutDelay);
-    // setTimeout(() => camera?.position.easeTo("y", newCameraPosition.y, easingFrames), timeoutDelay);
-    // setTimeout(() => camera?.position.easeTo("z", newCameraPosition.z, easingFrames), timeoutDelay);
+        // Calculate direction from selected node to camera target (cluster center)
+        // This ensures the selected node is positioned between camera and cluster center
+        const directionToTarget = targetPosition; // .subtract(currentNodeMesh.position);
 
+        // Calculate the length of the direction vector
+        const directionLength = directionToTarget.length();
 
-    camera.setTarget(targetPosition);
-    // setTimeout(() => camera?.target.easeTo("x", targetPosition.x, easingFrames), timeoutDelay);
-    // setTimeout(() => camera?.target.easeTo("y", targetPosition.y, easingFrames), timeoutDelay);
-    // setTimeout(() => camera?.target.easeTo("z", targetPosition.z, easingFrames), timeoutDelay);
+        // Only proceed if the direction vector has significant length
+        if (directionLength > 0.01) { // Small threshold to avoid division by zero
+          // Normalize the direction vector for stable angle calculation
+          const normalizedDirection = directionToTarget.normalize();
 
-    camera.radius = cameraDistance;
-    dataStore.setState('cameraStartDistance',cameraDistance);
-    camera.alpha = Math.PI / 2; // Side view
-    camera.beta = Math.PI / 4; // Slightly above
-    // setTimeout(() => camera?.easeTo("radius", cameraDistance, easingFrames), timeoutDelay);
-    // setTimeout(() => camera?.easeTo("alpha", Math.PI / 2, easingFrames), timeoutDelay);
-    // setTimeout(() => camera?.easeTo("beta",  Math.PI / 4, easingFrames), timeoutDelay);
+          // Position camera opposite to the cluster center relative to the selected node
+          // This ensures: camera -> selected node -> cluster center (colinear)
+          // And puts the bulk of meshes behind the selected node from camera's perspective
+          radius = cameraDistance;
+          alpha = Math.atan2(normalizedDirection.z, normalizedDirection.x); // Add Math.PI to position on opposite side
+
+          // Ensure beta is in a reasonable range to avoid looking straight up/down
+          const rawBeta = Math.acos(normalizedDirection.y);
+          beta = Math.max(0.1, Math.min(Math.PI - 0.1, rawBeta)); // Clamp between 0.1 and PI-0.1 radians
+
+          console.log(`[CAMERA][POSITION] Using cluster-focused spherical coordinates - alpha: ${alpha}, beta: ${beta}, radius: ${radius}`);
+          console.log(`[CAMERA][POSITION] Camera will point at cluster center with selected node in foreground`);
+        } else {
+          console.warn(`[CAMERA][POSITION] Direction vector too small. Using standard spherical coordinates`);
+          // Fallback when selected node and cluster center are too close
+          radius = cameraDistance;
+          alpha = Math.PI / 2; // Side view
+          beta = Math.PI / 4;  // Slightly above
+        }
+      } else {
+        console.warn(`[CAMERA][POSITION] Current node mesh not found. Using standard spherical coordinates`);
+        // Fallback to standard positioning
+        radius = cameraDistance;
+        alpha = Math.PI / 2; // Side view
+        beta = Math.PI / 4;  // Slightly above
+      }
+    } else {
+      console.log(`[CAMERA][POSITION] Using standard spherical coordinates for root node`);
+      // Standard positioning for root node
+      radius = cameraDistance;
+      alpha = Math.PI / 2; // Side view
+      beta = Math.PI / 4;  // Slightly above
+    }
+    console.debug(`[CAMERA][POSITION] Calculated spherical coordinates - alpha: ${alpha}, beta: ${beta}, radius: ${radius}`);
+
+    // Animate camera movement to new target
+    const targetAnimation = new Animation(
+      "camera.target",
+      "target",
+      fps,
+      Animation.ANIMATIONTYPE_VECTOR3,
+      Animation.ANIMATIONLOOPMODE_CONSTANT
+    );
+
+    targetAnimation.setKeys([
+      { frame: 0, value: camera.target.clone() },
+      { frame: easingFrames, value: targetPosition.clone() }
+    ]);
+
+    const easingFn = new CubicEase();
+    easingFn.setEasingMode(EasingFunction.EASINGMODE_EASEINOUT);
+    targetAnimation.setEasingFunction(easingFn);
+
+    // Animate camera movement to new radius
+    const radiusAnimation = new Animation(
+      "camera.radius",
+      "radius",
+      fps,
+      Animation.ANIMATIONTYPE_FLOAT,
+      Animation.ANIMATIONLOOPMODE_CONSTANT
+    );
+
+    radiusAnimation.setKeys([
+      { frame: 0, value: camera.radius },
+      { frame: easingFrames, value: radius }
+    ]);
+
+    radiusAnimation.setEasingFunction(easingFn);
+
+    // Animate camera movement to new alpha
+    const alphaAnimation = new Animation(
+      "camera.alpha",
+      "alpha",
+      fps,
+      Animation.ANIMATIONTYPE_FLOAT,
+      Animation.ANIMATIONLOOPMODE_CONSTANT
+    );
+
+    alphaAnimation.setKeys([
+      { frame: 0, value: camera.alpha },
+      { frame: easingFrames, value: alpha }
+    ]);
+
+    alphaAnimation.setEasingFunction(easingFn);
+
+    // Animate camera movement to new beta
+    const betaAnimation = new Animation(
+      "camera.beta",
+      "beta",
+      fps,
+      Animation.ANIMATIONTYPE_FLOAT,
+      Animation.ANIMATIONLOOPMODE_CONSTANT
+    );
+
+    betaAnimation.setKeys([
+      { frame: 0, value: camera.beta },
+      { frame: easingFrames, value: beta }
+    ]);
+
+    betaAnimation.setEasingFunction(easingFn);
+
+    camera.animations = [targetAnimation, radiusAnimation, alphaAnimation, betaAnimation];
+
+    console.log(`[CAMERA][POSITION] Starting alpha: `, camera?.alpha, `, beta: `, camera?.beta)
+    console.log(`[CAMERA][POSITION] Target alpha: `, alpha, `, beta: `, beta)
+
+    scene?.beginAnimation(camera, 0, easingFrames, false, 1, () => {
+      console.log(`[CAMERA][POSITION] Setting post-animation target to `, targetPosition);
+      camera?.setTarget(targetPosition, false, false, true);
+      console.log(`[CAMERA][POSITION] Final alpha: `, camera?.alpha, `, beta: `, camera?.beta)
+    });
+
+    dataStore.setState('cameraStartDistance', cameraDistance);
+
+    setTimeout((camera: ArcRotateCamera) => console.log(`[CAMERA][POSITION] After animation, position: `,
+      [camera.position.x, camera.position.y, camera.position.z],
+      `, target: `,
+       [camera.target.x, camera.target.y, camera.target.z]), 3000, camera);
 
     console.log(`[NAV] Positioned camera for node ${nodeId} at (${targetPosition.x}, ${targetPosition.y}, ${targetPosition.z}) with distance ${cameraDistance}`);
   }
-
-
 
 
 /**

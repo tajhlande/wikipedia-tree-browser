@@ -61,6 +61,7 @@ export type AppState = {
   leafNodeInfoVisible: boolean; // whether leaf node info is showing or not
   error: string | null;
   cameraStartDistance: number;
+  showBoundingBox: boolean; // whether the bounding box around all nodes is visible
 };
 
 export type NodeCache = {

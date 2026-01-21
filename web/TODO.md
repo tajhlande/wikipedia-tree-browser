@@ -2,6 +2,7 @@
 
 ## Bugs
 
+* Parent button is placing departed nodes too close to their parent
 * "Loading" on leaf node detail / link list doesn't work, so stale content is shown until links load
 * Fix broken tests
 
@@ -10,7 +11,6 @@
 * Internationalize the UI text
 * Reorganize node info boxes
 * Replace UI "namespace" references with "Wiki" references
-* Button to allow camera to center on current node (new behavior) or graph centroid (current behavior)
 * Tune the LOD for billboards
 * Mobile layout fixes (controls and info boxes)
 * Add header to top of node view saying what current WP is

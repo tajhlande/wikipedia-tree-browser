@@ -20,6 +20,16 @@ export const LeafNodeOverlay: Component = () => {
     const currentNamespace = dataStore.state.currentNamespace;
     const leafNodeId = dataStore.state.leafNode?.id;
     const leafNode = dataStore.state.leafNode;
+
+    if (currentNamespace == null) {
+      console.warn(`[LEAF_OVERLAY] Current namespace is null, cannot load pages`);
+      return;
+    }
+    if (leafNodeId == null) {
+      console.warn(`[LEAF_OVERLAY] Leaf node id is null, cannot load pages`);
+      return;
+    }
+
     console.debug(`[LEAF_OVERLAY] loadPages() Loading pages for namespace ${currentNamespace} and node ${leafNodeId}, page ${page}`)
     setIsLoading(true);
     try {

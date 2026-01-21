@@ -23,9 +23,11 @@ export const BillboardInfoOverlay: Component = () => {
     if (interactionManager) {
       // Poll the interaction manager for hovered node changes
       const checkHoveredNode = () => {
-        const currentHoveredNode = interactionManager.getHoveredNode();
+        const currentHoveredNode = interactionManager?.getHoveredNode();
         // console.log(`[UI] BillboardInfoOverlay: Checking hovered node: ${currentHoveredNode ? currentHoveredNode.label : 'null'}`);
-        setHoveredNode(currentHoveredNode);
+        if (currentHoveredNode) {
+          setHoveredNode(currentHoveredNode);
+        }
       };
 
       // Check immediately

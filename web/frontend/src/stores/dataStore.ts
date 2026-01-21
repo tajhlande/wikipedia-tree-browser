@@ -67,6 +67,7 @@ export const createDataStore = () => {
     leafNode: null,
     leafNodeInfoVisible: false,
     cameraStartDistance: 25,
+    showBoundingBox: false,
   });
 
   const [nodeCache, setNodeCache] = createStore<NodeCache>({});
@@ -134,6 +135,14 @@ export const createDataStore = () => {
    */
   const toggleBillboards = () => {
     setState('showBillboards', !state.showBillboards);
+  };
+
+
+  /**
+   * Toggle bounding box visibility
+   */
+  const toggleBoundingBox = () => {
+    setState('showBoundingBox', !state.showBoundingBox);
   };
 
   /**
@@ -473,6 +482,7 @@ export const createDataStore = () => {
     setCurrentNode,
     setShowBillboards,
     toggleBillboards,
+    toggleBoundingBox,
     cacheNode,
     getCachedNode,
     cachePage,
