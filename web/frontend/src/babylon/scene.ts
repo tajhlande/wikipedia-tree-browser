@@ -11,6 +11,7 @@ import {
   EasingFunction,
   Animation,
   LinesMesh,
+  Color4,
 } from "@babylonjs/core";
 import { NodeManager } from './nodeManager';
 import { ClusterManager } from './clusterManager';
@@ -45,6 +46,9 @@ export function initScene(canvasId: string) {
     // Initialize Babylon.js engine and scene
     engine = new Engine(canvas, true);
     scene = new Scene(engine);
+
+    // match oklch(0.21 0.034 264.665) #101828
+    scene.clearColor = new Color4(16 / 255.0, 24 / 255.0, 40 / 255.0, 1.0);
 
     // Setup camera with better initial positioning
     console.log(`[INIT] Creating new ArcRotateCamera`);
