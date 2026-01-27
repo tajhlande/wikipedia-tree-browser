@@ -10,14 +10,13 @@
 
 * Internationalize the UI text
 * Reorganize node info boxes
-* Replace UI "namespace" references with "Wiki" references
 * Tune the LOD for billboards
 * Mobile layout fixes (controls and info boxes)
-* Add header to top of node view saying what current WP is
 * Add descriptive text to main page
 
 ## Technical improvements
 
+* Create script that copies a working namespace SQLite db to a slimmer read-only version for distribution
 * Migrate to real db backend
 * If not that, add indexes on sqlitedb
 
@@ -25,6 +24,6 @@
 
 * See if replacing leaf with link looks better
 * Animate graph transitions (add/remove nodes)
-* Consider color and material changes
+* Consider color and material changes - example: layer on monthly readership or number of edits
 * Match node info hover box border color with node color
 * Put border on current node box and match with node color
