@@ -38,7 +38,7 @@ from index_pages import (
     compute_embeddings_for_chunk,
     get_embedding_model_config,
 )
-from languages import get_language_for_namespace
+from languages import get_language_for_namespace, get_language_info_for_namespace
 from progress_utils import ProgressTracker
 from topic_discovery import TopicDiscovery
 from transform import (
@@ -1263,8 +1263,12 @@ class TopicsCommand(Command):
                         f"Total clusters processed for namespace {namespace}: {total_clusters_processed}.")
             logger.debug("Total processed after pass 4: %d", total_clusters_processed)
 
-            # TODO write "wikipedia" in the language appropriate way
-            root_label = f"{get_language_for_namespace(namespace)} Wikipedia"
+            # Write "wikipedia" in the language appropriate way
+            language_info = get_language_info_for_namespace(namespace)
+            if language_info:
+                root_label = language_info.localized_wiki_name
+            else:
+                root_label = f"{get_language_for_namespace(namespace)} Wikipedia"
             root_node = [n for n in cluster_node_list if not n.parent_id][0]
             root_node.first_label = root_node.final_label = root_label
             logger.info("Root node ID: %s", root_node.node_id)
