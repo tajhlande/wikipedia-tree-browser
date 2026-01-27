@@ -97,7 +97,8 @@ export const NamespaceSelector = () => {
 
     return currentNamespaces.filter(namespace =>
       namespace.name.toLowerCase().includes(query) ||
-      namespace.display_name.toLowerCase().includes(query) ||
+      namespace.english_wiki_name.toLowerCase().includes(query) ||
+      namespace.localized_wiki_name.toLowerCase().includes(query) ||
       namespace.language.toLowerCase().includes(query)
     );
   };

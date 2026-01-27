@@ -110,8 +110,9 @@ export class ApiClient {
         const namespacesArray = result.data;
         const transformedNamespaces = namespacesArray.map(item => ({
           name: item.namespace,
-          display_name: `${item.language} Wikipedia`,
-          language: item.language
+          language: item.language,
+          english_wiki_name: item.english_wiki_name,
+          localized_wiki_name: item.localized_wiki_name
         }));
 
         this.namespaceCache = transformedNamespaces;

@@ -15,9 +15,14 @@ export const NamespaceCard: Component<{
       onClick={() => props.onSelect(props.namespace)}
     >
       <div class="flex items-start justify-between mb-2">
-        <h3 class="text-lg font-semibold text-white">
-          {props.namespace.display_name}
-        </h3>
+        <div class="flex-1">
+          <h3 class="text-lg font-semibold text-white">
+            {props.namespace.english_wiki_name}
+          </h3>
+          <p class="text-sm text-gray-300 italic">
+            {props.namespace.localized_wiki_name}
+          </p>
+        </div>
         <span class="bg-blue-600 text-white px-2 py-1 rounded text-xs">
           {props.namespace.name}
         </span>

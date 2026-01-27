@@ -5,60 +5,64 @@ import type { Namespace } from '../types';
 // Mock namespace with language
 const namespaceWithLanguage: Namespace = {
   name: 'enwiki_namespace_0',
-  display_name: 'English Wikipedia',
-  language: 'English'
+  language: 'English',
+  english_wiki_name: 'English Wikipedia',
+  localized_wiki_name: 'English Wikipedia'
 };
 
 // Mock namespace without language
 const namespaceWithoutLanguage: Namespace = {
   name: 'dewiki',
-  display_name: 'German Wikipedia',
-  language: 'German'
+  language: 'German',
+  english_wiki_name: 'German Wikipedia',
+  localized_wiki_name: 'Deutschsprachige Wikipedia'
 };
 
 // Test the display logic that would be used in NamespaceCard
 describe('Language Display Logic', () => {
-  it('should display language + Wikipedia when language is available', () => {
-    const displayText = namespaceWithLanguage.language
-      ? `${namespaceWithLanguage.language} Wikipedia`
-      : namespaceWithLanguage.display_name || namespaceWithLanguage.name;
+  it('should display english_wiki_name as the primary display text', () => {
+    const displayText = namespaceWithLanguage.english_wiki_name;
 
     expect(displayText).toBe('English Wikipedia');
   });
 
-  it('should always display display_name since language is now required', () => {
-    const displayText = namespaceWithoutLanguage.display_name;
+  it('should display localized_wiki_name as the secondary display text', () => {
+    const displayText = namespaceWithoutLanguage.localized_wiki_name;
 
-    expect(displayText).toBe('German Wikipedia');
+    expect(displayText).toBe('Deutschsprachige Wikipedia');
   });
 
-  it('should use display_name as the primary display text', () => {
+  it('should use english_wiki_name as the primary display text', () => {
     const namespaceWithDisplayName: Namespace = {
       name: 'frwiki',
-      display_name: 'French Wikipedia',
-      language: 'French'
+      language: 'French',
+      english_wiki_name: 'French Wikipedia',
+      localized_wiki_name: 'Wikipédia en français'
     };
 
-    const displayText = namespaceWithDisplayName.display_name;
+    const displayText = namespaceWithDisplayName.english_wiki_name;
 
     expect(displayText).toBe('French Wikipedia');
   });
 
-  it('should use display_name for description since it already contains language info', () => {
-    const descriptionText = namespaceWithLanguage.display_name;
+  it('should use localized_wiki_name for description since it shows the local name', () => {
+    const descriptionText = namespaceWithLanguage.localized_wiki_name;
 
     expect(descriptionText).toBe('English Wikipedia');
   });
 
-  it('should use display_name which includes language information', () => {
+  it('should use both english and localized names for complete information', () => {
     const namespaceWithLanguageInfo: Namespace = {
       name: 'eswiki',
-      display_name: 'Spanish Wikipedia',
-      language: 'Spanish'
+      language: 'Spanish',
+      english_wiki_name: 'Spanish Wikipedia',
+      localized_wiki_name: 'Wikipedia en español'
     };
 
-    const descriptionText = namespaceWithLanguageInfo.display_name;
+    const englishName = namespaceWithLanguageInfo.english_wiki_name;
+    const localizedName = namespaceWithLanguageInfo.localized_wiki_name;
 
-    expect(descriptionText).toBe('Spanish Wikipedia');
+    expect(englishName).toBe('Spanish Wikipedia');
+    expect(localizedName).toBe('Wikipedia en español');
   });
 });

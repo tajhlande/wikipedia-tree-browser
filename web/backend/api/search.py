@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from services.database_service import DatabaseService
 
-from util.languages import get_language_for_namespace
+from util.languages import get_language_for_namespace, get_language_info_for_namespace
 
 router = APIRouter()
 db_service = DatabaseService()
@@ -52,10 +52,12 @@ async def get_available_namespaces():
         namespaces = db_service.get_available_namespaces()
         namespace_info_list = []
         for namespace in namespaces:
-            language = get_language_for_namespace(namespace)
+            language_info = get_language_info_for_namespace(namespace)
             namespace_info_list.append({
                 "namespace": namespace,
-                "language": language
+                "language": language_info.language,
+                "english_wiki_name": language_info.english_wiki_name,
+                "localized_wiki_name": language_info.localized_wiki_name
             })
 
         logger.debug("Returning %s", str(namespace_info_list))

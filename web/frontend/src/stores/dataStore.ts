@@ -111,7 +111,8 @@ export const createDataStore = () => {
       setState('currentWikiName', null);
     } else {
       console.log('[DATA]')
-      const wikiName = getCachedNamespace(namespace)?.display_name ?? "Unknown Wiki";
+      const namespaceInfo = getCachedNamespace(namespace)
+      const wikiName = namespaceInfo?.localized_wiki_name ?? namespaceInfo?.english_wiki_name ?? "Unknown Wiki";
       setState('currentWikiName', wikiName);
     }
   };
