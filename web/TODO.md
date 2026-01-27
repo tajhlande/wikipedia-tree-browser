@@ -2,6 +2,7 @@
 
 ## Bugs
 
+* Node information box still visible when navigating back to namespace chooser
 * Parent button is placing departed nodes too close to their parent
 * "Loading" on leaf node detail / link list doesn't work, so stale content is shown until links load
 * Fix broken tests
