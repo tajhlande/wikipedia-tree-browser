@@ -95,7 +95,8 @@ def ensure_tables(sqlconn: sqlite3.Connection):
         sqlconn.execute(cluster_tree_table_sql)
         # Index for fast cluster lookup
         sqlconn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_page_vector_ns_cluster ON page_vector(namespace, cluster_id);"
+            # "CREATE INDEX IF NOT EXISTS idx_page_vector_ns_cluster ON page_vector(namespace, cluster_id);"
+            "CREATE INDEX IF NOT EXISTS idx_page_vector_ns_cluster_node ON page_vector(namespace, cluster_node_id);"
         )
         # Indexes for cluster_tree table
         sqlconn.execute(
