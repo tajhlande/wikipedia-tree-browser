@@ -1,16 +1,20 @@
 {
   "folders": [
     {
+      "name": "wp-embeddings",
+      "path": "."
+    },
+    {
+      "name": "dataprep",
       "path": "dataprep"
     },
     {
+      "name": "backend",
       "path": "web/backend"
     },
     {
+      "name": "frontend",
       "path": "web/frontend"
-    },
-    {
-      "path": "."
     }
   ],
   "settings": {
