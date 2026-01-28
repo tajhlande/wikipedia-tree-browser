@@ -124,6 +124,7 @@ class TestClusterAPIUnit:
             "doc_count": 100,
             "child_count": 5,
             "final_label": "Root Topic",
+            "centroid_3d": None,
         }
         mock_cluster_service.get_root_node.assert_called_once_with("enwiki_namespace_0")
 
@@ -191,6 +192,7 @@ class TestClusterAPIUnit:
             "doc_count": 100,
             "child_count": 5,
             "final_label": "Root Topic",
+            "centroid_3d": None,
         }
         mock_cluster_service.get_cluster_node.assert_called_once_with(
             "enwiki_namespace_0", 1
@@ -265,6 +267,7 @@ class TestClusterAPIUnit:
                 "doc_count": 50,
                 "child_count": 2,
                 "final_label": "Child Topic 1",
+                "centroid_3d": None,
             },
             {
                 "node_id": 3,
@@ -274,6 +277,7 @@ class TestClusterAPIUnit:
                 "doc_count": 30,
                 "child_count": 1,
                 "final_label": "Child Topic 2",
+                "centroid_3d": None,
             },
         ]
         mock_cluster_service.get_cluster_node_children.assert_called_once_with(
@@ -334,6 +338,7 @@ class TestClusterAPIUnit:
                 "doc_count": 20,
                 "child_count": 0,
                 "final_label": "Sibling Topic 1",
+                "centroid_3d": None,
             },
             {
                 "node_id": 5,
@@ -343,6 +348,7 @@ class TestClusterAPIUnit:
                 "doc_count": 25,
                 "child_count": 0,
                 "final_label": "Sibling Topic 2",
+                "centroid_3d": None,
             },
         ]
         mock_cluster_service.get_cluster_node_siblings.assert_called_once_with(
@@ -400,6 +406,7 @@ class TestClusterAPIUnit:
             "doc_count": 200,
             "child_count": 1,
             "final_label": "Parent Topic",
+            "centroid_3d": None,
         }
         mock_cluster_service.get_cluster_node_parent.assert_called_once_with(
             "enwiki_namespace_0", 1

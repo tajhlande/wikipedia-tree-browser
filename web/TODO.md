@@ -3,7 +3,6 @@
 ## Bugs
 
 * Parent button is placing departed nodes too close to their parent
-* Fix broken tests
 
 ## Usability improvements
 

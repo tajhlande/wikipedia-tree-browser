@@ -98,7 +98,7 @@ describe('Node Validation', () => {
         final_label: 'Missing Centroid',
         depth: 1,
         is_leaf: false,
-        centroid: null,
+        centroid: undefined as any,
         size: 100,
         parent_id: null,
         created_at: new Date().toISOString(),
