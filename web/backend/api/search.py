@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from services.database_service import DatabaseService
 
-from util.languages import get_language_for_namespace, get_language_info_for_namespace
+from util.languages import get_language_info_for_namespace
 
 router = APIRouter()
 db_service = DatabaseService()

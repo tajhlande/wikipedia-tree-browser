@@ -99,7 +99,7 @@ class DatabaseService(ClusterService):
     def _get_connection(self, namespace: str) -> sqlite3.Connection:
         """Get database connection for a namespace"""
 
-        db_file_path = os.path.join(self.db_directory, f"{namespace}.db")
+        db_file_path = os.path.join(self.db_directory, f"{namespace}_slim.db")
         logger.debug("Namespace: %s, db file: %s", namespace, db_file_path)
         return _get_sql_conn_for_file(db_file_path)
 
@@ -431,10 +431,12 @@ class DatabaseService(ClusterService):
         namespaces = []
 
         # Check for database files in the current directory
-        db_files = list(Path("../../data").glob("*.db"))
+        db_files = list(Path("../../data").glob("*_slim.db"))
         for db_file in db_files:
-            # Extract namespace from filename (e.g., "enwiki_namespace_0.db")
-            namespace = db_file.stem
+            # Extract namespace from filename (e.g., "enwiki_namespace_0_slim.db" -> "enwiki_namespace_0")
+            stem = db_file.stem
+            # Remove the "_slim" suffix if present
+            namespace = stem[:-5] if stem.endswith("_slim") else stem
             namespaces.append(namespace)
 
         return sorted(namespaces)

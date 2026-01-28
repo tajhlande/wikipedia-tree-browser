@@ -15,7 +15,6 @@
 
 ## Technical improvements
 
-* Create script that copies a working namespace SQLite db to a slimmer read-only version for distribution
 * Migrate to real db backend
 
 ## Aesthetic improvements
