@@ -10,7 +10,9 @@ import { ErrorOverlay } from "./ui/ErrorOverlay";
 import { PerformanceMonitor } from "./ui/PerformanceMonitor";
 import { LeafNodeOverlay } from "./ui/LeafNodeOverlay";
 import { WikiTitleOverlay } from "./ui/WikiTitleOverlay";
+import { LocaleSelector } from "./ui/LocaleSelector";
 import { dataStore } from './stores/dataStore';
+import { I18nProvider } from "./i18n";
 
 const App: Component = () => {
   onMount(() => {
@@ -19,39 +21,45 @@ const App: Component = () => {
 
   return (
     <>
-      {/* Babylon.js canvas - always present */}
-      <canvas id="scene" class="w-full h-full" />
+      <I18nProvider>
+        {/* Babylon.js canvas - always present */}
+        <canvas id="scene" class="w-full h-full" />
 
-      {/* Conditional rendering based on current view */}
-      <Show when={dataStore.state.currentView === 'namespace_selection'}>
-        <NamespaceSelector />
-      </Show>
+        {/* Language Selector  */}
+        <div class="fixed top-4 left-4 z-60">
+          <LocaleSelector />
+        </div>
 
-      {/* Navigation Controls - shown in node view */}
-      <NavigationControls />
+        {/* Conditional rendering based on current view */}
+        <Show when={dataStore.state.currentView === 'namespace_selection'}>
+          <NamespaceSelector />
+        </Show>
 
-      {/* Node Information Overlay - shown in node view */}
-      <NodeInfoOverlay />
+        {/* Navigation Controls - shown in node view */}
+        <NavigationControls />
 
-      {/* Billboard Information Overlay - shown when hovering over billboard labels */}
-      <BillboardInfoOverlay />
+        {/* Node Information Overlay - shown in node view */}
+        <NodeInfoOverlay />
 
-      {/* Node View Loading Indicator */}
-      {/* <NodeViewLoading /> */}
+        {/* Billboard Information Overlay - shown when hovering over billboard labels */}
+        <BillboardInfoOverlay />
 
-      {/* Error Overlay */}
-      <ErrorOverlay />
+        {/* Node View Loading Indicator */}
+        {/* <NodeViewLoading /> */}
 
-      {/* Wiki Title Overlay - shown in node view */}
-      <WikiTitleOverlay />
+        {/* Error Overlay */}
+        <ErrorOverlay />
 
-      {/* Performance Monitor */}
-      <PerformanceMonitor />
+        {/* Wiki Title Overlay - shown in node view */}
+        <WikiTitleOverlay />
 
-      {/* Leaf Node Overlay - shown when clicking on leaf nodes */}
-      <LeafNodeOverlay />
+        {/* Performance Monitor */}
+        <PerformanceMonitor />
 
+        {/* Leaf Node Overlay - shown when clicking on leaf nodes */}
+        <LeafNodeOverlay />
 
+      </I18nProvider>
     </>
   );
 };

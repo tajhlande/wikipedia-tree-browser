@@ -1,13 +1,15 @@
 import { Component, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { interactionManager } from '../babylon/scene';
 import type { ClusterNode } from '../types';
+import { useI18n } from "../i18n";
 
 /**
  * Billboard Information Overlay Component
  * Shows information about nodes when hovering over their billboard labels
  */
 export const BillboardInfoOverlay: Component = () => {
-  const [billboardHoverInfo, setBillboardHoverInfo] = createSignal<{
+  const { t } = useI18n();
+    const [billboardHoverInfo, setBillboardHoverInfo] = createSignal<{
     nodeId: number;
     label: string;
     depth: number;
@@ -66,14 +68,14 @@ export const BillboardInfoOverlay: Component = () => {
     <Show when={billboardHoverInfo()}>
       {/* {console.log(`[UI] BillboardInfoOverlay: Rendering with data`, billboardHoverInfo())} */}
       <div class="fixed bottom-4 left-4 z-50 bg-black/65 text-white p-4 rounded-lg max-w-xs border-2 border-blue-500">
-        <h3 class="text-lg font-bold mb-2">Node Information</h3>
+        <h3 class="text-lg font-bold mb-2">{t("billboardInfoOverlay.title")}</h3>
         <p class="text-sm">
-          <strong>ID:</strong> {billboardHoverInfo()?.nodeId}<br/>
-          <strong>Label:</strong> {billboardHoverInfo()?.label}<br/>
-          <strong>Depth:</strong> {billboardHoverInfo()?.depth}<br/>
-          <strong>Type:</strong> {billboardHoverInfo()?.isLeaf ? 'Leaf Node' : 'Cluster Node'}<br/>
+          <strong>{t("billboardInfoOverlay.id")}:</strong> {billboardHoverInfo()?.nodeId}<br/>
+          <strong>{t("billboardInfoOverlay.label")}:</strong> {billboardHoverInfo()?.label}<br/>
+          <strong>{t("billboardInfoOverlay.depth")}:</strong> {billboardHoverInfo()?.depth}<br/>
+          <strong>{t("billboardInfoOverlay.type")}:</strong> {billboardHoverInfo()?.isLeaf ? t("billboardInfoOverlay.leafNode") : t("billboardInfoOverlay.clusterNode")}<br/>
           <Show when={billboardHoverInfo()?.parentId !== null && billboardHoverInfo()?.parentId !== undefined}>
-            <strong>Parent ID:</strong> {billboardHoverInfo()?.parentId}<br/>
+            <strong>{t("billboardInfoOverlay.parentId")}:</strong> {billboardHoverInfo()?.parentId}<br/>
           </Show>
         </p>
       </div>

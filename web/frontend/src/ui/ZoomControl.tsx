@@ -3,12 +3,14 @@ import { dataStore } from '../stores/dataStore';
 import { camera } from '../babylon/scene';
 import { Slider } from "@kobalte/core/slider";
 import './ZoomControl.css';
+import { useI18n } from "../i18n";
 
 /**
  * Zoom Control Component
  * Provides a vertical slider to control camera zoom distance
  */
 export const ZoomControl: Component = () => {
+  const { t } = useI18n();
   const [zoomValue, setZoomValue] = createSignal([25]); // 0-100 range
   const [isDragging, setIsDragging] = createSignal(false);
 
@@ -93,7 +95,7 @@ export const ZoomControl: Component = () => {
             inverted={true}
         >
           <div class=" text-sm text-gray-300 text-center">
-            <Slider.Label class="text-white font-medium text-sm mb-2">Zoom</Slider.Label>
+            <Slider.Label class="text-white font-medium text-sm mb-2">{t("zoomControl.label")}</Slider.Label>
             {/* <Slider.ValueLabel /> */}
           </div>
           <Slider.Track class="SliderTrack mb-2 mt-2">

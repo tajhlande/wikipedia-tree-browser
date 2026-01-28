@@ -1,5 +1,6 @@
 import type { Component } from 'solid-js';
 import type { Namespace } from '../types';
+import { useI18n } from '../i18n';
 
 /**
  * Namespace Card Component
@@ -9,6 +10,7 @@ export const NamespaceCard: Component<{
   namespace: Namespace;
   onSelect: (namespace: Namespace) => void;
 }> = (props) => {
+  const { t } = useI18n();
   return (
     <div
       class="namespace-card bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg p-4 cursor-pointer transition-all duration-200"
@@ -29,7 +31,7 @@ export const NamespaceCard: Component<{
       </div>
       <div class="flex items-center text-blue-400 text-sm space-x-2">
         <span>✨</span>
-        <span class="ml-0">Explore this Wiki</span>
+        <span class="ml-0">{t("namespaceCard.explore")}</span>
         <span>✨</span>
       </div>
     </div>

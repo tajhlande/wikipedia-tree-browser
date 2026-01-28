@@ -1,15 +1,18 @@
-import { createSignal, onMount, Show, For } from 'solid-js';
+import { createSignal, onMount, Show, For, createEffect } from 'solid-js';
 import { apiClient } from '../services/apiClient';
 import { dataStore } from '../stores/dataStore';
 import type { Namespace } from '../types';
 import { Button } from '@kobalte/core';
 import NamespaceCard from './NamespaceCard';
+import { useI18n } from '../i18n';
 
 /**
  * Namespace Selection Component
  * Handles loading and displaying available namespaces for selection
  */
 export const NamespaceSelector = () => {
+  const { t } = useI18n();
+
   const [namespaces, setNamespaces] = createSignal<Namespace[]>([]);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -114,10 +117,9 @@ export const NamespaceSelector = () => {
     <div class="namespace-selector fixed inset-0 bg-gray-900/90 z-50 p-6 overflow-y-auto">
       <div class="max-w-6xl mx-auto">
         {/* Header */}
-        <div class="flex justify-between items-center mb-6">
-          <h1 class="text-3xl font-bold text-white">Wikipedia Tree Browser</h1>
+        <div class="flex justify-between items-center mb-6 ml-16">
           <div class="text-white text-sm">
-            Select a wiki to begin
+            {t("namespaceSelector.subtitle")}
           </div>
         </div>
 
@@ -125,7 +127,7 @@ export const NamespaceSelector = () => {
         <div class="mb-6">
           <input
             type="text"
-            placeholder="Search wikis..."
+            placeholder={t("namespaceSelector.searchPlaceholder")}
             value={searchQuery()}
             onInput={(e) => setSearchQuery(e.currentTarget.value)}
             class="w-full p-3 rounded-lg bg-gray-800 text-white border border-gray-700 focus:border-blue-500 focus:outline-none"
@@ -136,7 +138,7 @@ export const NamespaceSelector = () => {
         <Show when={loading()}>
           <div class="loading-state text-center py-8">
             <div class="inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p class="text-blue-400">Loading namespaces...</p>
+            <p class="text-blue-400">{t("namespaceSelector.loading")}</p>
           </div>
         </Show>
 
@@ -151,7 +153,7 @@ export const NamespaceSelector = () => {
               onClick={loadNamespaces}
               class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
             >
-              Retry
+              {t("namespaceSelector.error.retry")}
             </Button.Root>
           </div>
         </Show>
@@ -172,8 +174,8 @@ export const NamespaceSelector = () => {
             <Show when={filteredNamespaces().length === 0}>
               <div class="no-results col-span-full text-center py-8 text-gray-500">
                 {searchQuery() ?
-                  `No namespaces found matching "${searchQuery()}"` :
-                  'No namespaces available. Please ensure the backend is running.'}
+                  t("namespaceSelector.empty.noMatch", { query: searchQuery() }) :
+                  t("namespaceSelector.empty.noAvailable")}
               </div>
             </Show>
           </div>

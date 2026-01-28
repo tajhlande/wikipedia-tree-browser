@@ -2,12 +2,14 @@ import { Component, Show, createEffect, createSignal, onCleanup } from "solid-js
 import { dataStore } from '../stores/dataStore';
 import { engine } from '../babylon/scene';
 import { Button } from "@kobalte/core";
+import { useI18n } from "../i18n";
 
 /**
  * Performance Monitor Component
  * Shows FPS and other performance metrics
  */
 export const PerformanceMonitor: Component = () => {
+  const { t } = useI18n();
   const [fps, setFps] = createSignal(0);
   const [showMonitor, setShowMonitor] = createSignal(false);
 
@@ -37,7 +39,7 @@ export const PerformanceMonitor: Component = () => {
       <Button.Root
         onClick={toggleMonitor}
         class="fixed bottom-4 left-4 z-50 bg-black/65 text-white p-2 rounded-lg hover:bg-black/90 transition-all"
-        title="Toggle performance monitor"
+        title={t("performanceMonitor.toggleTooltip")}
       >
         ⚡
       </Button.Root>
@@ -46,15 +48,15 @@ export const PerformanceMonitor: Component = () => {
       <Show when={showMonitor()}>
         <div class="fixed bottom-16 left-4 z-50 bg-black/85 text-white p-3 rounded-lg text-sm">
           <div class="flex items-center gap-2">
-            <span class="font-bold">FPS:</span>
+            <span class="font-bold">{t("performanceMonitor.fps")}:</span>
             <span class={fps() >= 60 ? 'text-green-400' : fps() >= 30 ? 'text-yellow-400' : 'text-red-400'}>
               {fps()}
             </span>
           </div>
           <div class="mt-1">
-            <span class="font-bold">Status:</span>
+            <span class="font-bold">{t("performanceMonitor.status")}:</span>
             <span class="ml-1">
-              {fps() >= 60 ? 'Excellent' : fps() >= 30 ? 'Good' : 'Poor'}
+              {fps() >= 60 ? t("performanceMonitor.excellent") : fps() >= 30 ? t("performanceMonitor.good") : t("performanceMonitor.poor")}
             </span>
           </div>
         </div>

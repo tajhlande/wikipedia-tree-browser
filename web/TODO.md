@@ -9,7 +9,6 @@
 
 ## Usability improvements
 
-* Internationalize the UI text
 * Reorganize node info boxes
 * Tune the LOD for billboards
 * Mobile layout fixes (controls and info boxes)

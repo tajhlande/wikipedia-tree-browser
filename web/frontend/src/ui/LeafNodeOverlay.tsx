@@ -1,20 +1,21 @@
-import { Component, Show, onMount, createEffect, createSignal, For } from "solid-js";
+import { Component, Show, createEffect, createSignal, For } from "solid-js";
 import { dataStore } from '../stores/dataStore';
-import { interactionManager } from '../babylon/scene';
 import { Page } from "../types";
 import { Button } from "@kobalte/core";
+import { useI18n } from "../i18n";
+
 
 /**
  * Leaf Node Information Overlay Component
  * Shows pages with links to Wikipedia for the selected leaf node
  */
 export const LeafNodeOverlay: Component = () => {
+  const { t } = useI18n();
   const [pages, setPages] = createSignal<Page[]>([]);
   const [isLoading, setIsLoading] = createSignal<boolean>(false);
   const [currentPage, setCurrentPage] = createSignal<number>(1);
   const [hasMorePages, setHasMorePages] = createSignal<boolean>(true);
   const pageSize = 50;
-
 
   const loadPages = async (page: number = 1) => {
     const currentNamespace = dataStore.state.currentNamespace;
@@ -93,14 +94,14 @@ export const LeafNodeOverlay: Component = () => {
         {/* Current Node Info */}
 
         <div class="mb-3">
-          <h3 class="text-lg font-bold mb-1">{dataStore.state.leafNode?.label ?? "[missing cluster label]"} </h3>
+          <h3 class="text-lg font-bold mb-1">{dataStore.state.leafNode?.label ?? t("leafNodeOverlay.missingLabel")} </h3>
           <div id="leaf-node-deferred-load">
-            <p class="text-sm font-bold mb-2">🌐 View on Wikipedia</p>
+            <p class="text-sm font-bold mb-2">🌐 {t("leafNodeOverlay.viewOnWikipedia")}</p>
             <div class="h-64 max-h-96 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-500 scrollbar-track-gray-300 hover:scrollbar-thumb-gray-600">
               <Show when={isLoading()}>
                 <div class="flex flex-col items-center justify-center h-full">
                   <div class="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                  <p class="text-white text-med font-medium">Loading page links...</p>
+                  <p class="text-white text-med font-medium">{t("leafNodeOverlay.loading")}</p>
                 </div>
               </Show>
               <Show when={!isLoading() && pages().length > 0}>
@@ -115,7 +116,7 @@ export const LeafNodeOverlay: Component = () => {
                 </For>
               </Show>
               <Show when={!isLoading() && pages().length === 0}>
-                <p class="text-sm text-gray-400">No pages found</p>
+                <p class="text-sm text-gray-400">{t("leafNodeOverlay.noPages")}</p>
               </Show>
             </div>
           </div>
@@ -127,25 +128,28 @@ export const LeafNodeOverlay: Component = () => {
               disabled={currentPage() <= 1}
               class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm disabled:bg-gray-700 disabled:cursor-not-allowed"
             >
-              Previous
+              {t("leafNodeOverlay.previous")}
             </Button.Root>
             <Button.Root
               onClick={goToNextPage}
               disabled={!hasMorePages()}
               class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm disabled:bg-gray-700 disabled:cursor-not-allowed"
             >
-              Next
+              {t("leafNodeOverlay.next")}
             </Button.Root>
           </div>
           <Button.Root
             onClick={() => { dataStore.setState('leafNodeInfoVisible', false); }}
             class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
           >
-            Close
+            {t("leafNodeOverlay.close")}
           </Button.Root>
         </div>
         <div class="text-sm text-gray-300 mt-2">
-          Page {currentPage()} of {dataStore.state.leafNode?.size ? Math.ceil(dataStore.state.leafNode.size / pageSize) : 1}
+          {t("leafNodeOverlay.pageOf", {
+            currentPage: currentPage(),
+            totalPages: dataStore.state.leafNode?.size ? Math.ceil(dataStore.state.leafNode.size / pageSize) : 1
+          })}
         </div>
 
       </div>

@@ -2,12 +2,15 @@ import { Component, Show } from "solid-js";
 import { dataStore } from '../stores/dataStore';
 import { ZoomControl } from './ZoomControl';
 import { Button } from "@kobalte/core";
+import { useI18n } from "../i18n";
 
 /**
  * Navigation Controls Component
  * Provides UI controls for navigating the node hierarchy
  */
 export const NavigationControls: Component = () => {
+  const { t } = useI18n();
+
   return (
     <Show when={dataStore.state.currentView === 'node_view' && dataStore.state.currentNode}>
       <div class="fixed top-4 right-4 z-50 flex flex-col gap-2">
@@ -25,9 +28,9 @@ export const NavigationControls: Component = () => {
               ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
               : 'bg-gray-400 cursor-not-allowed'
           }`}
-          title={dataStore.state.currentNode?.parent_id ? 'Go to parent node' : 'No parent node'}
+          title={dataStore.state.currentNode?.parent_id ? t("navigationControls.parentTooltip") : t("navigationControls.noParentTooltip")}
         >
-          ← Parent
+          ← {t("navigationControls.parent")}
         </Button.Root>
 
         {/* Home Button */}
@@ -36,9 +39,9 @@ export const NavigationControls: Component = () => {
             dataStore.navigateToRoot();
           }}
           class="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-medium transition-all duration-200"
-          title="Return to root node"
+          title={t("navigationControls.homeTooltip")}
         >
-          🏠 Home
+          🏠 {t("navigationControls.home")}
         </Button.Root>
 
 
@@ -52,9 +55,9 @@ export const NavigationControls: Component = () => {
               ? 'bg-teal-600 hover:bg-teal-700'
               : 'bg-gray-600 hover:bg-gray-700'
           }`}
-          title={dataStore.state.showBillboards ? 'Hide billboard labels' : 'Show billboard labels'}
+          title={dataStore.state.showBillboards ? t("navigationControls.labelsTooltip.hide") : t("navigationControls.labelsTooltip.show")}
         >
-          {dataStore.state.showBillboards ? '🏷️ Hide Labels' : '🏷️ Show Labels'}
+          🏷️ {dataStore.state.showBillboards ? t("navigationControls.hideLabels") : t("navigationControls.showLabels")}
         </Button.Root>
 
         {/* Back to Namespace Selection */}
@@ -63,9 +66,9 @@ export const NavigationControls: Component = () => {
             dataStore.navigateToNamespaceSelection();
           }}
           class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-medium transition-all duration-200"
-          title="Back to wiki selection"
+          title={t("navigationControls.chooseWikiTooltip")}
         >
-          🔙 Choose a wiki
+          🔙 {t("navigationControls.chooseWiki")}
         </Button.Root>
 
         {/* Toggle bounding box visibility */}
@@ -78,9 +81,9 @@ export const NavigationControls: Component = () => {
               ? 'bg-teal-600 hover:bg-teal-700'
               : 'bg-gray-600 hover:bg-gray-700'
           }`}
-          title={dataStore.state.showBoundingBox ? 'Hide bounding box' : 'Show bounding box'}
+          title={dataStore.state.showBoundingBox ? t("navigationControls.boundingBoxTooltip.hide") : t("navigationControls.boundingBoxTooltip.show")}
         >
-          {dataStore.state.showBoundingBox ? '📦 Hide Bounding Box' : '📦 Show  Bounding Box'}
+          📦 {dataStore.state.showBoundingBox ? t("navigationControls.hideBoundingBox") : t("navigationControls.showBoundingBox")}
         </Button.Root>
 
       </div>
