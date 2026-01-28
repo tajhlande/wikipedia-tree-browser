@@ -108,6 +108,7 @@ class DatabaseService(ClusterService):
         logger.debug("Closing SQL onnections")
         for db_name in _sqlconns:
             _sqlconns[db_name].close()
+        _sqlconns.clear()
 
     # ====================================================================================================
     # Page-related methods
@@ -430,8 +431,8 @@ class DatabaseService(ClusterService):
         """Get list of available namespaces by checking for database files"""
         namespaces = []
 
-        # Check for database files in the current directory
-        db_files = list(Path("../../data").glob("*_slim.db"))
+        # Check for database files in the configured data directory
+        db_files = list(Path(self.db_directory).glob("*_slim.db"))
         for db_file in db_files:
             # Extract namespace from filename (e.g., "enwiki_namespace_0_slim.db" -> "enwiki_namespace_0")
             stem = db_file.stem

@@ -57,7 +57,9 @@ app.config.timestamp_*.js
 .settings/
 
 # Temp
-gitignore
+**/.coverage
+**/htmlcov/
+**/.coverage.*
 
 # System Files
 .DS_Store

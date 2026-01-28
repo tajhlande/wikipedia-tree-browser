@@ -23,6 +23,7 @@ max-line-length = 120
 dev = [
     "black>=25.11.0",
     "flake8-pyproject>=1.2.3",
+    "pytest-cov>=7.0.0",
     "ruff>=0.14.5",
     "vulture>=2.14",
 ]
