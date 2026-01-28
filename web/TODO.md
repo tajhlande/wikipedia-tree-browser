@@ -2,14 +2,14 @@
 
 ## Bugs
 
-* Parent button is placing departed nodes too close to their parent
+* Parent button is placing departed nodes too close to their parent (maybe not a bug anymore)
 
 ## Usability improvements
 
-* Reorganize node info boxes
-* Tune the LOD for billboards
-* Mobile layout fixes (controls and info boxes)
 * Add descriptive text to main page
+* Reorganize node info boxes
+* Mobile layout fixes (controls and info boxes)
+* Tune the LOD for billboards
 * Search across all nodes to cross-navigate tree
 
 ## Technical improvements
