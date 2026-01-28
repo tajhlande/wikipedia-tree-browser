@@ -29,6 +29,8 @@ export const BillboardInfoOverlay: Component = () => {
         // console.log(`[UI] BillboardInfoOverlay: Checking hovered node: ${currentHoveredNode ? currentHoveredNode.label : 'null'}`);
         if (currentHoveredNode) {
           setHoveredNode(currentHoveredNode);
+        } else {
+          setHoveredNode(null);
         }
       };
 
