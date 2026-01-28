@@ -29,19 +29,33 @@ const dictCache = new Map<string, Record<string, string>>();
 
 /**
  * Load dictionary for a specific locale
+ * Uses the pre-loaded dictionaryModules from import.meta.glob
  */
-async function loadDictionary(locale: Locale): Promise<any> {
+function loadDictionary(locale: Locale): i18n.BaseRecordDict {
   console.debug(`[i18n] Loading dictionary for locale: ${locale}`);
 
-  let dict: i18n.BaseRecordDict = flatEnDict; // default
-  try {
-    const module = await import(/* @vite-ignore */ `./dictionaries/${locale}`);
-    dict = i18n.flatten(module.dict);
-    console.log(`[i18n] Successfully loaded dictionary for locale: ${locale}`);
-  } catch (error) {
-    console.error(`[i18n] Failed to load dictionary for locale ${locale}:`, error);
-    // Keep current dictionary if loading fails
+  // Check if already cached
+  if (dictCache.has(locale)) {
+    console.debug(`[i18n] Dictionary for locale ${locale} already cached`);
+    return dictCache.get(locale)!;
   }
+
+  let dict: i18n.BaseRecordDict = flatEnDict; // default to English
+
+  // Find the dictionary module from the pre-loaded modules
+  const dictModule = Object.entries(dictionaryModules).find(
+    ([path, module]: [string, any]) => path.includes(`/dictionaries/${locale}.ts`)
+  );
+
+  if (dictModule) {
+    const [, module] = dictModule;
+    dict = i18n.flatten(module.dict);
+    dictCache.set(locale, dict);
+    console.log(`[i18n] Successfully loaded dictionary for locale: ${locale}`);
+  } else {
+    console.error(`[i18n] Dictionary not found for locale: ${locale}, falling back to English`);
+  }
+
   return dict;
 }
 
@@ -68,10 +82,9 @@ export function I18nProvider(props: any) {
       return;
     }
 
-    loadDictionary(l).then(d => {
-      dictCache.set(l, d);
-      setDict(d);
-    });
+    const d = loadDictionary(l);
+    dictCache.set(l, d);
+    setDict(d);
   });
 
 
