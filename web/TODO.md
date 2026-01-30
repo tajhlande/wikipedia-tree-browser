@@ -6,7 +6,6 @@
 
 ## Usability improvements
 
-* Add descriptive text to main page
 * Reorganize node info boxes
 * Mobile layout fixes (controls and info boxes)
 * Tune the LOD for billboards

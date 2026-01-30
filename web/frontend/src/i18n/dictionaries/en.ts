@@ -63,7 +63,6 @@ export const dict = {
     noPages: "No pages found",
     previous: "Previous",
     next: "Next",
-    close: "Close",
     pageOf: "Page {{currentPage}} of {{totalPages}}"
   },
 
@@ -99,6 +98,37 @@ export const dict = {
     leafNode: "Leaf Node",
     clusterNode: "Cluster Node",
     parentId: "Parent ID"
+  },
+
+  appHeader: {
+    title: "Wikipedia Tree Browser",
+    whatsThis: "What's this application?"
+  },
+
+  appInfoOverlay: {
+    title: "About Wiki Tree Browser",
+    description: [
+      "Visualize the discovered hierarchical structure of Wikipedia articles as an interactive 3D tree.",
+      "Each node represents a cluster of related articles, organized by topic similarity",
+      "and semantic relationships."
+    ].join(" "),
+    process: [
+      "This structure was discovered by embedding article titles and abstracts into a vector space",
+      "using the jina-embeddings-v4-text-matching embedding model, reducing the dimensionality",
+      "of those vectors using principal component analysis, then recursively clustering the",
+      "reduced vectors using k-means. The topic labels were determined by feeding the page titles",
+      "for each of the leaf nodes in the cluster tree into the gpt-oss-20b LLM model",
+      "in a two-pass process and asking for the most appropriate descriptive label.",
+      "This process has plenty of bias to produce a structure that is reasonably navigable, and so",
+      "it won't necessarily produce categories like those present on-wiki, but it is interesting",
+      "nonetheless.",
+    ].join(" "),
+    infoEntries: {
+      creator: "This project was created by",
+      codeRepo: "Code for this project is hosted at",
+      license: "This project is open source, licensed under ",
+    },
+    specialThanks: "I am grateful to Wikimedia Enterprise for granting access to the source content."
   },
 
   common: {

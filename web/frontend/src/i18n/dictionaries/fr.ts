@@ -65,7 +65,6 @@ export const dict: Dict = {
     noPages: "Aucune page trouvée",
     previous: "Précédent",
     next: "Suivant",
-    close: "Fermer",
     pageOf: "Page {{currentPage}} sur {{totalPages}}"
   },
 
@@ -101,6 +100,37 @@ export const dict: Dict = {
     leafNode: "Nœud feuille",
     clusterNode: "Nœud cluster",
     parentId: "ID parent"
+  },
+
+  appHeader: {
+    title: "Navigateur d'arborescence Wikipedia",
+    whatsThis: "Qu'est-ce que cette application ?"
+  },
+
+   appInfoOverlay: {
+    title: "À propos de Wiki Tree Browser",
+    description: [
+      "Visualisez la structure hiérarchique des articles de Wikipédia sous forme d'arbre 3D interactif.",
+      "Chaque nœud représente un groupe d'articles apparentés, organisés par similarité thématique et relations sémantiques.",
+    ].join(" "),
+    process: [
+      "Cette structure a été découverte en intégrant les titres et résumés des articles dans un espace",
+      "vectoriel à l'aide du modèle d'intégration jina-embeddings-v4-text-matching, en réduisant",
+      "la dimensionnalité de ces vecteurs par analyse en composantes principales, puis en regroupant",
+      "récursivement les vecteurs réduits par l'algorithme des k-moyennes. Les étiquettes thématiques",
+      "ont été déterminées en fournissant les titres des pages de chaque nœud terminal de l'arbre de",
+      "regroupement au modèle LLM gpt-oss-20b, selon un processus en deux passes, afin de sélectionner",
+      "l'étiquette descriptive la plus appropriée.",
+      "Ce processus introduit un certain biais pour produire une structure relativement navigable;",
+      "il ne produira donc pas nécessairement des catégories identiques à celles présentes sur Wikipédia,",
+      "mais il n'en demeure pas moins intéressant."
+    ].join(" "),
+    infoEntries: {
+      creator: "Ce projet a été créé par",
+      codeRepo: "Le code de ce projet est hébergé à l'adresse suivante",
+      license: "Ce projet est open source et distribué sous licence",
+    },
+    specialThanks: "Je remercie Wikimedia Enterprise de m'avoir accordé l'accès au contenu source."
   },
 
   common: {

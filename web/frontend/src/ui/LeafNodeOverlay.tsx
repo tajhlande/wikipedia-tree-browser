@@ -142,7 +142,7 @@ export const LeafNodeOverlay: Component = () => {
             onClick={() => { dataStore.setState('leafNodeInfoVisible', false); }}
             class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm"
           >
-            {t("leafNodeOverlay.close")}
+            {t("common.close")}
           </Button.Root>
         </div>
         <div class="text-sm text-gray-300 mt-2">

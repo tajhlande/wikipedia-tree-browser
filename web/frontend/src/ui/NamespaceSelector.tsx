@@ -114,10 +114,10 @@ export const NamespaceSelector = () => {
   });
 
   return (
-    <div class="namespace-selector fixed inset-0 bg-gray-900/90 z-50 p-6 overflow-y-auto">
+    <div class="namespace-selector fixed inset-0 bg-gray-900/90 z-50 p-6 overflow-y-auto pt-24">
       <div class="max-w-6xl mx-auto">
         {/* Header */}
-        <div class="flex justify-between items-center mb-6 ml-16">
+        <div class="flex justify-between items-center mb-6 ml-2">
           <div class="text-white text-sm">
             {t("namespaceSelector.subtitle")}
           </div>

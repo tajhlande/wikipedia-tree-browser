@@ -65,7 +65,6 @@ export const dict: Dict = {
     noPages: "Keine Seiten gefunden",
     previous: "Zurück",
     next: "Weiter",
-    close: "Schließen",
     pageOf: "Seite {{currentPage}} von {{totalPages}}"
   },
 
@@ -101,6 +100,38 @@ export const dict: Dict = {
     leafNode: "Blattknoten",
     clusterNode: "Clusterknoten",
     parentId: "Übergeordnete ID"
+  },
+
+  appHeader: {
+    title: "Wikipedia-Baum-Browser",
+    whatsThis: "Was ist diese Anwendung?"
+  },
+
+  appInfoOverlay: {
+    title: "Über den WikiTree-Browser",
+    description: [
+      "Visualisieren Sie die ermittelte hierarchische Struktur der Wikipedia-Artikel als interaktiven",
+      "3D-Baum. Jeder Knoten repräsentiert eine Gruppe verwandter Artikel, geordnet nach thematischer",
+      "Ähnlichkeit und semantischen Beziehungen."
+    ].join(" "),
+    process: [
+      "Diese Struktur wurde entdeckt, indem Artikeltitel und Abstracts mithilfe des",
+      "jina-embeddings-v4-text-matching-Einbettungsmodells in einen Vektorraum eingebettet,",
+      "die Dimensionalität dieser Vektoren mittels Hauptkomponentenanalyse reduziert und",
+      "die reduzierten Vektoren anschließend rekursiv mit k-Means geclustert wurden.",
+      "Die Themenbezeichnungen wurden ermittelt, indem die Seitentitel jedes Blattknotens",
+      "im Clusterbaum in einem zweistufigen Prozess in das gpt-oss-20b-LLM-Modell eingespeist",
+      "und die jeweils passendste beschreibende Bezeichnung ausgewählt wurde.",
+      "Dieses Verfahren ist zwar bewusst so gestaltet, dass es eine einigermaßen navigierbare",
+      "Struktur erzeugt, und führt daher nicht unbedingt zu Kategorien wie denen in Wikis.",
+      "Dennoch ist es interessant.",
+    ].join(" "),
+    infoEntries: {
+      creator: "Dieses Projekt wurde erstellt von",
+      codeRepo: "Der Code für dieses Projekt wird gehostet unter",
+      license: "Dieses Projekt ist Open Source und unter folgender Lizenz lizenziert",
+    },
+    specialThanks: "Ich danke Wikimedia Enterprise für die Gewährung des Zugangs zum Quellinhalt.",
   },
 
   common: {

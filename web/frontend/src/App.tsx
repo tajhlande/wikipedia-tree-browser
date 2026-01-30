@@ -1,5 +1,5 @@
 import type { Component } from 'solid-js';
-import { onMount, Show } from "solid-js";
+import { onMount, Show, createSignal } from "solid-js";
 import { initScene } from "./babylon/scene";
 import NamespaceSelector from "./ui/NamespaceSelector";
 import { NavigationControls } from "./ui/NavigationControls";
@@ -10,11 +10,14 @@ import { ErrorOverlay } from "./ui/ErrorOverlay";
 import { PerformanceMonitor } from "./ui/PerformanceMonitor";
 import { LeafNodeOverlay } from "./ui/LeafNodeOverlay";
 import { WikiTitleOverlay } from "./ui/WikiTitleOverlay";
-import { LocaleSelector } from "./ui/LocaleSelector";
+import { AppHeader } from "./ui/AppHeader";
+import { AppInfoOverlay } from "./ui/AppInfoOverlay";
 import { dataStore } from './stores/dataStore';
 import { I18nProvider } from "./i18n";
 
 const App: Component = () => {
+  const [showAppInfo, setShowAppInfo] = createSignal(false);
+
   onMount(() => {
     initScene("scene");
   });
@@ -25,10 +28,11 @@ const App: Component = () => {
         {/* Babylon.js canvas - always present */}
         <canvas id="scene" class="w-full h-full" />
 
-        {/* Language Selector  */}
-        <div class="fixed top-4 left-4 z-60">
-          <LocaleSelector />
-        </div>
+        {/* App Header - contains title card, locale selector, and "What's this?" button */}
+        <AppHeader onWhatsThisClick={() => setShowAppInfo(true)} />
+
+        {/* App Info Overlay - shown when "What's this?" button is clicked */}
+        <AppInfoOverlay visible={showAppInfo()} onClose={() => setShowAppInfo(false)} />
 
         {/* Conditional rendering based on current view */}
         <Show when={dataStore.state.currentView === 'namespace_selection'}>
