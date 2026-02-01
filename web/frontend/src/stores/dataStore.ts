@@ -41,7 +41,7 @@ export const createDataStore = () => {
       console.warn(`[DATA] Node ${backendNode.node_id} has null centroid_3d`);
     }
 
-    return {
+    const mappedNode = {
       id: backendNode.node_id || 0,
       namespace: backendNode.namespace || namespace,
       label: backendNode.final_label || backendNode.first_label || `Node ${backendNode.node_id}`,
@@ -54,6 +54,16 @@ export const createDataStore = () => {
       created_at: new Date().toISOString(), // Use current time as fallback
       updated_at: new Date().toISOString()  // Use current time as fallback
     };
+
+    // console.log(`[DATA][MAP] Mapping backend node to frontend:`, {
+    //   backendNodeId: backendNode.node_id,
+    //   mappedNodeId: mappedNode.id,
+    //   backendParentId: backendNode.parent_id,
+    //   mappedParentId: mappedNode.parent_id,
+    //   isRoot: mappedNode.parent_id === null
+    // });
+
+    return mappedNode;
   };
 
   const [state, setState] = createStore<AppState>({
@@ -179,7 +189,30 @@ export const createDataStore = () => {
    * Cache a node
    */
   const cacheNode = (key: string, node: ClusterNode | ClusterNode[]) => {
-    setNodeCache(key, node);
+    // Log cache writes to root keys specifically
+    if (key.startsWith('root_')) {
+      const isArray = Array.isArray(node);
+      const node_id = isArray ? node.map(n => n.id) : (node as ClusterNode).id;
+      if (isArray) {
+        console.warn(`[ROOT] Attempting to write an array to root key "${key}"`);
+      }
+      if (node_id !== 1) {
+        console.warn(`[ROOT] Attempting to write a node with id != 1 to root key "${key}". node.id = "${node_id}"`);
+      }
+      if (!isArray && node_id !== (node as ClusterNode).id) {
+        console.warn(`[ROOT] node_id ("${node_id}}) somehow not equal to node.id ("${(node as ClusterNode).id}")`);
+      }
+
+      // console.log(`[ROOT] Writing to root key "${key}" (isArray: "${isArray}"):`, {
+      //   isArray: Array.isArray(node),
+      //   value: node,
+      //   id: node_id,
+      //   parentId: Array.isArray(node) ? undefined : node.parent_id,
+      //   depth: Array.isArray(node) ? undefined : node.depth,
+      //   stackTrace: new Error().stack?.split('\n').slice(1, 5)
+      // });
+    }
+    nodeCache[key] = node;
   };
 
   /**
@@ -193,7 +226,7 @@ export const createDataStore = () => {
    * Cache a page
    */
   const cachePage = (key: string, page: Page | Page[]) => {
-    setPageCache(key, page);
+    pageCache[key] = page;
   };
 
   /**
@@ -207,10 +240,18 @@ export const createDataStore = () => {
    * Clear all caches
    */
   const clearAllCaches = () => {
-    console.log('[CLEANUP] Clearing all caches');
-    setNodeCache({});
-    setPageCache({});
+    console.log('[ROOT] Clearing all caches');
+    // console.log('[ROOT] Current nodeCache keys before clearing:', Object.keys(nodeCache));
+    // console.log('[ROOT] Current nodeCache values before clearing:', nodeCache);
+    // Clear nodeCache and pageCache by creating new objects
+    for (const key in Object.keys(nodeCache)) {
+      delete nodeCache[key];
+    }
+    for (const key in Object.keys(pageCache)) {
+      delete pageCache[key];
+    }
     setNamespaceCache([]);
+    // console.log('[ROOT] Caches cleared');
   };
 
   /**
@@ -242,11 +283,32 @@ export const createDataStore = () => {
    */
   const loadRootNode = async (namespace: string, bypassCache: boolean = false): Promise<ClusterNode> => {
     const cacheKey = `root_${namespace}`;
-    const cachedNode = getCachedNode(cacheKey);
+    let cachedNode = getCachedNode(cacheKey);
+
+    // console.log(`[ROOT] loadRootNode called for namespace "${namespace}", bypassCache=${bypassCache}`);
+    // console.log(`[ROOT] Cache key: "${cacheKey}"`);
+    // console.log(`[ROOT] Cached value found:`, {
+    //   exists: cachedNode !== undefined,
+    //   isArray: Array.isArray(cachedNode),
+    //   value: cachedNode,
+    //   id: Array.isArray(cachedNode) ? cachedNode.map(n => n.id) : cachedNode?.id
+    // });
 
     if (cachedNode && !bypassCache) {
-      console.log(`[CACHE] Returning cached root node for namespace: ${namespace}`);
-      return cachedNode as ClusterNode;
+      // Validate cached node is actually a root node
+      const node = cachedNode as ClusterNode;
+      if (node.parent_id !== null && node.parent_id !== undefined) {
+        console.error(`[ROOT] ERROR: Cached node ${node.id} has parent ${node.parent_id} - not a root node!`);
+        console.error(`[ROOT] Bypassing cache and fetching from API`);
+        // Don't return the invalid cached node - proceed to fetch from API
+      } else if (node.id !== 1) {
+        console.error(`[ROOT] ERROR: Cached node has ID ${node.id} but root node should have ID 1`);
+        console.error(`[ROOT] Bypassing cache and fetching from API`);
+        // Don't return the invalid cached node - proceed to fetch from API
+      } else {
+        // console.log(`[ROOT] Returning valid cached root node ${node.id}`);
+        return node;
+      }
     }
 
     setLoading(true);
@@ -255,12 +317,20 @@ export const createDataStore = () => {
     try {
       const result = await apiClient.getRootNode(namespace);
 
+      // console.log(`[ROOT] API response for root node of namespace ${namespace}:`, result.data);
+
       if (!result.success || !result.data) {
         throw new Error(result.error || 'Failed to load root node');
       }
 
       // Map backend response to frontend model
       const mappedNode = _mapBackendNodeToFrontend(result.data, namespace);
+
+      // console.log(`[ROOT] Mapped node:`, {
+      //   id: mappedNode.id,
+      //   parentId: mappedNode.parent_id,
+      //   label: mappedNode.label
+      // });
 
       // Validate mapped node has a valid ID
       if (!mappedNode.id) {
@@ -273,8 +343,12 @@ export const createDataStore = () => {
         console.error(`[DATA] ERROR: Attempting to cache non-root node ${mappedNode.id} (parent_id: ${mappedNode.parent_id}) as root for namespace ${namespace}`);
         throw new Error(`Invalid root node: node ${mappedNode.id} has parent ${mappedNode.parent_id}`);
       }
+      if (mappedNode.id !== 1) {
+        console.error(`[DATA] ERROR: Attempting to cache non-root node ${mappedNode.id} as root for namespace ${namespace}`);
+        throw new Error(`Invalid root node: node ${mappedNode.id}`);
+      }
 
-      console.log(`[DATA] Loaded and mapped root node ${mappedNode.id} for namespace ${namespace} (bypass cache: ${bypassCache})`);
+      console.log(`[ROOT] Loaded and mapped root node ${mappedNode.id} for namespace ${namespace} (bypass cache: ${bypassCache})`);
 
       cacheNode(cacheKey, mappedNode);
       return mappedNode;
@@ -309,6 +383,7 @@ export const createDataStore = () => {
     children: ClusterNode[];
     parent: ClusterNode | null;
   }> => {
+    // console.log(`[DATA][NODEVIEW] loadNodeView called for namespace ${namespace}, nodeId ${nodeId}`);
     setLoading(true);
     clearError();
 
@@ -362,6 +437,7 @@ export const createDataStore = () => {
    * Navigate to a node
    */
   const navigateToNode = async (namespace: string, nodeId: number): Promise<void> => {
+    // console.log(`[DATA][NAVIGATE] navigateToNode called for namespace ${namespace}, nodeId ${nodeId}`);
     try {
       let result;
       result = await loadNodeView(namespace, nodeId);
@@ -405,6 +481,8 @@ export const createDataStore = () => {
   const navigateToRoot = async (): Promise<void> => {
     const currentNamespace = state.currentNamespace;
 
+    // console.log(`[ROOT][NAVIGATE] navigateToRoot called, namespace: ${currentNamespace}`);
+
     if (!currentNamespace) {
       setError('No namespace selected');
       return;
@@ -414,6 +492,7 @@ export const createDataStore = () => {
       // Always fetch fresh root node from API when navigating to root
       // This ensures we get the actual root (parent_id = null) and not a stale cache
       const rootNode = await loadRootNode(currentNamespace, true);
+      // console.log(`[ROOT][NAVIGATE] navigateToRoot got root node id: ${rootNode.id}`);
       // Use navigateToNode to properly load the full view (with children)
       await navigateToNode(currentNamespace, rootNode.id);
     } catch (error) {
@@ -426,7 +505,9 @@ export const createDataStore = () => {
    * Navigate to namespace selection
    */
   const navigateToNamespaceSelection = (): void => {
-    console.log("[DATA] Navigating to Namespace Selection page");
+    console.log("[ROOT] Navigating to Namespace Selection page");
+    // console.log("[ROOT] Current namespace before clearing:", state.currentNamespace);
+    // console.log("[ROOT] Current node before clearing:", state.currentNode?.id);
     setCurrentView('namespace_selection');
     setCurrentNamespace(null);
     setCurrentNode(null);

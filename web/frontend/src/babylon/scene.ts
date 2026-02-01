@@ -240,7 +240,7 @@ function convertToClusterData(nodeViewData: {
 /**
  * Compute which clusters should be visible based on current node and ancestors
  */
-async function computeTargetClusters(namespace: string, nodeId: number, includeAncestors: boolean): Promise<Array<number>> {
+async function computeTargetClusters(namespace: string, nodeId: number): Promise<Array<number>> {
   const targetClusters = new Array<number>();
 
   // Always include current node cluster
@@ -356,14 +356,14 @@ function updateBoundingBoxVisibility(showBoundingBox: boolean) {
 /**
  * Synchronize scene state: ensure only target clusters are visible
  */
-async function syncSceneToTargetState(namespace: string, nodeId: number, includeAncestors: boolean) {
+async function syncSceneToTargetState(namespace: string, nodeId: number) {
   if (!clusterManager || !nodeManager) {
     console.error("[SCENE] Cannot sync scene - managers not initialized");
     return;
   }
 
   // Step 1: Compute which clusters should be visible
-  const targetClusters: Array<number> = await computeTargetClusters(namespace, nodeId, includeAncestors);
+  const targetClusters: Array<number> = await computeTargetClusters(namespace, nodeId);
   console.log(`[SCENE] Sync: Target clusters for node ${nodeId}:`, targetClusters);
 
   // Step 2: Get currently visible clusters
@@ -481,7 +481,7 @@ async function loadNodeView(namespace: string, nodeId: number) {
     console.log(`[SCENE] Loading node view for node ${nodeId} in namespace ${namespace}`);
 
     // Synchronize scene to target state
-    await syncSceneToTargetState(namespace, nodeId, false);
+    await syncSceneToTargetState(namespace, nodeId);
 
     // Update current node ID
     currentNodeId = nodeId;
@@ -821,6 +821,15 @@ export function cleanupScene() {
   // Reset tracking variables
   currentNodeId = null;
   rootNodeId = null;
+
+  // DEBUG iterate scene visible meshes
+  console.debug('[SCENE][CLEANUP] Listing remaining meshes...');
+  let meshCount = 0;
+  scene?.meshes.forEach( (mesh) => {
+    console.debug('[SCENE][CLEANUP]     Mesh: ', mesh.name);
+    meshCount++;
+  });
+  console.debug('[SCENE][CLEANUP] Found ', meshCount, ' remaining meshes');
 
   console.log("[SCENE] Scene cleanup completed");
 }

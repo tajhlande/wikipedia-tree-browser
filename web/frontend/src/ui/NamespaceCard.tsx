@@ -11,10 +11,17 @@ export const NamespaceCard: Component<{
   onSelect: (namespace: Namespace) => void;
 }> = (props) => {
   const { t } = useI18n();
+
+  const handleClick = () => {
+    // console.log(`[ROOT] Clicked namespace card: ${props.namespace.name}`);
+    // console.log(`[ROOT] onSelect function exists: ${typeof props.onSelect === 'function'}`);
+    props.onSelect(props.namespace);
+  };
+
   return (
     <div
       class="namespace-card bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg p-4 cursor-pointer transition-all duration-200"
-      onClick={() => props.onSelect(props.namespace)}
+      onClick={handleClick}
     >
       <div class="flex items-start justify-between mb-2">
         <div class="flex-1">

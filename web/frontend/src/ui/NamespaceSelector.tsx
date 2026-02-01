@@ -69,7 +69,7 @@ export const NamespaceSelector = () => {
           throw new Error('Root node ID is undefined or invalid');
         }
 
-        console.log(`[NAV] Navigating to root node ${rootNodeResult.id} for namespace ${namespace.name}`);
+        console.log(`[ROOT] Navigating to root node ${rootNodeResult.id} for namespace ${namespace.name}`);
 
         // Set the root node as current node and switch to node view
         dataStore.setCurrentNode(rootNodeResult);
@@ -77,8 +77,12 @@ export const NamespaceSelector = () => {
         dataStore.setCurrentView('node_view');
       }
     } catch (error) {
-      console.error('Failed to navigate to namespace:', error);
+      console.error(`[ROOT] Error in handleNamespaceSelect:`, error);
+      console.error(`[ROOT] Error details:`, error instanceof Error ? error.message : 'Unknown error');
+      console.error(`[ROOT] Error stack:`, error instanceof Error ? error.stack : 'No stack');
       setError(`Failed to load namespace: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      console.log(`[ROOT] Finally block - resetting loading state`);
       dataStore.setLoading(false);
     }
   };
