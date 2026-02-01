@@ -48,7 +48,12 @@ def _get_sql_conn_for_file(db_file: str = "chunk_log.db") -> sqlite3.Connection:
         sqlconn.execute("PRAGMA journal_mode=WAL;")
         sqlconn.execute("PRAGMA synchronous=NORMAL;")
         sqlconn.execute("PRAGMA temp_store = MEMORY;")
-        sqlconn.execute("PRAGMA cache_size = -20000;")  # ~20MB cache (adjust as needed)
+        sqlconn.execute("PRAGMA cache_size = -500000;")  # ~20MB cache (adjust as needed)
+        sqlconn.execute("PRAGMA mmap_size = 8000000000;")  # ~8GB or larger than db
+        sqlconn.execute("PRAGMA temp_store = MEMORY;")  # avoids disk I/O for: Sorts, GROUP BY, temp indices
+        sqlconn.execute("PRAGMA locking_mode = EXCLUSIVE;")  # only use if only one process accesses the db
+        sqlconn.execute("PRAGMA threads = 4;")  # use multiple threads
+        sqlconn.execute("PRAGMA query_only = ON;")  # read only access
     except sqlite3.Error:
         pass
 
