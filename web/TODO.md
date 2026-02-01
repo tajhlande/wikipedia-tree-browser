@@ -2,6 +2,7 @@
 
 ## Bugs
 
+* Leaving a graph to go back to the namespace selector and then returning to the same wiki graph shows structural bugs
 * Parent button is placing departed nodes too close to their parent (maybe not a bug anymore)
 
 ## Usability improvements
