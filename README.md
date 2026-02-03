@@ -1,6 +1,6 @@
 # Wikipedia Embeddings and Visualization
 
-This project consists of two separate Python applications that work together to process and visualize Wikipedia embeddings:
+This project consists of two separate applications that work together to process and visualize Wikipedia embeddings:
 
 1. **Data Preparation** (`dataprep/`) - Downloads, processes, and analyzes Wikipedia data
 2. **Web Application** (`web/`) - Provides 3D visualization of the processed embeddings
@@ -22,15 +22,15 @@ wp-embeddings/
 │   ├── classes.py     # Data models
 │   ├── database.py    # Database operations
 │   ├── download_chunks.py    # Download Wikipedia chunks
-│   ├── index_pages.py        # Process page content
-│   ├── transform.py          # ML transformations
+│   ├── index_pages.py        # Process page content through embedding functions
+│   ├── transform.py          # ML and statistical data transformations
 │   └── pyproject.toml        # Dependencies for data prep
 ├── web/               # Web application for 3D visualization
 │   ├── backend/       # FastAPI backend
-│   ├── frontend/      # BabylonJS frontend
-│   ├── test_*.py      # Web application tests
-│   └── pyproject.toml # Dependencies for web app
-├── data/              # Shared data directory (created during setup)
+│   │   └── pyproject.toml    # Dependencies for backend API
+│   └── frontend/      # SolidJS + Kobalte + BabylonJS frontend
+│       └── package.json      # Dependencies for frontend web app
+├── data/              # Shared data directory (you need to create this)
 │   ├── downloaded/    # Raw downloaded chunks
 │   ├── extracted/     # Extracted page data
 │   └── *.db          # SQLite databases
@@ -39,11 +39,12 @@ wp-embeddings/
 
 ## Data Preparation Application
 
-The data preparation application handles downloading, processing, and analyzing Wikipedia data. It can be invoked interactively:
+The data preparation application handles downloading, processing, and analyzing Wikipedia data.
+It can be invoked interactively:
 
 ```
 $ cd dataprep
-$ python -m command
+$ uv run python -m command
 Welcome to wp-embeddings command interpreter!
 Type 'help' for available commands or 'quit' to exit.
 
