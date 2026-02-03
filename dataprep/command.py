@@ -155,6 +155,7 @@ class Command(ABC):
         self.name = name
         self.description = description
         self.expected_args = expected_args
+        self.is_cli: bool = False
 
     def get_required_args(self):
         return [arg for arg in self.expected_args if arg.required is True]
@@ -163,7 +164,7 @@ class Command(ABC):
         return [arg for arg in self.expected_args if arg.required is False]
 
     @abstractmethod
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str], is_cli: bool = False) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         """Execute the command with given arguments."""
         pass
 
@@ -281,9 +282,11 @@ class CommandParser:
                     args[key] = True
             else:
                 # Positional argument - treat as value for 'command' argument for help command
-                # or as a positional argument for other commands
+                # or as a positional argument for namespace command
                 if command_name == "help":
                     args["command"] = part
+                elif command_name == "namespace":
+                    args["value"] = part
                 else:
                     # For other commands, we could handle positional arguments here
                     # For now, just ignore or handle as needed
@@ -341,7 +344,11 @@ class CommandDispatcher:
                 raise
         return self.api_client
 
-    def dispatch(self, command_name: str, namespace: str, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def dispatch(self,
+                 command_name: str,
+                 namespace: str,
+                 args: dict[str, Any],
+                 env_vars: dict[str, str]) -> tuple[Result, str]:
         """Dispatch command to appropriate handler."""
         if not self.parser.validate_command(command_name):
             return Result.FAILURE, f"Unknown command: {command_name}"
@@ -1524,6 +1531,55 @@ class ProjectCentroidsCommand(Command):
             return Result.FAILURE, f"{X} Failed to compute centroid 3D vectors: {e}"
 
 
+NAMESPACE_VALUE_ARGUMENT = Argument(name="value", type="string", required=False,
+                                    description="The namespace value to set")
+
+
+class NamespaceCommand(Command):
+    """View or change the current namespace."""
+
+    def __init__(self, interpreter: 'CommandInterpreter'):
+        super().__init__(
+            name="namespace",
+            description="View or change the current namespace",
+            expected_args=[]
+        )
+        self.interpreter = interpreter
+
+    def get_help(self) -> str:
+        """Get help text for the namespace command."""
+        return (
+            f"Command \"{self.name}\": {self.description}\n"
+            f"\nUsage:\n"
+            f"  {self.name}           - Show the current namespace\n"
+            f"  {self.name} <value>   - Set the namespace to the specified value\n"
+            f"\nExamples:\n"
+            f"  > {self.name}\n"
+            f"  ✓ Current namespace: enwiki_namespace_0\n"
+            f"\n  > {self.name} enwiki_namespace_1\n"
+            f"  ✓ Namespace set to: enwiki_namespace_1\n"
+        )
+
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+        try:
+            namespace_value = args.get("value")
+
+            if namespace_value is None:
+                # No argument - just show the current namespace
+                if self.interpreter.global_namespace:
+                    return Result.SUCCESS, f"{CHECK} Current namespace: {self.interpreter.current_namespace}"
+                else:
+                    return Result.SUCCESS, f"{X} No namespace is set"
+            else:
+                # One argument - set the namespace
+                self.interpreter.set_namespace(namespace_value)
+                return Result.SUCCESS, f"{CHECK} Namespace set to: {namespace_value}"
+
+        except Exception as e:
+            logger.exception(f"Failed to handle namespace command: {e}")
+            return Result.FAILURE, f"{X} Failed: {e}"
+
+
 COMMAND_NAME_ARGUMENT = Argument(name="command", type="string", required=False,
                                  description="Get help on the specific named command")
 
@@ -1539,7 +1595,7 @@ class HelpCommand(Command):
         )
         self.parser = parser
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str], is_cli: bool = False) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         command_name = args.get(COMMAND_NAME_ARGUMENT.name)
 
         if command_name:
@@ -1550,7 +1606,7 @@ class HelpCommand(Command):
                 cmd = self.parser.commands[cmd_name]
                 help_text += f"  {cmd_name} - {cmd.description}\n"
 
-            if is_cli:
+            if self.is_cli:
                 help_text += (
                     "\nCommand Line Usage:\n"
                     "  Format:  python -m command --namespace <namespace> <command> [options]\n"
@@ -1589,6 +1645,9 @@ class CommandInterpreter:
 
     def _register_commands(self):
         """Register all commands."""
+        self.parser.register_command(HelpCommand(self.parser))
+        self.parser.register_command(StatusCommand())
+        self.parser.register_command(NamespaceCommand(self))
         self.parser.register_command(RefreshChunkDataCommand())
         self.parser.register_command(DownloadChunksCommand())
         self.parser.register_command(UnpackProcessChunksCommand())
@@ -1597,10 +1656,8 @@ class CommandInterpreter:
         self.parser.register_command(RecursiveClusterCommand())
         self.parser.register_command(ProjectCommand())
         self.parser.register_command(TopicsCommand())
-        self.parser.register_command(StatusCommand())
         self.parser.register_command(ComputeMissingCentroidsCommand())
         self.parser.register_command(ProjectCentroidsCommand())
-        self.parser.register_command(HelpCommand(self.parser))
 
     def run_interactive(self):
         """Run interactive command interpreter."""
@@ -1655,7 +1712,8 @@ class CommandInterpreter:
 
             help_command = self.parser.commands.get("help")
             if help_command:
-                result = help_command.execute(help_args, self.env_values, is_cli=True)
+                help_command.is_cli = True
+                result = help_command.execute(help_args, self.env_values)
                 print(result[1])
                 return result[0]
             else:
