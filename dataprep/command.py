@@ -163,7 +163,7 @@ class Command(ABC):
         return [arg for arg in self.expected_args if arg.required is False]
 
     @abstractmethod
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str], is_cli: bool = False) -> tuple[Result, str]:
         """Execute the command with given arguments."""
         pass
 
@@ -341,13 +341,15 @@ class CommandDispatcher:
                 raise
         return self.api_client
 
-    def dispatch(self, command_name: str, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def dispatch(self, command_name: str, namespace: str, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
         """Dispatch command to appropriate handler."""
         if not self.parser.validate_command(command_name):
             return Result.FAILURE, f"Unknown command: {command_name}"
 
         try:
             command = self.parser.commands[command_name]
+            # Inject global namespace into args
+            args[REQUIRED_NAMESPACE_ARGUMENT.name] = namespace
             command.validate(args)
             return command.execute(args, env_vars)
         except ValueError as e:
@@ -364,7 +366,7 @@ class RefreshChunkDataCommand(Command):
         super().__init__(
             name="refresh",
             description="Refresh chunk data for a namespace",
-            expected_args=[REQUIRED_NAMESPACE_ARGUMENT]
+            expected_args=[]
         )
 
     def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
@@ -415,7 +417,7 @@ class DownloadChunksCommand(Command):
         super().__init__(
             name="download",
             description="Download chunks that haven't been downloaded yet",
-            expected_args=[OPTIONAL_CHUNK_LIMIT_ARGUMENT, REQUIRED_NAMESPACE_ARGUMENT]
+            expected_args=[OPTIONAL_CHUNK_LIMIT_ARGUMENT]
         )
 
     def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
@@ -536,7 +538,7 @@ class UnpackProcessChunksCommand(Command):
         super().__init__(
             name="unpack",
             description="Unpack and process downloaded chunks",
-            expected_args=[REQUIRED_NAMESPACE_ARGUMENT, OPTIONAL_CHUNK_LIMIT_NO_DEFAULT_ARGUMENT]
+            expected_args=[OPTIONAL_CHUNK_LIMIT_NO_DEFAULT_ARGUMENT]
         )
 
     def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
@@ -685,7 +687,6 @@ class EmbedPagesCommand(Command):
             name="embed",
             description="Process remaining pages for embedding computation",
             expected_args=[
-                REQUIRED_NAMESPACE_ARGUMENT,
                 OPTIONAL_CHUNK_NAME_ARGUMENT,
                 OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT
             ]
@@ -891,7 +892,7 @@ class ReduceCommand(Command):
         super().__init__(
             name="reduce",
             description="Reduce dimension of embeddings",
-            expected_args=[REQUIRED_NAMESPACE_ARGUMENT, TARGET_DIMENSIONS_ARGUMENT, BATCH_SIZE_ARGUMENT]
+            expected_args=[TARGET_DIMENSIONS_ARGUMENT, BATCH_SIZE_ARGUMENT]
         )
 
     def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
@@ -969,7 +970,6 @@ class RecursiveClusterCommand(Command):
             name="recursive-cluster",
             description="Run recursive clustering algorithm to build a tree of clusters",
             expected_args=[
-                REQUIRED_NAMESPACE_ARGUMENT,
                 LEAF_TARGET_ARGUMENT,
                 MAX_K_ARGUMENT,
                 MAX_DEPTH_ARGUMENT,
@@ -1026,7 +1026,6 @@ class TopicsCommand(Command):
             name="topics",
             description="Use an LLM to discover topics for clusters according to their page content.",
             expected_args=[
-                REQUIRED_NAMESPACE_ARGUMENT,
                 REQUIRED_MODE_ARGUMENT,
                 OPTIONAL_LIMIT_ARGUMENT,
                 OPTIONAL_BATCH_SIZE_ARGUMENT,
@@ -1293,7 +1292,7 @@ class ProjectCommand(Command):
         super().__init__(
             name="project",
             description="Project reduced vector cluster tree nodes into 3-space.",
-            expected_args=[REQUIRED_NAMESPACE_ARGUMENT, OPTIONAL_CLUSTER_LIMIT_ARGUMENT]
+            expected_args=[OPTIONAL_CLUSTER_LIMIT_ARGUMENT]
         )
 
     def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
@@ -1324,7 +1323,7 @@ class StatusCommand(Command):
         super().__init__(
             name="status",
             description="Show current data status",
-            expected_args=[REQUIRED_NAMESPACE_ARGUMENT]
+            expected_args=[]
         )
 
     def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
@@ -1447,7 +1446,7 @@ class ComputeMissingCentroidsCommand(Command):
         super().__init__(
             name="compute-missing-centroids",
             description="Compute missing centroids for cluster tree nodes that are missing them",
-            expected_args=[REQUIRED_NAMESPACE_ARGUMENT]
+            expected_args=[]
         )
 
     def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
@@ -1489,7 +1488,7 @@ class ProjectCentroidsCommand(Command):
         super().__init__(
             name="project-centroids",
             description="Compute 3D vectors for centroids of cluster tree nodes using PCA",
-            expected_args=[REQUIRED_NAMESPACE_ARGUMENT]
+            expected_args=[]
         )
 
     def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
@@ -1540,7 +1539,7 @@ class HelpCommand(Command):
         )
         self.parser = parser
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(self, args: dict[str, Any], env_vars: dict[str, str], is_cli: bool = False) -> tuple[Result, str]:
         command_name = args.get(COMMAND_NAME_ARGUMENT.name)
 
         if command_name:
@@ -1551,9 +1550,18 @@ class HelpCommand(Command):
                 cmd = self.parser.commands[cmd_name]
                 help_text += f"  {cmd_name} - {cmd.description}\n"
 
-            help_text += (
-                "\nUse 'help <command>' for more information about a specific command."
-            )
+            if is_cli:
+                help_text += (
+                    "\nCommand Line Usage:\n"
+                    "  Format:  python -m command --namespace <namespace> <command> [options]\n"
+                    "  Example: python -m command --namespace enwiki_namespace_0 status\n\n"
+                    "  The --namespace argument is required for all commands except 'help'.\n"
+                    "  Use 'help <command>' for more information about a specific command."
+                )
+            else:
+                help_text += (
+                    "\nUse 'help <command>' for more information about a specific command."
+                )
             return Result.SUCCESS, help_text
 
 
@@ -1568,6 +1576,16 @@ class CommandInterpreter:
         self.dispatcher = CommandDispatcher(self.parser)
         self._register_commands()
         self.env_values = env_values
+        self.global_namespace: str | None = None
+
+    @property
+    def current_namespace(self) -> str:
+        if self.global_namespace is None:
+            raise ValueError("Namespace is not set. Use --namespace to set it.")
+        return self.global_namespace
+
+    def set_namespace(self, namespace: str) -> None:
+        self.global_namespace = namespace
 
     def _register_commands(self):
         """Register all commands."""
@@ -1606,7 +1624,7 @@ class CommandInterpreter:
                 if not command_name:
                     continue
 
-                result = self.dispatcher.dispatch(command_name, args, self.env_values)
+                result = self.dispatcher.dispatch(command_name, self.current_namespace, args, self.env_values)
                 print(result[1])
                 print()
 
@@ -1620,7 +1638,7 @@ class CommandInterpreter:
                 print(f"Error: {e}")
                 logger.error(f"Interactive mode error: {e}")
 
-    def run_command(self, command_args: list[str]) -> Result:
+    def run_command(self, command_args: list[str], namespace: str | None = None) -> Result:
         """Run a single command."""
         if not command_args:
             print("Usage: python command.py <command> [options]")
@@ -1637,7 +1655,7 @@ class CommandInterpreter:
 
             help_command = self.parser.commands.get("help")
             if help_command:
-                result = help_command.execute(help_args, self.env_values)
+                result = help_command.execute(help_args, self.env_values, is_cli=True)
                 print(result[1])
                 return result[0]
             else:
@@ -1652,6 +1670,9 @@ class CommandInterpreter:
         command = self.parser.commands.get(command_name)
         if command:
             for arg in command.get_required_args():
+                # Skip namespace argument - it's now global
+                if arg.name == REQUIRED_NAMESPACE_ARGUMENT.name:
+                    continue
                 if arg.type == "integer":
                     parser.add_argument(
                         f"--{arg.name}", type=int, required=True, help=f"Required argument: {arg.name}"
@@ -1685,23 +1706,54 @@ class CommandInterpreter:
         except SystemExit:
             return Result.FAILURE
 
-        result = self.dispatcher.dispatch(command_name, args, self.env_values)
+        # Use the passed namespace if available, otherwise use current_namespace
+        ns = namespace if namespace is not None else self.current_namespace
+        result = self.dispatcher.dispatch(command_name, ns, args, self.env_values)
         print(result[1])
         return result[0]
 
 
 def main() -> int:
     """Main entry point."""
+    import argparse
+
+    # Parse global arguments (namespace)
+    global_parser = argparse.ArgumentParser(add_help=False)
+    global_parser.add_argument("--namespace", required=False,
+                               help="The wiki namespace (e.g. enwiki_namespace_0)")
+    global_args, remaining_args = global_parser.parse_known_args()
+
     env_values = read_essential_env_variables()
     interpreter = CommandInterpreter(env_values)
 
-    if len(sys.argv) > 1:
-        # Run single command
-        result = interpreter.run_command(sys.argv[1:])
+    if len(remaining_args) >= 1:
+        # Command line mode - namespace is required, except for 'help' command
+        if not global_args.namespace and remaining_args[0] != "help":
+            print("Error: --namespace is required")
+            global_parser.print_help()
+            return Result.FAILURE.value
+        if global_args.namespace:
+            interpreter.set_namespace(global_args.namespace)
+        result = interpreter.run_command(remaining_args, global_args.namespace)
         return result
     else:
-        # Run interactive mode
+        # Interactive mode - prompt for namespace if not provided
         register_command_history_file(env_values[COMMAND_HISTORY_FILENAME_VAR])
+
+        if not global_args.namespace:
+            print("Welcome to wp-embeddings command interpreter!")
+            while True:
+                namespace_input = input("Please enter a namespace (e.g. enwiki_namespace_0): ").strip()
+                if namespace_input:
+                    interpreter.set_namespace(namespace_input)
+                    break
+        else:
+            interpreter.set_namespace(global_args.namespace)
+            print("Welcome to wp-embeddings command interpreter!")
+
+        print(f"Using namespace: {interpreter.current_namespace}")
+        print("Type 'help' for available commands or 'quit' to exit.\n")
+
         interpreter.run_interactive()
         return Result.SUCCESS.value
 

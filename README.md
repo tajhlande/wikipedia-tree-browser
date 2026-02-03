@@ -86,8 +86,8 @@ Available commands are:
 * **status** – Show current data status
 * **help** – Show help information
 
-Most operations require a `--namespace` argument that is expected to be a Wikipedia namespace,
-as they are named by the Wikimedia Enterprise API, for example: `enwiki_namespace_0`.
+All operations require a `--namespace` argument provided before the command name.
+Example: `python -m command --namespace enwiki_namespace_0 <command> [options]`
 
 All the page content, metadata, computed embeddings, and cluster information
 are stored in a Sqlite 3 database named after the namespace,
@@ -130,25 +130,27 @@ source .venv/bin/activate
 python -m command
 ```
 
-and see
+When starting interactive mode, you can provide the namespace via command line,
+or you will be prompted to enter it:
 
-```
-Welcome to wp-embeddings command interpreter!
+**With namespace on command line:**
+```bash
+$ python -m command --namespace enwiki_namespace_0
+Using namespace: enwiki_namespace_0
 Type 'help' for available commands or 'quit' to exit.
 
-> help
-Available commands:
-  refresh - Refresh chunk data for a namespace
-  download - Download chunks that haven't been downloaded yet
-  unpack - Unpack and process downloaded chunks
-  embed - Process remaining pages for embedding computation
-  status - Show current system status
-  help - Show help information
+>
+```
 
-Use 'help <command>' for more information about a specific command.
+**Without namespace (prompted):**
+```bash
+$ python -m command
+Welcome to wp-embeddings command interpreter!
+Please enter a namespace (e.g. enwiki_namespace_0): enwiki_namespace_0
+Using namespace: enwiki_namespace_0
+Type 'help' for available commands or 'quit' to exit.
 
-> quit
-Goodbye!
+>
 ```
 
 ### Web Application Setup
@@ -172,12 +174,11 @@ uv run fastapi dev
 
 The web application will be available at `http://localhost:8000`
 
-For required and optional parameters to a command, precede them with a double-dash,
-whether on the command line or within the command interpreter:
+For required and optional parameters to a command, precede them with a double-dash:
 
 ```bash
 cd dataprep
-python -m command refresh --namespace enwiki_namespace_0
+python -m command --namespace enwiki_namespace_0 refresh
 ```
 
 ### Running Tests
