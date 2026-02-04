@@ -1654,7 +1654,8 @@ class CommandInterpreter:
         self.parser.register_command(EmbedPagesCommand())
         self.parser.register_command(ReduceCommand())
         self.parser.register_command(RecursiveClusterCommand())
-        self.parser.register_command(ProjectCommand())
+        # TODO remove ProjectCommand from the code
+        # self.parser.register_command(ProjectCommand())  # deregistering this command because it is not needed anymore
         self.parser.register_command(TopicsCommand())
         self.parser.register_command(ComputeMissingCentroidsCommand())
         self.parser.register_command(ProjectCentroidsCommand())
