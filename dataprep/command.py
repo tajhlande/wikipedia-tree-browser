@@ -1446,13 +1446,13 @@ class StatusCommand(Command):
             return Result.FAILURE, f"{X} Failed to get status: {e}"
 
 
-class ComputeMissingCentroidsCommand(Command):
-    """Compute missing centroids for cluster tree nodes."""
+class LeafCentroidsCommand(Command):
+    """Compute centroids for leaf cluster tree nodes."""
 
     def __init__(self):
         super().__init__(
-            name="compute-missing-centroids",
-            description="Compute missing centroids for cluster tree nodes that are missing them",
+            name="leaf-centroids",
+            description="Compute centroids for leaf cluster tree nodes",
             expected_args=[]
         )
 
@@ -1462,10 +1462,10 @@ class ComputeMissingCentroidsCommand(Command):
             sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
-            logger.info("Computing missing centroids for namespace: %s", namespace)
+            logger.info("Computing leaf centroids for namespace: %s", namespace)
 
             with ProgressTracker(
-                description="Computing missing centroids",
+                description="Computing leaf centroids",
                 unit="centroids"
             ) as tracker:
                 centroids_computed = compute_missing_centroids(
@@ -1475,17 +1475,17 @@ class ComputeMissingCentroidsCommand(Command):
                 )
 
             if centroids_computed == 0:
-                return Result.SUCCESS, f"{CHECK} No missing centroids found in namespace {namespace}"
+                return Result.SUCCESS, f"{CHECK} No leaf centroids needed in namespace {namespace}"
             else:
                 return (
                     Result.SUCCESS,
-                    f"{CHECK} Computed {centroids_computed} missing centroid{'s' if centroids_computed != 1 else ''} "
+                    f"{CHECK} Computed {centroids_computed} leaf centroid{'s' if centroids_computed != 1 else ''} "
                     f"for namespace {namespace}"
                 )
 
         except Exception as e:
-            logger.exception(f"Failed to compute missing centroids: {e}")
-            return Result.FAILURE, f"{X} Failed to compute missing centroids: {e}"
+            logger.exception(f"Failed to compute leaf centroids: {e}")
+            return Result.FAILURE, f"{X} Failed to compute leaf centroids: {e}"
 
 
 class ProjectCentroidsCommand(Command):
@@ -1618,6 +1618,23 @@ class HelpCommand(Command):
                 help_text += (
                     "\nUse 'help <command>' for more information about a specific command."
                 )
+
+            help_text += (
+                "\n\nData Processing Pipeline:\n"
+                "  Commands should be run in the following order:\n"
+                "    1. refresh           - Fetch chunk metadata from the API\n"
+                "    2. download          - Download chunk archives\n"
+                "    3. unpack            - Extract and parse pages from chunks\n"
+                "    4. embed             - Compute embeddings for pages\n"
+                "    5. reduce            - Reduce embedding dimensions with PCA\n"
+                "    6. recursive-cluster - Build hierarchical cluster tree\n"
+                "    7. leaf-centroids    - Compute centroids for leaf clusters\n"
+                "    8. project-centroids - Project cluster centroids to 3D space\n"
+                "    9. topics            - Assign topics to clusters\n"
+                "\n  Other commands:\n"
+                "    status              - Show current processing status\n"
+                "    namespace           - View or change the current namespace\n"
+            )
             return Result.SUCCESS, help_text
 
 
@@ -1657,7 +1674,7 @@ class CommandInterpreter:
         # TODO remove ProjectCommand from the code
         # self.parser.register_command(ProjectCommand())  # deregistering this command because it is not needed anymore
         self.parser.register_command(TopicsCommand())
-        self.parser.register_command(ComputeMissingCentroidsCommand())
+        self.parser.register_command(LeafCentroidsCommand())
         self.parser.register_command(ProjectCentroidsCommand())
 
     def run_interactive(self):
