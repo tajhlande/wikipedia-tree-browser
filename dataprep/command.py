@@ -1556,8 +1556,8 @@ class NamespaceCommand(Command):
             f"\nExamples:\n"
             f"  > {self.name}\n"
             f"  ✓ Current namespace: enwiki_namespace_0\n"
-            f"\n  > {self.name} enwiki_namespace_1\n"
-            f"  ✓ Namespace set to: enwiki_namespace_1\n"
+            f"\n  > {self.name} dewiki_namespace_0\n"
+            f"  ✓ Namespace set to: dewiki_namespace_0\n"
         )
 
     def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
