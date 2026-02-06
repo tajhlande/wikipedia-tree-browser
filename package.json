@@ -1,0 +1,7 @@
+{
+  "name": "wp-embeddings",
+  "description": "3D visualization of Wikipedia embeddings clusters",
+  "scripts": {
+    "build": "cd web/frontend && npm install && npm run build"
+  }
+}

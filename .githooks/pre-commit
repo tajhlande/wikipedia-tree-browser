@@ -1,0 +1,21 @@
+#!/bin/bash
+# Pre-commit hook: Update requirements.txt when Python dependencies change
+
+# Get list of staged files
+CHANGED_FILES=$(git diff --cached --name-only)
+
+# Check if dependency files are being committed
+if echo "$CHANGED_FILES" | grep -q "web/backend/pyproject.toml\|web/backend/uv.lock"; then
+    echo "📦 Python dependencies changed - updating requirements.txt..."
+
+    # Run build.sh to regenerate requirements.txt
+    if ./build.sh; then
+        # Stage the updated requirements.txt
+        git add requirements.txt
+        echo "✓ requirements.txt updated and staged"
+    else
+        echo "✗ build.sh failed - commit aborted"
+        echo "  Run ./build.sh manually to fix the issue"
+        exit 1
+    fi
+fi

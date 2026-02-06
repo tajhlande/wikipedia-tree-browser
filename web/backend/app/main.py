@@ -9,6 +9,9 @@ import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
 # API routes
 from api import pages, clusters, search
@@ -50,15 +53,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API routers
-app.include_router(pages.router, prefix="/api/pages", tags=["pages"])
-app.include_router(clusters.router, prefix="/api/clusters", tags=["clusters"])
-app.include_router(search.router, prefix="/api/search", tags=["search"])
+# Frontend dist directory
+# __file__ is web/backend/app/main.py, go up 4 levels to project root
+frontend_dist = Path(__file__).parent.parent.parent.parent / "web" / "frontend" / "dist"
+
+# Mount the SPA frontend at /app
+if frontend_dist.exists():
+    # Mount assets directory separately (index.html references /assets/...)
+    app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
+    # Mount the rest of the app at /app
+    app.mount("/app", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
 
 
 @app.get("/")
 async def root():
-    """Root endpoint with API information"""
+    """Root endpoint - redirects to the web app if it has been built"""
+    if frontend_dist.exists():
+        return RedirectResponse("/app")
     return {
         "message": "Wikipedia Embeddings API",
         "version": "1.0.0",
@@ -77,8 +88,10 @@ async def health_check():
     return {"status": "healthy"}
 
 
-# Mount static files for production (if serving frontend from same server)
-# app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")
+# Include API routers
+app.include_router(pages.router, prefix="/api/pages", tags=["pages"])
+app.include_router(clusters.router, prefix="/api/clusters", tags=["clusters"])
+app.include_router(search.router, prefix="/api/search", tags=["search"])
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

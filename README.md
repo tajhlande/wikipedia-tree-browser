@@ -348,3 +348,161 @@ uv run pytest
 cd web
 uv run pytest
 ```
+
+## Deployment
+
+This project is configured for deployment to [Toolforge](https://wikitech.wikimedia.org/wiki/Help:Toolforge),
+the Wikimedia Foundation's hosting platform for tools and bots.
+
+### Deployment Files
+
+The following files at the repository root are used for Toolforge deployment:
+
+| File | Purpose |
+|------|---------|
+| `Procfile` | Tells Toolforge how to start the web service |
+| `package.json` | Triggers frontend build during Toolforge's build phase |
+| `requirements.txt` | Python dependencies for the backend (generated from `uv.lock`) |
+| `build.sh` | Script to regenerate `requirements.txt` when dependencies change |
+| `.githooks/pre-commit` | Git hook that auto-runs `build.sh` when deps change |
+
+### How Toolforge Build Works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Toolforge Build Time (happens once per deployment)          │
+│  ─────────────────────────────────────────────────────────   │
+│  1. Detect package.json at root → install Node.js           │
+│  2. Detect requirements.txt → install Python deps           │
+│  3. Run npm run build → creates web/frontend/dist/          │
+│  4. Bake everything into container image                    │
+├─────────────────────────────────────────────────────────────┤
+│  Runtime (container starts)                                  │
+│  ─────────────────────────────────────────────────────────   │
+│  5. Procfile runs: cd web/backend && uvicorn app.main:app  │
+│  6. FastAPI serves pre-built dist/ files                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key point**: The frontend is built during Toolforge's image build, not at container startup. This means:
+- Build artifacts are not committed to git
+- Frontend stays in sync automatically
+- Container restarts are fast
+
+### The Procfile
+
+```procfile
+web: cd web/backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+The `web` process type is what Toolforge uses to start your web service. It:
+1. Changes to the backend directory
+2. Starts uvicorn with the FastAPI app
+3. Uses the `$PORT` environment variable (set by Toolforge)
+
+### Root package.json
+
+The root `package.json` is minimal and delegates to the frontend's build:
+
+```json
+{
+  "name": "wp-embeddings",
+  "description": "3D visualization of Wikipedia topic clusters",
+  "scripts": {
+    "build": "cd web/frontend && npm install && npm run build"
+  }
+}
+```
+
+This allows the Node.js buildpack to detect the project and run the build during image construction.
+
+### The build.sh Script
+
+Since this project uses `uv` for Python dependency management (with `pyproject.toml` and `uv.lock`), but Toolforge's Python buildpack expects a `requirements.txt`, the `build.sh` script bridges this gap:
+
+```bash
+#!/bin/bash
+# Generates requirements.txt from uv.lock
+
+cd web/backend
+uv export --format requirements-txt | \
+  grep -E '^[a-z]' | awk '{print $1}' | \
+  grep -vE '^(black|flake8|pytest|...)' > ../../requirements.txt
+```
+
+**When to run**: Manually before deploying, OR automatically via the pre-commit hook.
+
+### Pre-commit Hook
+
+The `.githooks/pre-commit` file automatically runs `build.sh` when Python dependencies change:
+
+```bash
+#!/bin/bash
+# Runs when pyproject.toml or uv.lock is being committed
+if git diff --cached --name-only | grep -q "web/backend/pyproject.toml\|web/backend/uv.lock"; then
+    ./build.sh
+    git add requirements.txt
+fi
+```
+
+#### Setting up the hook
+
+One-time setup per developer (no installation required):
+
+```bash
+git config core.hooksPath .githooks
+```
+
+This tells Git to look in the `.githooks/` directory (tracked in git) instead of `.git/hooks/` (not tracked).
+
+### Deployment Workflow
+
+```bash
+# 1. Make changes to the code
+vim web/backend/app/main.py
+
+# 2. If Python dependencies changed, the pre-commit hook auto-runs build.sh
+git add web/backend/pyproject.toml
+git commit -m "Update fastapi"
+# → Hook runs build.sh, stages requirements.txt
+
+# 3. Commit all changes
+git add Procfile package.json requirements.txt build.sh web/
+git commit -m "Deploy to Toolforge"
+git push
+
+# 4. On Toolforge
+toolforge build start <your-repo-url>
+toolforge webservice buildservice start --mount=none
+
+# 5. Monitor logs
+toolforge webservice buildservice logs -f
+```
+
+### Files NOT in git
+
+The following are in `.gitignore` and NOT committed:
+
+- `web/frontend/dist/` - Build output, created during Toolforge build
+- `web/frontend/node_modules/` - npm dependencies, installed during build
+- `web/backend/.venv/` - Python virtual environment
+
+### Testing Locally
+
+You can test the build process locally using the Toolforge builder (requires Docker):
+
+```bash
+pack build --builder tools-harbor.wmcloud.org/toolforge/heroku-builder:22 myimage
+docker run -e PORT=8000 -p 8000:8000 --rm --entrypoint web myimage
+```
+
+Then navigate to `http://127.0.0.1:8000` to verify it works.
+
+### Environment Variables
+
+For production, configure environment variables via Toolforge's envvars service:
+
+```bash
+toolforge envvars create EMBEDDING_MODEL_API_KEY
+toolforge envvars create SUMMARIZING_MODEL_API_KEY
+```
