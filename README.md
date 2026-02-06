@@ -1,5 +1,13 @@
 # Wikipedia Embeddings and Visualization
 
+![Wikipedia Tree Visualization](en-wp-tree-screenshot.png)
+
+Visualize the topical structure of Wikipedia!
+
+Browse and navigate the discovered topical structure of several of the largest language Wikipedias.
+
+## Project Structure
+
 This project consists of two separate applications that work together to process and visualize Wikipedia embeddings:
 
 1. **Data Preparation** (`dataprep/`) - Downloads, processes, and analyzes Wikipedia data
@@ -13,7 +21,7 @@ The goal is to have visualizations for multiple languages – as many as can be 
 * [jinaai/jina-embeddings-v4-text-matching-GGUF](https://huggingface.co/jinaai/jina-embeddings-v4-text-matching-GGUF) for embeddings
 * [ggml-org/gpt-oss-20b-GGUF](https://huggingface.co/ggml-org/gpt-oss-20b-GGUF) for topic discovery
 
-## Project Structure
+
 
 ```
 wp-embeddings/
