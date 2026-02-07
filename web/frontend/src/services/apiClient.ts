@@ -289,7 +289,8 @@ export class ApiClient {
     limit: number = 50,
     offset: number = 0
   ): Promise<ApiResponse<Page[]>> {
-    const url = new URL(`${this.baseUrl}/pages/namespace/${namespace}/node_id/${nodeId}`);
+    // Use window.location.origin as base for URL constructor (needed for relative baseUrls)
+    const url = new URL(`${this.baseUrl}/pages/namespace/${namespace}/node_id/${nodeId}`, window.location.origin);
     url.searchParams.append('limit', limit.toString());
     url.searchParams.append('offset', offset.toString());
 
