@@ -1,5 +1,25 @@
 # TODO tasks for the web application
 
+## Security (Internet Exposure)
+
+### Critical Priority
+* **Fix CORS Configuration** - Replace `allow_origins=["*"]` with specific allowed origins in [`web/backend/app/main.py:50`](web/backend/app/main.py:50)
+* **Implement Authentication** - Add API key authentication, JWT tokens, or OAuth to protect all API endpoints
+
+### High Priority
+* **Add Rate Limiting** - Implement rate limiting on all API endpoints to prevent DoS attacks and API abuse (use `slowapi` or `fastapi-limiter`)
+* **Sanitize Error Messages** - Remove internal error details from HTTP responses; log detailed errors server-side only
+
+### Medium Priority
+* **Configure Production Logging** - Replace `logging.DEBUG` with environment-based logging level (use `LOG_LEVEL` env var)
+* **Add Input Validation for Limits** - Add maximum value constraints to pagination parameters (e.g., `limit` should have `le=1000`)
+* **Add Security Headers** - Implement middleware for X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, and HSTS headers
+* **Enforce HTTPS** - Add HSTS headers and configure nginx to redirect HTTP to HTTPS
+
+### Low Priority
+* **Validate Namespace Format** - Add regex validation for namespace parameter to prevent potential path traversal
+* **Add API Versioning** - Implement version prefix in routes (e.g., `/api/v1/clusters/`) for better change management
+
 ## Deployment
 
 * Add health check endpoint to FastAPI
