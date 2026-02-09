@@ -3,7 +3,6 @@
 ## Security (Internet Exposure)
 
 ### Critical Priority
-* **Fix CORS Configuration** - Replace `allow_origins=["*"]` with specific allowed origins in [`web/backend/app/main.py:50`](web/backend/app/main.py:50)
 * **Implement Authentication** - Add API key authentication, JWT tokens, or OAuth to protect all API endpoints
 
 ### High Priority
