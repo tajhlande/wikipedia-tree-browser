@@ -257,6 +257,35 @@ Run these in the `dataprep` directory
 * Configure CORS settings appropriately for production deployment.
 * Use environment variables for sensitive configuration (database paths, API keys).
 
+### CORS Configuration
+
+The backend API uses environment-based CORS configuration for security:
+
+1. **Development**: Copy [`env-example`](env-example) to `.env` in project root
+2. **Configure**: Set `CORS_ORIGINS` to allowed frontend origins
+   - Development: `http://localhost:3000,http://127.0.0.1:3000`
+   - Production (integrated): Leave empty or set to your domain
+   - Production (separate): `https://your-frontend-domain.com`
+3. **Never use wildcard (`*`) in production**
+
+See [`env-example`](env-example) for full CORS configuration documentation.
+
+**Configuration Location:**
+- The `.env` file is located at the project root (shared with dataprep)
+- CORS settings are loaded by [`web/backend/util/environment.py`](web/backend/util/environment.py)
+- Applied in [`web/backend/app/main.py`](web/backend/app/main.py)
+
+**Environment Variables:**
+- `CORS_ORIGINS`: Comma-separated list of allowed origins (or `*` for wildcard)
+- `CORS_ALLOW_CREDENTIALS`: Enable credentials (cookies, auth headers) - must be `false` with wildcard
+- `CORS_ALLOW_METHODS`: Allowed HTTP methods (default: `GET,POST,PUT,DELETE,OPTIONS`)
+- `CORS_ALLOW_HEADERS`: Allowed headers (default: `*`)
+
+**Important Note for Agents:**
+- Only modify [`env-example`](env-example) which is under git control
+- Never modify the live `.env` file as it contains sensitive credentials
+- Users should copy `env-example` to `.env` and customize it for their environment
+
 ## Web Application (3D Cluster Visualization)
 
 The web application provides an interactive 3D visualization of Wikipedia page clusters using BabylonJS. It reads from the existing SQLite databases and displays cluster trees in three-dimensional space, allowing users to explore and navigate the hierarchical structure of Wikipedia knowledge.

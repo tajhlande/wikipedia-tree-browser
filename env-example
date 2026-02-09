@@ -28,3 +28,25 @@ DOTENV_FILENAME_VAR=.env
 
 # where the interactive command history is stored
 COMMAND_HISTORY_FILENAME_VAR=.wp_transform_history
+
+# ###################################################################
+# Web Backend CORS Configuration
+
+# CORS Configuration
+# Comma-separated list of allowed origins (no spaces)
+# For development, include all localhost variants
+# For production, list specific domains or leave empty for same-origin only
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
+# Alternative: Use wildcard ONLY for development
+# CORS_ORIGINS=*
+
+# Enable credentials (cookies, authorization headers)
+# Must be False when using wildcard origins
+CORS_ALLOW_CREDENTIALS=false
+
+# Allowed HTTP methods (usually leave as default)
+CORS_ALLOW_METHODS=GET,POST,PUT,DELETE,OPTIONS
+
+# Allowed headers (usually leave as default)
+CORS_ALLOW_HEADERS=*

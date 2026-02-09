@@ -19,6 +19,9 @@ from api import pages, clusters, search
 # Injected service management
 from services.service_setup import init_services, shutdown_services
 
+# Environment configuration
+from util.environment import Config
+
 # logging setup
 logging.basicConfig(
     level=logging.DEBUG, format="%(name)s - %(levelname)s - %(message)s"
@@ -45,12 +48,26 @@ app = FastAPI(
 )
 
 # Configure CORS for frontend communication
+cors_origins = Config.cors.get_origins()
+cors_credentials = Config.cors.allow_credentials()
+
+# Validation: Cannot use credentials with wildcard origins
+if "*" in cors_origins and cors_credentials:
+    logger.warning(
+        "CORS configuration error: allow_credentials cannot be True when using wildcard origins. "
+        "Setting allow_credentials to False."
+    )
+    cors_credentials = False
+
+logger.info(f"CORS enabled for origins: {cors_origins}")
+logger.info(f"CORS credentials allowed: {cors_credentials}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=False,  # Must be False when using wildcard origins
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=cors_origins,
+    allow_credentials=cors_credentials,
+    allow_methods=Config.cors.get_methods(),
+    allow_headers=Config.cors.get_headers(),
 )
 
 # Frontend dist directory
