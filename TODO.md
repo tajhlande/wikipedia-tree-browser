@@ -26,6 +26,7 @@
 
 ## Bugs
 
+* Parent button is not doing anything
 * Parent button is placing departed nodes too close to their parent (maybe not a bug anymore)
 
 ## Usability improvements
