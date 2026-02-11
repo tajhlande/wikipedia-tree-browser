@@ -9,7 +9,6 @@ email-validator==2.3.0
 fastapi==0.124.2
 fastapi-cli==0.0.16
 fastapi-cloud-cli==0.6.0
-fastar==0.8.0
 h11==0.16.0
 httpcore==1.0.9
 httptools==0.7.1
@@ -30,11 +29,8 @@ pydantic-core==2.41.5
 pygments==2.19.2
 python-dotenv==1.0.1
 python-multipart==0.0.20
-pytokens==0.3.0
 pyyaml==6.0.3
 rich==14.2.0
-rich-toolkit==0.17.0
-rignore==0.7.6
 sentry-sdk==2.47.0
 shellingham==1.5.4
 starlette==0.50.0
