@@ -18,8 +18,10 @@ def init_services():
     logger.info("Initializing services")
     db_directory = os.environ.get("DB_FILE_PATH") or None
     if db_directory:
+        logger.info("DB directory: %s", db_directory)
         db_service = DatabaseService(db_directory=db_directory)
     else:
+        logger.warning("DB directory was not set, using default value")
         db_service = DatabaseService()
     _service_catalog["cluster_service"] = db_service
     logger.debug("Service initialization complete")
