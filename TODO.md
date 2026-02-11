@@ -21,7 +21,7 @@ None
 
 ## Deployment
 
-* Add health check endpoint to FastAPI
+None
 
 ## Bugs
 
@@ -29,13 +29,14 @@ None
 
 ## Usability improvements
 
+* Search across all nodes to cross-navigate tree
 * Reorganize node info boxes
 * Mobile layout fixes (controls and info boxes)
 * Tune the LOD for billboards
-* Search across all nodes to cross-navigate tree
 
 ## Technical improvements
 
+* Caching in API layer of request + response
 * Migrate to real db backend
 
 ## Aesthetic improvements
