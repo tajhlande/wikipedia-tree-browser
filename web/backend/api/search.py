@@ -3,15 +3,16 @@ Search functionality API endpoints for Wikipedia Embeddings
 """
 
 import logging
-from fastapi import APIRouter, HTTPException
-from services.database_service import DatabaseService
+
+from fastapi import APIRouter, Depends, HTTPException
+from services.cluster_service import ClusterService
+from services.service_setup import get_cluster_service
 
 from util.languages import get_language_info_for_namespace
 
 router = APIRouter()
-db_service = DatabaseService()
 
-logger = logging.getLogger(__file__)
+logger = logging.getLogger(__name__)
 
 
 # @router.get("/pages", response_model=List[PageResponse])
@@ -45,11 +46,13 @@ logger = logging.getLogger(__file__)
 
 
 @router.get("/namespaces")
-async def get_available_namespaces():
+async def get_available_namespaces(
+    cluster_service: ClusterService = Depends(get_cluster_service),
+):
     """Get list of available namespaces"""
     try:
         logger.debug("Called /namespaces")
-        namespaces = db_service.get_available_namespaces()
+        namespaces = cluster_service.get_available_namespaces()
         namespace_info_list = []
         for namespace in namespaces:
             language_info = get_language_info_for_namespace(namespace)
