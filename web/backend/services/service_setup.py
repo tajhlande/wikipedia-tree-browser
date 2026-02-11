@@ -1,5 +1,6 @@
 from functools import partial
 import logging
+import os
 
 from typing import Any
 from services.database_service import DatabaseService
@@ -15,7 +16,12 @@ _service_catalog: dict[str, ManagedService] = dict()
 def init_services():
     """Initialize all the services here. This should be called upon system startup."""
     logger.info("Initializing services")
-    _service_catalog["cluster_service"] = DatabaseService()
+    db_directory = os.environ.get("DB_FILE_PATH") or None
+    if db_directory:
+        db_service = DatabaseService(db_directory=db_directory)
+    else:
+        db_service = DatabaseService()
+    _service_catalog["cluster_service"] = db_service
     logger.debug("Service initialization complete")
 
 
