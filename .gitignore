@@ -2,7 +2,6 @@
 __pycache__/
 *.py[oc]
 build/
-dist/
 wheels/
 *.egg-info
 
@@ -33,7 +32,6 @@ enwiki_namespace_0_chunk_0_line_1.txt
 cluster_tree.html
 dead
 
-dist
 .wrangler
 .output
 .vercel
@@ -66,4 +64,4 @@ Thumbs.db
 
 # web app stuff
 web/frontend/coverage/
-web/frontend/dist
+
