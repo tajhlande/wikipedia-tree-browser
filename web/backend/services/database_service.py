@@ -437,8 +437,10 @@ class DatabaseService(ClusterService):
         namespaces = []
 
         # Check for database files in the configured data directory
+        logger.info("Looking for database files in %s", self.db_directory)
         db_files = list(Path(self.db_directory).glob("*_slim.db"))
         for db_file in db_files:
+            logger.info("Found database file %s", db_file)
             # Extract namespace from filename (e.g., "enwiki_namespace_0_slim.db" -> "enwiki_namespace_0")
             stem = db_file.stem
             # Remove the "_slim" suffix if present
