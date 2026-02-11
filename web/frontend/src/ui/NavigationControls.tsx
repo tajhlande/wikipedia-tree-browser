@@ -1,4 +1,4 @@
-import { Component, Show } from "solid-js";
+import { Component, Show, createEffect, createMemo } from "solid-js";
 import { dataStore } from '../stores/dataStore';
 import { ZoomControl } from './ZoomControl';
 import { Button } from "@kobalte/core";
@@ -11,24 +11,30 @@ import { useI18n } from "../i18n";
 export const NavigationControls: Component = () => {
   const { t } = useI18n();
 
+  // Create reactive values to track state changes
+  const currentView = () => dataStore.state.currentView;
+  const currentNode = () => dataStore.state.currentNode;
+  const shouldShow = () => currentView() === 'node_view' && currentNode();
+  const hasParent = () => currentNode()?.parent_id !== null && currentNode()?.parent_id !== undefined;
+
   return (
-    <Show when={dataStore.state.currentView === 'node_view' && dataStore.state.currentNode}>
-      <div class="fixed top-4 right-4 z-50 flex flex-col gap-2">
+    <Show when={shouldShow()}>
+      <div class="fixed top-4 right-4 z-70 flex flex-col gap-2">
         {/* Parent Button */}
         <Button.Root
           onClick={() => {
-            const currentNode = dataStore.state.currentNode;
-            if (currentNode && currentNode.parent_id) {
+            const node = currentNode();
+            if (node && node.parent_id) {
               dataStore.navigateToParent();
             }
           }}
-          disabled={!dataStore.state.currentNode?.parent_id}
+          disabled={!hasParent()}
           class={`px-4 py-2 rounded-lg text-white font-medium transition-all duration-200 ${
-            dataStore.state.currentNode?.parent_id
+            hasParent()
               ? 'bg-blue-600 hover:bg-blue-700 cursor-pointer'
               : 'bg-gray-400 cursor-not-allowed'
           }`}
-          title={dataStore.state.currentNode?.parent_id ? t("navigationControls.parentTooltip") : t("navigationControls.noParentTooltip")}
+          title={hasParent() ? t("navigationControls.parentTooltip") : t("navigationControls.noParentTooltip")}
         >
           ← {t("navigationControls.parent")}
         </Button.Root>

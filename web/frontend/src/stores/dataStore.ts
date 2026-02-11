@@ -55,14 +55,6 @@ export const createDataStore = () => {
       updated_at: new Date().toISOString()  // Use current time as fallback
     };
 
-    // console.log(`[DATA][MAP] Mapping backend node to frontend:`, {
-    //   backendNodeId: backendNode.node_id,
-    //   mappedNodeId: mappedNode.id,
-    //   backendParentId: backendNode.parent_id,
-    //   mappedParentId: mappedNode.parent_id,
-    //   isRoot: mappedNode.parent_id === null
-    // });
-
     return mappedNode;
   };
 

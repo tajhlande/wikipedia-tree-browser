@@ -25,8 +25,7 @@ None
 
 ## Bugs
 
-* Parent button is not doing anything
-* Parent button is placing departed nodes too close to their parent (maybe not a bug anymore)
+* Parent button is placing departed node billboards too close to their parent
 
 ## Usability improvements
 
