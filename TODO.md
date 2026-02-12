@@ -33,21 +33,26 @@ None
 
 * Loading spinner needed after navigating and before nodes are loaded
 * Parent button is placing departed node billboards too close to their parent
+* Update the README to reflect `--namespace` changes and current command list
 
 ## Usability improvements
 
+* Add Chinese localization
 * Search across all nodes to cross-navigate tree
-* Reorganize node info boxes
 * Mobile layout fixes (controls and info boxes)
+* Reorganize node info boxes
 * Tune the LOD for billboards
 
 ## Technical and performance improvements
 
+* Move `migrate_to_slim.py` into `./dataprep`
+* Remove `--mode refresh` from topics command, use `resume` always
 * Caching in API layer of request + response
 * Migrate to real db backend
 
 ## Aesthetic improvements
 
+* Add favicon image to "Wikipedia Tree Browser" title box
 * See if replacing leaf with link looks better
 * Animate graph transitions (add/remove nodes)
 * Consider color and material changes - example: layer on monthly readership or number of edits
