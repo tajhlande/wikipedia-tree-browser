@@ -20,7 +20,6 @@ from database import (
     get_sql_conn,
     ensure_tables,
     get_page_ids_needing_embedding_for_chunk,
-    remove_existing_cluster_topics,
     update_cluster_tree_final_labels,
     update_cluster_tree_first_labels,
 )
@@ -46,7 +45,7 @@ from transform import (
     run_pca_per_cluster,
     run_recursive_clustering,
     compute_missing_centroids,
-    project_centroid_vectors
+    project_centroid_vectors,
 )
 
 logging.basicConfig(
@@ -67,9 +66,13 @@ def read_essential_env_variables() -> dict[str, str]:
     setting defaults as appropriate
     """
     env_vars = {}
-    env_vars[DATA_STORAGE_DIRNAME_VAR] = os.environ.get(DATA_STORAGE_DIRNAME_VAR, "../data")
+    env_vars[DATA_STORAGE_DIRNAME_VAR] = os.environ.get(
+        DATA_STORAGE_DIRNAME_VAR, "../data"
+    )
     env_vars[DOTENV_FILENAME_VAR] = os.environ.get(DOTENV_FILENAME_VAR, "./.env")
-    env_vars[COMMAND_HISTORY_FILENAME_VAR] = os.environ.get(COMMAND_HISTORY_FILENAME_VAR)
+    env_vars[COMMAND_HISTORY_FILENAME_VAR] = os.environ.get(
+        COMMAND_HISTORY_FILENAME_VAR
+    )
     return env_vars
 
 
@@ -96,15 +99,16 @@ def register_command_history_file(histfile_path: str | None) -> None:
     readline.set_history_length(1000)  # keep last 1000 lines
 
 
-class Argument():
+class Argument:
     """Description of a command line argument"""
+
     def __init__(
         self,
         name: str,
         description: str,
         type: str,
         required: bool,
-        default: Any = None
+        default: Any = None,
     ):
         self.name = name
         self.description = description
@@ -118,25 +122,49 @@ class Result(IntEnum):
     FAILURE = -1
 
 
-REQUIRED_NAMESPACE_ARGUMENT = Argument(name="namespace", type="string", required=True,
-                                       description="The wiki namespace, e.g. enwiki_namespace_0")
-OPTIONAL_CHUNK_LIMIT_ARGUMENT = Argument(name="limit", type="integer", required=False, default=1,
-                                         description="Number of chunks to process")
-OPTIONAL_CHUNK_LIMIT_NO_DEFAULT_ARGUMENT = Argument(name="limit", type="integer", required=False,
-                                                    description="Number of chunks to process")
-OPTIONAL_CHUNK_NAME_ARGUMENT = Argument(name="chunk", type="string", required=False,
-                                        description="The name of the chunk to process")
+REQUIRED_NAMESPACE_ARGUMENT = Argument(
+    name="namespace",
+    type="string",
+    required=True,
+    description="The wiki namespace, e.g. enwiki_namespace_0",
+)
+OPTIONAL_CHUNK_LIMIT_ARGUMENT = Argument(
+    name="limit",
+    type="integer",
+    required=False,
+    default=1,
+    description="Number of chunks to process",
+)
+OPTIONAL_CHUNK_LIMIT_NO_DEFAULT_ARGUMENT = Argument(
+    name="limit",
+    type="integer",
+    required=False,
+    description="Number of chunks to process",
+)
+OPTIONAL_CHUNK_NAME_ARGUMENT = Argument(
+    name="chunk",
+    type="string",
+    required=False,
+    description="The name of the chunk to process",
+)
 OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT = Argument(
-    name="limit", type="integer", required=False, description="Number of pages to process"
+    name="limit",
+    type="integer",
+    required=False,
+    description="Number of pages to process",
 )
 OPTIONAL_BATCH_SIZE_ARGUMENT = Argument(
-    name="batch", type="integer", required=False, default=100, description="Size of batch to process at a time"
-)
-REQUIRED_MODE_ARGUMENT = Argument(
-    name="mode", type="string", required=True, description="Processing mode: 'refresh' or 'resume'"
+    name="batch",
+    type="integer",
+    required=False,
+    default=100,
+    description="Size of batch to process at a time",
 )
 OPTIONAL_LIMIT_ARGUMENT = Argument(
-    name="limit", type="integer", required=False, description="Maximum number of clusters to process across all passes"
+    name="limit",
+    type="integer",
+    required=False,
+    description="Maximum number of clusters to process across all passes",
 )
 
 CHECK = "✓"
@@ -146,12 +174,7 @@ X = "✗"
 class Command(ABC):
     """Abstract base class for all commands."""
 
-    def __init__(
-        self,
-        name: str,
-        description: str,
-        expected_args: list[Argument] = []
-    ):
+    def __init__(self, name: str, description: str, expected_args: list[Argument] = []):
         self.name = name
         self.description = description
         self.expected_args = expected_args
@@ -164,7 +187,9 @@ class Command(ABC):
         return [arg for arg in self.expected_args if arg.required is False]
 
     @abstractmethod
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         """Execute the command with given arguments."""
         pass
 
@@ -185,7 +210,9 @@ class Command(ABC):
                     try:
                         val = int(supplied_arg)
                     except ValueError:
-                        raise ValueError(f"Argument {expected_arg.name} must be an integer")
+                        raise ValueError(
+                            f"Argument {expected_arg.name} must be an integer"
+                        )
                     # Only apply >= 1 validation for arguments that should be positive integers
                     if expected_arg.name in [
                         CLUSTER_COUNT_ARGUMENT.name,
@@ -193,23 +220,27 @@ class Command(ABC):
                         LEAF_TARGET_ARGUMENT.name,
                         MAX_K_ARGUMENT.name,
                         MAX_DEPTH_ARGUMENT.name,
-                        OPTIONAL_LIMIT_ARGUMENT.name
+                        OPTIONAL_LIMIT_ARGUMENT.name,
                     ]:
                         if val < 1:
-                            raise ValueError(f"Argument {expected_arg.name} must be >= 1")
+                            raise ValueError(
+                                f"Argument {expected_arg.name} must be >= 1"
+                            )
                 elif expected_arg.type == "float":
                     try:
                         val = float(supplied_arg)
                     except ValueError:
-                        raise ValueError(f"Argument {expected_arg.name} must be a float")
+                        raise ValueError(
+                            f"Argument {expected_arg.name} must be a float"
+                        )
                     # Only apply >= 0 validation for arguments that should be non-negative
                     if expected_arg.name == "min-silhouette":
                         if val < 0:
-                            raise ValueError(f"Argument {expected_arg.name} must be >= 0")
+                            raise ValueError(
+                                f"Argument {expected_arg.name} must be >= 0"
+                            )
                 elif expected_arg.type == "string":
-                    if expected_arg.name == "mode":
-                        if supplied_arg not in ["refresh", "resume"]:
-                            raise ValueError(f"Argument {expected_arg.name} must be either 'refresh' or 'resume'")
+                    pass
             elif expected_arg.name not in args and expected_arg.default is not None:
                 args[expected_arg.name] = expected_arg.default
         return True
@@ -219,7 +250,7 @@ class Command(ABC):
 
     def get_help(self) -> str:
         """Get help text for the command."""
-        help_text = f"Command \"{self.name}\": {self.description}\n"
+        help_text = f'Command "{self.name}": {self.description}\n'
         required_arguments = [arg for arg in self.expected_args if arg.required]
         optional_arguments = [arg for arg in self.expected_args if not arg.required]
         help_text += f"\nRequired arguments: {'' if required_arguments else 'None'}\n"
@@ -344,11 +375,13 @@ class CommandDispatcher:
                 raise
         return self.api_client
 
-    def dispatch(self,
-                 command_name: str,
-                 namespace: str,
-                 args: dict[str, Any],
-                 env_vars: dict[str, str]) -> tuple[Result, str]:
+    def dispatch(
+        self,
+        command_name: str,
+        namespace: str,
+        args: dict[str, Any],
+        env_vars: dict[str, str],
+    ) -> tuple[Result, str]:
         """Dispatch command to appropriate handler."""
         if not self.parser.validate_command(command_name):
             return Result.FAILURE, f"Unknown command: {command_name}"
@@ -373,10 +406,12 @@ class RefreshChunkDataCommand(Command):
         super().__init__(
             name="refresh",
             description="Refresh chunk data for a namespace",
-            expected_args=[]
+            expected_args=[],
         )
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
         logger.info("Refreshing chunk data for namespace: %s", namespace)
 
@@ -397,7 +432,7 @@ class RefreshChunkDataCommand(Command):
             return (
                 Result.SUCCESS,
                 f"{CHECK} Refreshed chunk data for namespace: {namespace}\n"
-                f"Found {count} chunks in namespace {namespace}"
+                f"Found {count} chunks in namespace {namespace}",
             )
 
         except Exception as e:
@@ -409,7 +444,9 @@ class RefreshChunkDataCommand(Command):
         if not hasattr(self, "api_client") or self.api_client is None:
             try:
                 logger.info("Dotenv path: %s", dotenv_path)
-                auth_client, refresh_token, access_token = get_enterprise_auth_client(dotenv_path)
+                auth_client, refresh_token, access_token = get_enterprise_auth_client(
+                    dotenv_path
+                )
                 self.api_client = get_enterprise_api_client(access_token)
             except Exception as e:
                 logger.error(f"Failed to authenticate: {e}")
@@ -424,11 +461,15 @@ class DownloadChunksCommand(Command):
         super().__init__(
             name="download",
             description="Download chunks that haven't been downloaded yet",
-            expected_args=[OPTIONAL_CHUNK_LIMIT_ARGUMENT]
+            expected_args=[OPTIONAL_CHUNK_LIMIT_ARGUMENT],
         )
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
-        limit = args.get(OPTIONAL_CHUNK_LIMIT_ARGUMENT.name, OPTIONAL_CHUNK_LIMIT_ARGUMENT.default)
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
+        limit = args.get(
+            OPTIONAL_CHUNK_LIMIT_ARGUMENT.name, OPTIONAL_CHUNK_LIMIT_ARGUMENT.default
+        )
         namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
 
         try:
@@ -483,7 +524,11 @@ class DownloadChunksCommand(Command):
 
                 try:
                     # Create download directory
-                    download_dir = os.path.join(env_vars[DATA_STORAGE_DIRNAME_VAR], "downloaded", chunk_namespace)
+                    download_dir = os.path.join(
+                        env_vars[DATA_STORAGE_DIRNAME_VAR],
+                        "downloaded",
+                        chunk_namespace,
+                    )
                     os.makedirs(download_dir, exist_ok=True)
 
                     chunk_file_path = os.path.join(download_dir, f"{chunk_name}.tar.gz")
@@ -520,7 +565,10 @@ class DownloadChunksCommand(Command):
                     logger.error(f"Failed to download {chunk_name}: {e}")
                     continue
 
-            return Result.SUCCESS, f"{CHECK} Downloaded {downloaded_count} chunk(s) in namespace {namespace or 'all'}"
+            return (
+                Result.SUCCESS,
+                f"{CHECK} Downloaded {downloaded_count} chunk(s) in namespace {namespace or 'all'}",
+            )
 
         except Exception as e:
             logger.error(f"Failed to download chunks: {e}")
@@ -545,10 +593,12 @@ class UnpackProcessChunksCommand(Command):
         super().__init__(
             name="unpack",
             description="Unpack and process downloaded chunks",
-            expected_args=[OPTIONAL_CHUNK_LIMIT_NO_DEFAULT_ARGUMENT]
+            expected_args=[OPTIONAL_CHUNK_LIMIT_NO_DEFAULT_ARGUMENT],
         )
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
         limit = args.get(OPTIONAL_CHUNK_LIMIT_NO_DEFAULT_ARGUMENT.name)
 
@@ -606,7 +656,9 @@ class UnpackProcessChunksCommand(Command):
 
                 try:
                     # Create extraction directory
-                    extract_dir = os.path.join(env_vars[DATA_STORAGE_DIRNAME_VAR], "extracted", chunk_namespace)
+                    extract_dir = os.path.join(
+                        env_vars[DATA_STORAGE_DIRNAME_VAR], "extracted", chunk_namespace
+                    )
                     os.makedirs(extract_dir, exist_ok=True)
 
                     # Extract archive
@@ -631,7 +683,11 @@ class UnpackProcessChunksCommand(Command):
                             "Parsing chunk file", total=file_line_count, unit="pages"
                         ) as tracker:
                             line_count = parse_chunk_file(
-                                sqlconn, chunk_namespace, chunk_name, chunk_file_path, tracker
+                                sqlconn,
+                                chunk_namespace,
+                                chunk_name,
+                                chunk_file_path,
+                                tracker,
                             )
                         logger.debug(
                             "Parsed %d pages from chunk file %s",
@@ -678,7 +734,7 @@ class UnpackProcessChunksCommand(Command):
             return (
                 Result.SUCCESS,
                 f"{CHECK} Unpacked and processed {processed_count} chunk(s). "
-                f"Processed {total_pages} pages from {processed_count} chunks"
+                f"Processed {total_pages} pages from {processed_count} chunks",
             )
 
         except Exception as e:
@@ -695,8 +751,8 @@ class EmbedPagesCommand(Command):
             description="Process remaining pages for embedding computation",
             expected_args=[
                 OPTIONAL_CHUNK_NAME_ARGUMENT,
-                OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT
-            ]
+                OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT,
+            ],
         )
         embedding_model_name, embedding_model_api_url, embedding_model_api_key = (
             get_embedding_model_config()
@@ -705,14 +761,22 @@ class EmbedPagesCommand(Command):
         self.embedding_model_api_url = embedding_model_api_url
         self.embedding_model_api_key = embedding_model_api_key
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
         chunk_name = args.get(OPTIONAL_CHUNK_NAME_ARGUMENT.name)
 
         if chunk_name and not namespace:
-            return Result.FAILURE, f"{X} --namespace is required when --chunk_name is provided"
+            return (
+                Result.FAILURE,
+                f"{X} --namespace is required when --chunk_name is provided",
+            )
 
-        limit = args.get(OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT.name, OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT.default)
+        limit = args.get(
+            OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT.name,
+            OPTIONAL_PAGE_LIMIT_NO_DEFAULT_ARGUMENT.default,
+        )
 
         logger.info(
             "Computing embeddings for pages%s%s%s...",
@@ -734,7 +798,9 @@ class EmbedPagesCommand(Command):
 
             if chunk_name:
                 # Process specific chunk
-                page_ids = get_page_ids_needing_embedding_for_chunk(chunk_name, sqlconn, namespace=namespace)
+                page_ids = get_page_ids_needing_embedding_for_chunk(
+                    chunk_name, sqlconn, namespace=namespace
+                )
 
                 if limit:
                     pages_to_process = min(len(page_ids), limit)
@@ -759,7 +825,10 @@ class EmbedPagesCommand(Command):
                     )
 
                 if not page_ids:
-                    return Result.FAILURE, f"{X} No pages needing embeddings in chunk {chunk_name}"
+                    return (
+                        Result.FAILURE,
+                        f"{X} No pages needing embeddings in chunk {chunk_name}",
+                    )
 
                 # logger.info("Processing %d embeddings for named chunk %s...", len(page_ids), chunk_name)
 
@@ -779,7 +848,10 @@ class EmbedPagesCommand(Command):
                         tracker=tracker,
                     )
 
-                return Result.SUCCESS, f"{CHECK} Processed {len(page_ids)} pages for chunk {chunk_name}"
+                return (
+                    Result.SUCCESS,
+                    f"{CHECK} Processed {len(page_ids)} pages for chunk {chunk_name}",
+                )
 
             else:
                 # Process all chunks
@@ -796,7 +868,7 @@ class EmbedPagesCommand(Command):
                         WHERE pl.namespace = ? AND pv.embedding_vector IS NULL
                         ORDER BY pl.chunk_name ASC;
                     """
-                    cursor = sqlconn.execute(sql, (namespace, ))
+                    cursor = sqlconn.execute(sql, (namespace,))
                 else:
                     sql = """
                         SELECT DISTINCT pl.namespace, pl.chunk_name
@@ -807,7 +879,9 @@ class EmbedPagesCommand(Command):
                     """
                     cursor = sqlconn.execute(sql)
 
-                chunk_name_list = [(row["namespace"], row["chunk_name"]) for row in cursor.fetchall()]
+                chunk_name_list = [
+                    (row["namespace"], row["chunk_name"]) for row in cursor.fetchall()
+                ]
 
                 if not chunk_name_list:
                     return Result.FAILURE, f"{X} No pages needing embeddings"
@@ -822,7 +896,9 @@ class EmbedPagesCommand(Command):
 
                         # Get pages needing embeddings for this chunk
                         page_ids = get_page_ids_needing_embedding_for_chunk(
-                            chunk_name=chunk_name, sqlconn=sqlconn, namespace=chunk_namespace,
+                            chunk_name=chunk_name,
+                            sqlconn=sqlconn,
+                            namespace=chunk_namespace,
                         )
 
                         if not page_ids:
@@ -878,7 +954,7 @@ class EmbedPagesCommand(Command):
 
                 return (
                     Result.SUCCESS,
-                    f"{CHECK} Embedded {total_processed} pages across {len(chunk_name_list)} chunk(s)"
+                    f"{CHECK} Embedded {total_processed} pages across {len(chunk_name_list)} chunk(s)",
                 )
 
         except Exception as e:
@@ -886,10 +962,20 @@ class EmbedPagesCommand(Command):
             return Result.FAILURE, f"{X} Failed to process pages: {e}"
 
 
-TARGET_DIMENSIONS_ARGUMENT = Argument(name="target-dim", type="integer", required=False, default=100,
-                                      description="The target number of dimensions to reduce to")
-BATCH_SIZE_ARGUMENT = Argument(name="batch-size", type="integer", required=False, default=10_000,
-                               description="Number of pages to reduce per batch")
+TARGET_DIMENSIONS_ARGUMENT = Argument(
+    name="target-dim",
+    type="integer",
+    required=False,
+    default=100,
+    description="The target number of dimensions to reduce to",
+)
+BATCH_SIZE_ARGUMENT = Argument(
+    name="batch-size",
+    type="integer",
+    required=False,
+    default=10_000,
+    description="Number of pages to reduce per batch",
+)
 
 
 class ReduceCommand(Command):
@@ -899,22 +985,29 @@ class ReduceCommand(Command):
         super().__init__(
             name="reduce",
             description="Reduce dimension of embeddings",
-            expected_args=[TARGET_DIMENSIONS_ARGUMENT, BATCH_SIZE_ARGUMENT]
+            expected_args=[TARGET_DIMENSIONS_ARGUMENT, BATCH_SIZE_ARGUMENT],
         )
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
 
             sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
-            target_dim = args.get(TARGET_DIMENSIONS_ARGUMENT.name, TARGET_DIMENSIONS_ARGUMENT.default)
+            target_dim = args.get(
+                TARGET_DIMENSIONS_ARGUMENT.name, TARGET_DIMENSIONS_ARGUMENT.default
+            )
             batch_size = args.get(BATCH_SIZE_ARGUMENT.name, BATCH_SIZE_ARGUMENT.default)
             print(f"Target dimension: {target_dim}, batch size: {batch_size}")
 
             if target_dim > batch_size:
-                return Result.FAILURE, f"{X} Batch size must be equal to or greater than target dimension."
+                return (
+                    Result.FAILURE,
+                    f"{X} Batch size must be equal to or greater than target dimension.",
+                )
 
             estimated_vector_count = get_embedding_count(namespace, sqlconn)
             estimated_batch_count = estimated_vector_count // batch_size + 1
@@ -923,7 +1016,7 @@ class ReduceCommand(Command):
                 return (
                     Result.FAILURE,
                     f"{X} Only found {estimated_vector_count} records, "
-                    f"need at least {target_dim} to do PCA at that dimension"
+                    f"need at least {target_dim} to do PCA at that dimension",
                 )
 
             if estimated_vector_count < batch_size:
@@ -948,25 +1041,54 @@ class ReduceCommand(Command):
             return (
                 Result.SUCCESS,
                 f"{CHECK} Reduced {total_vector_count} page embeddings in {batch_count} "
-                f"batch{'' if batch_count == 1 else 'es'}"
+                f"batch{'' if batch_count == 1 else 'es'}",
             )
         except Exception as e:
             logger.exception(f"Failed to reduce embeddings: {e}")
             return Result.FAILURE, f"{X} Failed to reduce embeddings: {e}"
 
 
-LEAF_TARGET_ARGUMENT = Argument(name="leaf-target", type="integer", required=False, default=50,
-                                description="Target number of documents per leaf cluster")
-MAX_K_ARGUMENT = Argument(name="max-k", type="integer", required=False, default=50,
-                          description="Maximum number of clusters to create at each level")
-MAX_DEPTH_ARGUMENT = Argument(name="max-depth", type="integer", required=False, default=10,
-                              description="Maximum depth for recursion")
-MIN_SILHOUETTE_ARGUMENT = Argument(name="min-silhouette", type="float", required=False, default=0.03,
-                                   description="Minimum silhouette score to continue clustering")
-CLUSTER_COUNT_ARGUMENT = Argument(name="clusters", type="integer", required=False, default=10_000,
-                                  description="Number of clusters to process")
-OPTIONAL_CLUSTER_LIMIT_ARGUMENT = Argument(name="limit", type="integer", required=False,
-                                           description="Number of clusters to process")
+LEAF_TARGET_ARGUMENT = Argument(
+    name="leaf-target",
+    type="integer",
+    required=False,
+    default=50,
+    description="Target number of documents per leaf cluster",
+)
+MAX_K_ARGUMENT = Argument(
+    name="max-k",
+    type="integer",
+    required=False,
+    default=50,
+    description="Maximum number of clusters to create at each level",
+)
+MAX_DEPTH_ARGUMENT = Argument(
+    name="max-depth",
+    type="integer",
+    required=False,
+    default=10,
+    description="Maximum depth for recursion",
+)
+MIN_SILHOUETTE_ARGUMENT = Argument(
+    name="min-silhouette",
+    type="float",
+    required=False,
+    default=0.03,
+    description="Minimum silhouette score to continue clustering",
+)
+CLUSTER_COUNT_ARGUMENT = Argument(
+    name="clusters",
+    type="integer",
+    required=False,
+    default=10_000,
+    description="Number of clusters to process",
+)
+OPTIONAL_CLUSTER_LIMIT_ARGUMENT = Argument(
+    name="limit",
+    type="integer",
+    required=False,
+    description="Number of clusters to process",
+)
 
 
 class RecursiveClusterCommand(Command):
@@ -981,29 +1103,39 @@ class RecursiveClusterCommand(Command):
                 MAX_K_ARGUMENT,
                 MAX_DEPTH_ARGUMENT,
                 MIN_SILHOUETTE_ARGUMENT,
-                BATCH_SIZE_ARGUMENT
-            ]
+                BATCH_SIZE_ARGUMENT,
+            ],
         )
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
-            leaf_target = args.get(LEAF_TARGET_ARGUMENT.name, LEAF_TARGET_ARGUMENT.default)
+            leaf_target = args.get(
+                LEAF_TARGET_ARGUMENT.name, LEAF_TARGET_ARGUMENT.default
+            )
             max_k = args.get(MAX_K_ARGUMENT.name, MAX_K_ARGUMENT.default)
             max_depth = args.get(MAX_DEPTH_ARGUMENT.name, MAX_DEPTH_ARGUMENT.default)
-            min_silhouette = args.get(MIN_SILHOUETTE_ARGUMENT.name, MIN_SILHOUETTE_ARGUMENT.default)
+            min_silhouette = args.get(
+                MIN_SILHOUETTE_ARGUMENT.name, MIN_SILHOUETTE_ARGUMENT.default
+            )
             batch_size = args.get(BATCH_SIZE_ARGUMENT.name, BATCH_SIZE_ARGUMENT.default)
 
             sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
             print(f"Running recursive clustering on namespace {namespace}")
-            print(f"Parameters: leaf-target={leaf_target}, max-k={max_k}, max-depth={max_depth}, "
-                  f"min-silhouette={min_silhouette}, batch-size={batch_size}")
+            print(
+                f"Parameters: leaf-target={leaf_target}, max-k={max_k}, max-depth={max_depth}, "
+                f"min-silhouette={min_silhouette}, batch-size={batch_size}"
+            )
 
             delete_cluster_tree(sqlconn, namespace)
 
-            with ProgressTracker(description="Recursive clustering", unit=" nodes") as tracker:
+            with ProgressTracker(
+                description="Recursive clustering", unit=" nodes"
+            ) as tracker:
                 nodes_created = run_recursive_clustering(
                     sqlconn,
                     namespace=namespace,
@@ -1012,13 +1144,13 @@ class RecursiveClusterCommand(Command):
                     max_depth=max_depth,
                     min_silhouette_threshold=min_silhouette,
                     batch_size=batch_size,
-                    tracker=tracker
+                    tracker=tracker,
                 )
 
             return (
                 Result.SUCCESS,
                 f"{CHECK} Recursive clustering completed. Created {nodes_created} nodes "
-                f"in cluster tree for namespace {namespace}."
+                f"in cluster tree for namespace {namespace}.",
             )
         except Exception as e:
             logger.exception(f"Failed to run recursive clustering: {e}")
@@ -1033,22 +1165,20 @@ class TopicsCommand(Command):
             name="topics",
             description="Use an LLM to discover topics for clusters according to their page content.",
             expected_args=[
-                REQUIRED_MODE_ARGUMENT,
                 OPTIONAL_LIMIT_ARGUMENT,
                 OPTIONAL_BATCH_SIZE_ARGUMENT,
-            ]
+            ],
         )
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
-            batch_size = args.get(OPTIONAL_BATCH_SIZE_ARGUMENT.name, OPTIONAL_BATCH_SIZE_ARGUMENT.default)
-            mode = args[REQUIRED_MODE_ARGUMENT.name]
+            batch_size = args.get(
+                OPTIONAL_BATCH_SIZE_ARGUMENT.name, OPTIONAL_BATCH_SIZE_ARGUMENT.default
+            )
             limit = args.get(OPTIONAL_LIMIT_ARGUMENT.name)
-
-            # Validate mode argument
-            if mode not in ["refresh", "resume"]:
-                return Result.FAILURE, f"{X} Invalid mode: {mode}. Must be 'refresh' or 'resume'"
 
             if limit:
                 logger.debug("Limit: %d clusters", limit)
@@ -1059,16 +1189,13 @@ class TopicsCommand(Command):
             topic_discovery = TopicDiscovery.get_from_env()
             topic_discovery.accumulated_errors = 0
 
-            if mode == "refresh":
-                logger.info("In refresh mode: Removing any existing cluster topics and starting fresh")
-                remove_existing_cluster_topics(sqlconn, namespace)
-            elif mode == "resume":
-                logger.debug("In resume mode: resuming progress on existing cluster topics")
-                # make sure we have the new columns for tracking adverse topic labeling progress
+            logger.debug("Resuming progress on existing cluster topics")
 
             # get all the cluster nodes
             logger.debug("Loading all cluster nodes in namespace %s", namespace)
-            cluster_node_list = get_all_cluster_nodes_for_topic_labeling(sqlconn, namespace)
+            cluster_node_list = get_all_cluster_nodes_for_topic_labeling(
+                sqlconn, namespace
+            )
 
             # figure out which are leaf nodes
             logger.debug("Determining leaf nodes")
@@ -1102,11 +1229,11 @@ class TopicsCommand(Command):
             logger.debug("Stem count: %d", cluster_count - leaf_count)
 
             # get a leaf node work list
-            if mode == "refresh":
-                leaf_node_pass_1_work_list = [node for node in cluster_node_list if node.is_leaf]
-            else:
-                leaf_node_pass_1_work_list = [node for node in cluster_node_list
-                                              if node.is_leaf and not node.first_label]
+            leaf_node_pass_1_work_list = [
+                node
+                for node in cluster_node_list
+                if node.is_leaf and not node.first_label
+            ]
 
             # Track total clusters processed across all passes
             total_clusters_processed = 0
@@ -1114,114 +1241,169 @@ class TopicsCommand(Command):
             # Pass 1: generation of leaf cluster node topics
             if leaf_node_pass_1_work_list:
                 work_list_length = len(leaf_node_pass_1_work_list)
-                logger.debug("Executing pass 1: naive generation of leaf cluster node topics")
+                logger.debug(
+                    "Executing pass 1: naive generation of leaf cluster node topics"
+                )
                 logger.debug("leaf_node_pass_1_work_list count: %d", work_list_length)
-                with ProgressTracker(description="Pass 1/4: Naive leaf node topics", unit="cluster",
-                                     total=work_list_length) as tracker:
+                with ProgressTracker(
+                    description="Pass 1/4: Naive leaf node topics",
+                    unit="cluster",
+                    total=work_list_length,
+                ) as tracker:
                     for batch in batched(leaf_node_pass_1_work_list, batch_size):
                         if limit and total_clusters_processed >= limit:
                             logger.debug("Reached processing limit")
                             break
                         if limit and len(batch) > limit - total_clusters_processed:
-                            logger.debug("Truncating batch size to %d because of limit",
-                                         limit - total_clusters_processed)
-                            batch = batch[:limit - total_clusters_processed]
-                        topic_discovery.naively_summarize_page_topics_batch(namespace, batch, page_content_map)
+                            logger.debug(
+                                "Truncating batch size to %d because of limit",
+                                limit - total_clusters_processed,
+                            )
+                            batch = batch[: limit - total_clusters_processed]
+                        topic_discovery.naively_summarize_page_topics_batch(
+                            namespace, batch, page_content_map
+                        )
                         update_cluster_tree_first_labels(sqlconn, namespace, batch)
                         tracker.update(len(batch))
                         total_clusters_processed += len(batch)
-                        logger.debug("After batch, total processed is now %d", total_clusters_processed)
+                        logger.debug(
+                            "After batch, total processed is now %d",
+                            total_clusters_processed,
+                        )
             else:
                 logger.debug("Skipping pass 1 because no nodes need work")
 
             if limit and total_clusters_processed >= limit:
-                return (Result.SUCCESS, f"{CHECK} Stopping processing at limit in pass 1. "
-                        f"Total clusters processed for namespace {namespace}: {total_clusters_processed}.")
+                return (
+                    Result.SUCCESS,
+                    f"{CHECK} Stopping processing at limit in pass 1. "
+                    f"Total clusters processed for namespace {namespace}: {total_clusters_processed}.",
+                )
             logger.debug("Total processed after pass 1: %d", total_clusters_processed)
 
             # Pass 2: adversarial re-generation of leaf cluster node topics
 
             # get a leaf node work list
-            if mode == "refresh":
-                leaf_node_pass_2_work_list = [node for node in cluster_node_list if node.is_leaf]
-            else:
-                leaf_node_pass_2_work_list = [node for node in cluster_node_list
-                                              if node.is_leaf and not node.final_label]
+            leaf_node_pass_2_work_list = [
+                node
+                for node in cluster_node_list
+                if node.is_leaf and not node.final_label
+            ]
 
             if leaf_node_pass_2_work_list:
                 work_list_length = len(leaf_node_pass_2_work_list)
-                logger.debug("Executing pass 2: adversarial re-generation of leaf cluster node topics")
+                logger.debug(
+                    "Executing pass 2: adversarial re-generation of leaf cluster node topics"
+                )
                 logger.debug("leaf_node_pass_2_work_list count: %d", work_list_length)
-                with ProgressTracker(description="Pass 2/4: Adversarial leaf node topics", unit="cluster",
-                                     total=work_list_length) as tracker:
+                with ProgressTracker(
+                    description="Pass 2/4: Adversarial leaf node topics",
+                    unit="cluster",
+                    total=work_list_length,
+                ) as tracker:
 
                     for batch in batched(leaf_node_pass_2_work_list, batch_size):
                         if limit and total_clusters_processed >= limit:
                             logger.debug("Reached processing limit")
                             break
                         if limit and len(batch) > limit - total_clusters_processed:
-                            logger.debug("Truncating batch size to %d because of limit",
-                                         limit - total_clusters_processed)
-                            batch = batch[:limit - total_clusters_processed]
+                            logger.debug(
+                                "Truncating batch size to %d because of limit",
+                                limit - total_clusters_processed,
+                            )
+                            batch = batch[: limit - total_clusters_processed]
                         topic_discovery.adversely_summarize_page_topics_batch(
-                            namespace, batch, page_content_map, parent_id_child_map,
+                            namespace,
+                            batch,
+                            page_content_map,
+                            parent_id_child_map,
                         )
                         update_cluster_tree_final_labels(sqlconn, namespace, batch)
                         tracker.update(len(batch))
                         total_clusters_processed += len(batch)
-                        logger.debug("After batch, total processed is now %d", total_clusters_processed)
+                        logger.debug(
+                            "After batch, total processed is now %d",
+                            total_clusters_processed,
+                        )
 
             else:
                 logger.debug("Skipping pass 2 because no nodes need work")
 
             if limit and total_clusters_processed >= limit:
-                return (Result.SUCCESS, f"{CHECK} Stopping processing at limit in pass 2. "
-                        f"Total clusters processed for namespace {namespace}: {total_clusters_processed}.")
+                return (
+                    Result.SUCCESS,
+                    f"{CHECK} Stopping processing at limit in pass 2. "
+                    f"Total clusters processed for namespace {namespace}: {total_clusters_processed}.",
+                )
             logger.debug("Total processed after pass 1: %d", total_clusters_processed)
 
             # Pass 3: Label topics for nodes that don't have topics yet. Should be non-leaf nodes
             pass_3_work_list = [
-                node for node in cluster_node_list if not node.first_label and node.parent_id and not node.is_leaf
+                node
+                for node in cluster_node_list
+                if not node.first_label and node.parent_id and not node.is_leaf
             ]
-            logger.debug("Sorting pass 3 worklist to go from higher depth to lower depth")
-            pass_3_work_list = sorted(pass_3_work_list, reverse=True, key=lambda node: node.depth)
+            logger.debug(
+                "Sorting pass 3 worklist to go from higher depth to lower depth"
+            )
+            pass_3_work_list = sorted(
+                pass_3_work_list, reverse=True, key=lambda node: node.depth
+            )
 
             if pass_3_work_list:
                 work_list_length = len(pass_3_work_list)
-                logger.debug("Executing pass 3: naive generation of stem cluster node topics")
+                logger.debug(
+                    "Executing pass 3: naive generation of stem cluster node topics"
+                )
                 logger.debug("pass_3_work_list count: %d", work_list_length)
-                with ProgressTracker(description="Pass 3/4: Naive stem topics",
-                                     unit="cluster",
-                                     total=work_list_length) as tracker:
+                with ProgressTracker(
+                    description="Pass 3/4: Naive stem topics",
+                    unit="cluster",
+                    total=work_list_length,
+                ) as tracker:
                     for batch in batched(pass_3_work_list, batch_size):
                         if limit and total_clusters_processed >= limit:
                             logger.debug("Reached processing limit")
                             break
                         if limit and len(batch) > limit - total_clusters_processed:
-                            logger.debug("Truncating batch size to %d because of limit",
-                                         limit - total_clusters_processed)
-                            batch = batch[:limit - total_clusters_processed]
+                            logger.debug(
+                                "Truncating batch size to %d because of limit",
+                                limit - total_clusters_processed,
+                            )
+                            batch = batch[: limit - total_clusters_processed]
                         topic_discovery.naively_summarize_cluster_topics_batch(
                             namespace, batch, parent_id_child_map
                         )
                         update_cluster_tree_first_labels(sqlconn, namespace, batch)
                         tracker.update(len(batch))
                         total_clusters_processed += len(batch)
-                        logger.debug("After batch, total processed is now %d", total_clusters_processed)
+                        logger.debug(
+                            "After batch, total processed is now %d",
+                            total_clusters_processed,
+                        )
             else:
                 logger.debug("Skipping pass 3 because no nodes need work")
 
             if limit and total_clusters_processed >= limit:
-                return (Result.SUCCESS, f"{CHECK} Stopping processing at limit in pass 3. "
-                        f"Total clusters processed for namespace {namespace}: {total_clusters_processed}.")
+                return (
+                    Result.SUCCESS,
+                    f"{CHECK} Stopping processing at limit in pass 3. "
+                    f"Total clusters processed for namespace {namespace}: {total_clusters_processed}.",
+                )
             logger.debug("Total processed after pass 3: %d", total_clusters_processed)
 
             # Pass 4: Adversarial label for non-leaf nodes
             pass_4_work_list = [
-                node for node in cluster_node_list if not node.final_label and node.parent_id and not node.is_leaf
+                node
+                for node in cluster_node_list
+                if not node.final_label and node.parent_id and not node.is_leaf
             ]
-            logger.debug("Sorting pass 4 worklist to go from higher depth to lower depth")
-            pass_4_work_list = sorted(pass_4_work_list, reverse=True, key=lambda node: node.depth)
+            logger.debug(
+                "Sorting pass 4 worklist to go from higher depth to lower depth"
+            )
+            pass_4_work_list = sorted(
+                pass_4_work_list, reverse=True, key=lambda node: node.depth
+            )
 
             # validate that the sorting worked as expected
             # TODO delete or comment out this later once we are convinced that it works
@@ -1230,24 +1412,35 @@ class TopicsCommand(Command):
 
             if pass_4_work_list:  # Only run pass 4 if pass 3 had clusters to process
                 work_list_length = len(pass_4_work_list)
-                logger.debug("Executing pass 4: adversarial re-generation of stem cluster node topics")
+                logger.debug(
+                    "Executing pass 4: adversarial re-generation of stem cluster node topics"
+                )
                 logger.debug("nodes_missing_topics count: %d", work_list_length)
-                with ProgressTracker(description="Pass 4/4: Adversarial stem topics",
-                                     unit="cluster",
-                                     total=work_list_length) as tracker:
+                with ProgressTracker(
+                    description="Pass 4/4: Adversarial stem topics",
+                    unit="cluster",
+                    total=work_list_length,
+                ) as tracker:
                     for batch in batched(pass_4_work_list, batch_size):
                         if limit and total_clusters_processed >= limit:
                             logger.debug("Reached processing limit")
                             break
                         if limit and len(batch) > limit - total_clusters_processed:
-                            logger.debug("Truncating batch size to %d because of limit",
-                                         limit - total_clusters_processed)
-                            batch = batch[:limit - total_clusters_processed]
+                            logger.debug(
+                                "Truncating batch size to %d because of limit",
+                                limit - total_clusters_processed,
+                            )
+                            batch = batch[: limit - total_clusters_processed]
 
-                        nodes_with_neighbors = [n for n in batch
-                                                if parent_id_child_map[n.parent_id]
-                                                and len(parent_id_child_map[n.parent_id]) > 1]
-                        nodes_without_neighbors = [n for n in batch if n not in nodes_with_neighbors]
+                        nodes_with_neighbors = [
+                            n
+                            for n in batch
+                            if parent_id_child_map[n.parent_id]
+                            and len(parent_id_child_map[n.parent_id]) > 1
+                        ]
+                        nodes_without_neighbors = [
+                            n for n in batch if n not in nodes_with_neighbors
+                        ]
 
                         topic_discovery.adversely_summarize_cluster_topics_batch(
                             namespace, nodes_with_neighbors, parent_id_child_map
@@ -1255,18 +1448,28 @@ class TopicsCommand(Command):
                         for node in nodes_without_neighbors:
                             node.final_label = node.first_label
 
-                        update_cluster_tree_final_labels(sqlconn, namespace, nodes_with_neighbors)
-                        update_cluster_tree_final_labels(sqlconn, namespace, nodes_without_neighbors)
+                        update_cluster_tree_final_labels(
+                            sqlconn, namespace, nodes_with_neighbors
+                        )
+                        update_cluster_tree_final_labels(
+                            sqlconn, namespace, nodes_without_neighbors
+                        )
 
                         tracker.update(len(batch))
                         total_clusters_processed += len(batch)
-                        logger.debug("After batch, total processed is now %d", total_clusters_processed)
+                        logger.debug(
+                            "After batch, total processed is now %d",
+                            total_clusters_processed,
+                        )
             else:
                 logger.debug("Skipping pass 4 because no nodes need work")
 
             if limit and total_clusters_processed >= limit:
-                return (Result.SUCCESS, f"{CHECK} Stopping processing at limit in pass 4. "
-                        f"Total clusters processed for namespace {namespace}: {total_clusters_processed}.")
+                return (
+                    Result.SUCCESS,
+                    f"{CHECK} Stopping processing at limit in pass 4. "
+                    f"Total clusters processed for namespace {namespace}: {total_clusters_processed}.",
+                )
             logger.debug("Total processed after pass 4: %d", total_clusters_processed)
 
             # Write "wikipedia" in the language appropriate way
@@ -1282,10 +1485,19 @@ class TopicsCommand(Command):
             update_cluster_tree_first_labels(sqlconn, namespace, [root_node])
             update_cluster_tree_final_labels(sqlconn, namespace, [root_node])
 
-            logger.info("Handled %d errors from openai endpoint", topic_discovery.accumulated_errors)
-            logger.info("Total clusters processed across all passes: %d", total_clusters_processed)
+            logger.info(
+                "Handled %d errors from openai endpoint",
+                topic_discovery.accumulated_errors,
+            )
+            logger.info(
+                "Total clusters processed across all passes: %d",
+                total_clusters_processed,
+            )
 
-            return Result.SUCCESS, f"{CHECK} Completed cluster topic discovery for namespace {namespace}."
+            return (
+                Result.SUCCESS,
+                f"{CHECK} Completed cluster topic discovery for namespace {namespace}.",
+            )
 
         except Exception as e:
             logger.exception(f"Failed to discover cluster topics: {e}")
@@ -1299,10 +1511,12 @@ class ProjectCommand(Command):
         super().__init__(
             name="project",
             description="Project reduced vector cluster tree nodes into 3-space.",
-            expected_args=[OPTIONAL_CLUSTER_LIMIT_ARGUMENT]
+            expected_args=[OPTIONAL_CLUSTER_LIMIT_ARGUMENT],
         )
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
             limit = args.get(OPTIONAL_CLUSTER_LIMIT_ARGUMENT.name)
@@ -1310,17 +1524,24 @@ class ProjectCommand(Command):
             sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
-            with ProgressTracker(description="Projecting into 3-space", unit="vectors") as tracker:
-                processed_count = run_pca_per_cluster(sqlconn, namespace, n_components=3, limit=limit, tracker=tracker)
+            with ProgressTracker(
+                description="Projecting into 3-space", unit="vectors"
+            ) as tracker:
+                processed_count = run_pca_per_cluster(
+                    sqlconn, namespace, n_components=3, limit=limit, tracker=tracker
+                )
 
             return (
                 Result.SUCCESS,
                 f"{CHECK} Projected reduced page embeddings in {namespace} in {processed_count} "
-                f"cluster node{'' if processed_count == 1 else 's'} into 3-space using UMAP."
+                f"cluster node{'' if processed_count == 1 else 's'} into 3-space using UMAP.",
             )
         except Exception as e:
             logger.exception(f"Failed to project embeddings: {e}")
-            return Result.FAILURE, f"{X} Failed to project reduced page embeddings into 3-space: {e}"
+            return (
+                Result.FAILURE,
+                f"{X} Failed to project reduced page embeddings into 3-space: {e}",
+            )
 
 
 class StatusCommand(Command):
@@ -1328,12 +1549,12 @@ class StatusCommand(Command):
 
     def __init__(self):
         super().__init__(
-            name="status",
-            description="Show current data status",
-            expected_args=[]
+            name="status", description="Show current data status", expected_args=[]
         )
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
             sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
@@ -1363,15 +1584,17 @@ class StatusCommand(Command):
                         SUM(CASE WHEN chunk_extracted_path IS NOT NULL THEN 1 ELSE 0 END) as extracted_chunks
                     FROM chunk_log
                     WHERE namespace = ?
-                    """, (namespace, )
+                    """,
+                    (namespace,),
                 )
                 chunk_stats = chunk_cursor.fetchone()
 
-                print(f"    Chunks: "
-                      f"{chunk_stats['downloaded_chunks']} downloaded, "
-                      f"{chunk_stats['extracted_chunks']} extracted, "
-                      f"{chunk_stats['total_chunks']} total"
-                      )
+                print(
+                    f"    Chunks: "
+                    f"{chunk_stats['downloaded_chunks']} downloaded, "
+                    f"{chunk_stats['extracted_chunks']} extracted, "
+                    f"{chunk_stats['total_chunks']} total"
+                )
 
                 # count and show page stats
                 page_log_stats_sql = """
@@ -1380,7 +1603,9 @@ class StatusCommand(Command):
                     WHERE namespace = ?
                     AND page_id IS NOT NULL
                 """
-                page_log_stats_cursor = sqlconn.execute(page_log_stats_sql, (namespace, ))
+                page_log_stats_cursor = sqlconn.execute(
+                    page_log_stats_sql, (namespace,)
+                )
                 page_log_stats = page_log_stats_cursor.fetchone()
 
                 page_vector_stats_sql = """
@@ -1393,17 +1618,20 @@ class StatusCommand(Command):
                     FROM page_vector
                     WHERE namespace = ?
                 """
-                page_vector_stats_cursor = sqlconn.execute(page_vector_stats_sql, (namespace, ))
+                page_vector_stats_cursor = sqlconn.execute(
+                    page_vector_stats_sql, (namespace,)
+                )
                 page_vector_stats = page_vector_stats_cursor.fetchone()
 
-                print(f"    Pages: "
-                      f"{page_vector_stats['embedding_count']} embeddings, "
-                      f"{page_vector_stats['reduced_count']} reduced, "
-                      f"{page_vector_stats['three_d_count']} 3D projections, "
-                      f"{page_vector_stats['clustered_count']} clustered, "
-                      f"{page_vector_stats['tree_clustered_count']} tree-clustered, "
-                      f"{page_log_stats[0]} total"
-                      )
+                print(
+                    f"    Pages: "
+                    f"{page_vector_stats['embedding_count']} embeddings, "
+                    f"{page_vector_stats['reduced_count']} reduced, "
+                    f"{page_vector_stats['three_d_count']} 3D projections, "
+                    f"{page_vector_stats['clustered_count']} clustered, "
+                    f"{page_vector_stats['tree_clustered_count']} tree-clustered, "
+                    f"{page_log_stats[0]} total"
+                )
 
                 # count and show cluster stats
                 tree_cluster_count_sql = """
@@ -1413,15 +1641,18 @@ class StatusCommand(Command):
                     FROM cluster_tree
                     WHERE namespace = ?;
                 """
-                tree_cluster_count_cursor = sqlconn.execute(tree_cluster_count_sql, (namespace, ))
+                tree_cluster_count_cursor = sqlconn.execute(
+                    tree_cluster_count_sql, (namespace,)
+                )
                 tree_cluster_count_stats = tree_cluster_count_cursor.fetchone()
 
-                print(f"    Tree clusters: "
-                      f"{tree_cluster_count_stats['first_label_count']} first labeled, "
-                      f"{tree_cluster_count_stats['final_label_count']} final labeled, "
-                      f"{tree_cluster_count_stats['the_count']} total tree nodes."
-                      "\n"
-                      )
+                print(
+                    f"    Tree clusters: "
+                    f"{tree_cluster_count_stats['first_label_count']} first labeled, "
+                    f"{tree_cluster_count_stats['final_label_count']} final labeled, "
+                    f"{tree_cluster_count_stats['the_count']} total tree nodes."
+                    "\n"
+                )
 
                 tree_depth_stats_sql = """
                     SELECT depth, COUNT() as the_count
@@ -1430,7 +1661,9 @@ class StatusCommand(Command):
                     GROUP BY depth
                     ORDER BY depth ASC;
                 """
-                tree_depth_stats_cursor = sqlconn.execute(tree_depth_stats_sql, (namespace, ))
+                tree_depth_stats_cursor = sqlconn.execute(
+                    tree_depth_stats_sql, (namespace,)
+                )
                 tree_depth_stats = tree_depth_stats_cursor.fetchall()
                 print("    Depth counts:")
                 for row in tree_depth_stats:
@@ -1453,10 +1686,12 @@ class LeafCentroidsCommand(Command):
         super().__init__(
             name="leaf-centroids",
             description="Compute centroids for leaf cluster tree nodes",
-            expected_args=[]
+            expected_args=[],
         )
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
             sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
@@ -1465,22 +1700,22 @@ class LeafCentroidsCommand(Command):
             logger.info("Computing leaf centroids for namespace: %s", namespace)
 
             with ProgressTracker(
-                description="Computing leaf centroids",
-                unit="centroids"
+                description="Computing leaf centroids", unit="centroids"
             ) as tracker:
                 centroids_computed = compute_missing_centroids(
-                    sqlconn=sqlconn,
-                    namespace=namespace,
-                    tracker=tracker
+                    sqlconn=sqlconn, namespace=namespace, tracker=tracker
                 )
 
             if centroids_computed == 0:
-                return Result.SUCCESS, f"{CHECK} No leaf centroids needed in namespace {namespace}"
+                return (
+                    Result.SUCCESS,
+                    f"{CHECK} No leaf centroids needed in namespace {namespace}",
+                )
             else:
                 return (
                     Result.SUCCESS,
                     f"{CHECK} Computed {centroids_computed} leaf centroid{'s' if centroids_computed != 1 else ''} "
-                    f"for namespace {namespace}"
+                    f"for namespace {namespace}",
                 )
 
         except Exception as e:
@@ -1495,35 +1730,39 @@ class ProjectCentroidsCommand(Command):
         super().__init__(
             name="project-centroids",
             description="Compute 3D vectors for centroids of cluster tree nodes using PCA",
-            expected_args=[]
+            expected_args=[],
         )
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         try:
             namespace = args[REQUIRED_NAMESPACE_ARGUMENT.name]
             sqlconn = get_sql_conn(namespace, env_vars[DATA_STORAGE_DIRNAME_VAR])
             ensure_tables(sqlconn)
 
-            logger.info("Computing 3D vectors for centroids in namespace: %s", namespace)
+            logger.info(
+                "Computing 3D vectors for centroids in namespace: %s", namespace
+            )
 
             with ProgressTracker(
-                description="Computing centroid 3D vectors",
-                unit="centroids"
+                description="Computing centroid 3D vectors", unit="centroids"
             ) as tracker:
                 centroids_processed = project_centroid_vectors(
-                    sqlconn=sqlconn,
-                    namespace=namespace,
-                    tracker=tracker
+                    sqlconn=sqlconn, namespace=namespace, tracker=tracker
                 )
 
             if centroids_processed == 0:
-                return Result.SUCCESS, f"{CHECK} No centroids needing 3D vectors found in namespace {namespace}"
+                return (
+                    Result.SUCCESS,
+                    f"{CHECK} No centroids needing 3D vectors found in namespace {namespace}",
+                )
             else:
                 return (
                     Result.SUCCESS,
                     f"{CHECK} Computed 3D vectors for {centroids_processed} "
                     f"centroid{'s' if centroids_processed != 1 else ''} "
-                    f"in namespace {namespace}"
+                    f"in namespace {namespace}",
                 )
 
         except Exception as e:
@@ -1531,25 +1770,29 @@ class ProjectCentroidsCommand(Command):
             return Result.FAILURE, f"{X} Failed to compute centroid 3D vectors: {e}"
 
 
-NAMESPACE_VALUE_ARGUMENT = Argument(name="value", type="string", required=False,
-                                    description="The namespace value to set")
+NAMESPACE_VALUE_ARGUMENT = Argument(
+    name="value",
+    type="string",
+    required=False,
+    description="The namespace value to set",
+)
 
 
 class NamespaceCommand(Command):
     """View or change the current namespace."""
 
-    def __init__(self, interpreter: 'CommandInterpreter'):
+    def __init__(self, interpreter: "CommandInterpreter"):
         super().__init__(
             name="namespace",
             description="View or change the current namespace",
-            expected_args=[]
+            expected_args=[],
         )
         self.interpreter = interpreter
 
     def get_help(self) -> str:
         """Get help text for the namespace command."""
         return (
-            f"Command \"{self.name}\": {self.description}\n"
+            f'Command "{self.name}": {self.description}\n'
             f"\nUsage:\n"
             f"  {self.name}           - Show the current namespace\n"
             f"  {self.name} <value>   - Set the namespace to the specified value\n"
@@ -1560,14 +1803,19 @@ class NamespaceCommand(Command):
             f"  ✓ Namespace set to: dewiki_namespace_0\n"
         )
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         try:
             namespace_value = args.get("value")
 
             if namespace_value is None:
                 # No argument - just show the current namespace
                 if self.interpreter.global_namespace:
-                    return Result.SUCCESS, f"{CHECK} Current namespace: {self.interpreter.current_namespace}"
+                    return (
+                        Result.SUCCESS,
+                        f"{CHECK} Current namespace: {self.interpreter.current_namespace}",
+                    )
                 else:
                     return Result.SUCCESS, f"{X} No namespace is set"
             else:
@@ -1580,8 +1828,12 @@ class NamespaceCommand(Command):
             return Result.FAILURE, f"{X} Failed: {e}"
 
 
-COMMAND_NAME_ARGUMENT = Argument(name="command", type="string", required=False,
-                                 description="Get help on the specific named command")
+COMMAND_NAME_ARGUMENT = Argument(
+    name="command",
+    type="string",
+    required=False,
+    description="Get help on the specific named command",
+)
 
 
 class HelpCommand(Command):
@@ -1591,11 +1843,13 @@ class HelpCommand(Command):
         super().__init__(
             name="help",
             description="Show help information",
-            expected_args=[COMMAND_NAME_ARGUMENT]
+            expected_args=[COMMAND_NAME_ARGUMENT],
         )
         self.parser = parser
 
-    def execute(self, args: dict[str, Any], env_vars: dict[str, str]) -> tuple[Result, str]:
+    def execute(
+        self, args: dict[str, Any], env_vars: dict[str, str]
+    ) -> tuple[Result, str]:
         command_name = args.get(COMMAND_NAME_ARGUMENT.name)
 
         if command_name:
@@ -1615,9 +1869,7 @@ class HelpCommand(Command):
                     "  Use 'help <command>' for more information about a specific command."
                 )
             else:
-                help_text += (
-                    "\nUse 'help <command>' for more information about a specific command."
-                )
+                help_text += "\nUse 'help <command>' for more information about a specific command."
 
             help_text += (
                 "\n\nData Processing Pipeline:\n"
@@ -1699,7 +1951,9 @@ class CommandInterpreter:
                 if not command_name:
                     continue
 
-                result = self.dispatcher.dispatch(command_name, self.current_namespace, args, self.env_values)
+                result = self.dispatcher.dispatch(
+                    command_name, self.current_namespace, args, self.env_values
+                )
                 print(result[1])
                 print()
 
@@ -1713,7 +1967,9 @@ class CommandInterpreter:
                 print(f"Error: {e}")
                 logger.error(f"Interactive mode error: {e}")
 
-    def run_command(self, command_args: list[str], namespace: str | None = None) -> Result:
+    def run_command(
+        self, command_args: list[str], namespace: str | None = None
+    ) -> Result:
         """Run a single command."""
         if not command_args:
             print("Usage: python command.py <command> [options]")
@@ -1751,29 +2007,45 @@ class CommandInterpreter:
                     continue
                 if arg.type == "integer":
                     parser.add_argument(
-                        f"--{arg.name}", type=int, required=True, help=f"Required argument: {arg.name}"
+                        f"--{arg.name}",
+                        type=int,
+                        required=True,
+                        help=f"Required argument: {arg.name}",
                     )
                 elif arg.type == "float":
                     parser.add_argument(
-                        f"--{arg.name}", type=float, required=True, help=f"Required argument: {arg.name}"
+                        f"--{arg.name}",
+                        type=float,
+                        required=True,
+                        help=f"Required argument: {arg.name}",
                     )
                 else:
                     parser.add_argument(
-                        f"--{arg.name}", required=True, help=f"Required argument: {arg.name}"
+                        f"--{arg.name}",
+                        required=True,
+                        help=f"Required argument: {arg.name}",
                     )
 
             for arg in command.get_optional_args():
                 if arg.type == "integer":
                     parser.add_argument(
-                        f"--{arg.name}", type=int, default=arg.default, help=f"Optional argument: {arg.name}"
+                        f"--{arg.name}",
+                        type=int,
+                        default=arg.default,
+                        help=f"Optional argument: {arg.name}",
                     )
                 elif arg.type == "float":
                     parser.add_argument(
-                        f"--{arg.name}", type=float, default=arg.default, help=f"Optional argument: {arg.name}"
+                        f"--{arg.name}",
+                        type=float,
+                        default=arg.default,
+                        help=f"Optional argument: {arg.name}",
                     )
                 else:
                     parser.add_argument(
-                        f"--{arg.name}", default=arg.default, help=f"Optional argument: {arg.name}"
+                        f"--{arg.name}",
+                        default=arg.default,
+                        help=f"Optional argument: {arg.name}",
                     )
 
         try:
@@ -1795,8 +2067,11 @@ def main() -> int:
 
     # Parse global arguments (namespace)
     global_parser = argparse.ArgumentParser(add_help=False)
-    global_parser.add_argument("--namespace", required=False,
-                               help="The wiki namespace (e.g. enwiki_namespace_0)")
+    global_parser.add_argument(
+        "--namespace",
+        required=False,
+        help="The wiki namespace (e.g. enwiki_namespace_0)",
+    )
     global_args, remaining_args = global_parser.parse_known_args()
 
     env_values = read_essential_env_variables()
@@ -1819,7 +2094,9 @@ def main() -> int:
         if not global_args.namespace:
             print("Welcome to wp-embeddings command interpreter!")
             while True:
-                namespace_input = input("Please enter a namespace (e.g. enwiki_namespace_0): ").strip()
+                namespace_input = input(
+                    "Please enter a namespace (e.g. enwiki_namespace_0): "
+                ).strip()
                 if namespace_input:
                     interpreter.set_namespace(namespace_input)
                     break
