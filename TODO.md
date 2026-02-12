@@ -1,9 +1,16 @@
 # TODO tasks for the web application
 
+## Compliance
+
+* Add a privacy policy statement in the app. See https://wikitech.wikimedia.org/wiki/Wikitech:Cloud_Services_Terms_of_use
+* Link to the Cloud Services end user terms of use https://wikitech.wikimedia.org/wiki/Wikitech:Cloud_Services_End_User_Terms_of_use
+
+
 ## Security (Internet Exposure)
 
 ### Critical Priority
-None
+
+* Set CORS environment variables in toolforge
 
 ### High Priority
 * **Add Rate Limiting** - Implement rate limiting on all API endpoints to prevent DoS attacks and API abuse (use `slowapi` or `fastapi-limiter`)
@@ -13,7 +20,6 @@ None
 * **Configure Production Logging** - Replace `logging.DEBUG` with environment-based logging level (use `LOG_LEVEL` env var)
 * **Add Input Validation for Limits** - Add maximum value constraints to pagination parameters (e.g., `limit` should have `le=1000`)
 * **Add Security Headers** - Implement middleware for X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, and HSTS headers
-* **Enforce HTTPS** - Add HSTS headers and configure nginx to redirect HTTP to HTTPS
 
 ### Low Priority
 * **Validate Namespace Format** - Add regex validation for namespace parameter to prevent potential path traversal
@@ -25,6 +31,7 @@ None
 
 ## Bugs
 
+* Loading spinner needed after navigating and before nodes are loaded
 * Parent button is placing departed node billboards too close to their parent
 
 ## Usability improvements
@@ -34,7 +41,7 @@ None
 * Mobile layout fixes (controls and info boxes)
 * Tune the LOD for billboards
 
-## Technical improvements
+## Technical and performance improvements
 
 * Caching in API layer of request + response
 * Migrate to real db backend
