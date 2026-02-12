@@ -45,7 +45,6 @@ None
 
 ## Technical and performance improvements
 
-* Remove `--mode refresh` from topics command, use `resume` always
 * Caching in API layer of request + response
 * Migrate to real db backend
 
