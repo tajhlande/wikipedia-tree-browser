@@ -76,11 +76,44 @@ class CORSConfig:
         return [h.strip() for h in headers.split(",")]
 
 
+class CacheConfig:
+    """Cache configuration settings"""
+
+    @staticmethod
+    def get_ttl_seconds() -> int:
+        """
+        Get cache TTL (time-to-live) in seconds from environment
+
+        Returns:
+            TTL in seconds, default is 3600 (1 hour)
+
+        Environment:
+            CACHE_TTL_SECONDS: Time-to-live for cache entries in seconds
+        """
+        return int(os.getenv("CACHE_TTL_SECONDS", "3600"))
+
+    @staticmethod
+    def get_max_size() -> int:
+        """
+        Get maximum cache size from environment
+
+        Returns:
+            Maximum number of items in cache, default is 100
+
+        Environment:
+            CACHE_MAX_SIZE: Maximum number of entries in the cache
+        """
+        return int(os.getenv("CACHE_MAX_SIZE", "100"))
+
+
 class Config:
     """Main application configuration"""
 
     # CORS settings
     cors = CORSConfig()
+
+    # Cache settings
+    cache = CacheConfig()
 
     # Data directory (shared with dataprep)
     data_dir = Path(os.getenv("DATA_STORAGE_DIRNAME_VAR", "data"))

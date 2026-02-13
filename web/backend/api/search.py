@@ -9,6 +9,7 @@ from services.cluster_service import ClusterService
 from services.service_setup import get_cluster_service
 
 from util.languages import get_language_info_for_namespace
+from util.cache import async_cache
 
 router = APIRouter()
 
@@ -46,6 +47,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/namespaces")
+@async_cache(key_prefix="available_namespaces")
 async def get_available_namespaces(
     cluster_service: ClusterService = Depends(get_cluster_service),
 ):

@@ -9,6 +9,7 @@ from typing import Annotated, List
 from models.page import PageResponse, PageDetailResponse
 from services.cluster_service import ClusterService
 from services.service_setup import get_cluster_service
+from util.cache import async_cache
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ logger = logging.getLogger(__name__)
 @router.get(
     "/namespace/{namespace}/node_id/{node_id}", response_model=List[PageResponse]
 )
+@async_cache(key_prefix="pages_in_cluster")
 async def get_pages_in_cluster(
     namespace: Annotated[str, Path(title="Wikipedia namespace")],
     node_id: Annotated[int, Path(title="Cluster node ID")],
@@ -38,6 +40,7 @@ async def get_pages_in_cluster(
 @router.get(
     "/namespace/{namespace}/page_id/{page_id}", response_model=PageDetailResponse
 )
+@async_cache(key_prefix="page_details")
 async def get_page_details(
     namespace: Annotated[str, Path(title="Wikipedia namespace")],
     page_id: Annotated[int, Path(title="Page ID")],

@@ -10,6 +10,7 @@ from typing import Annotated, List
 from models.cluster import ClusterNodeResponse
 from services.cluster_service import ClusterService
 from services.service_setup import service_provider
+from util.cache import async_cache
 
 router = APIRouter()
 
@@ -19,6 +20,7 @@ logger.setLevel(logging.DEBUG)
 
 
 @router.get("/namespace/{namespace}/root_node", response_model=ClusterNodeResponse)
+@async_cache(key_prefix="root_node")
 async def get_root_node(
     namespace: Annotated[str, Path(title="Wikipedia namespace")],
     cluster_service: ClusterService = Depends(
@@ -48,6 +50,7 @@ async def get_root_node(
 @router.get(
     "/namespace/{namespace}/node_id/{node_id}", response_model=ClusterNodeResponse
 )
+@async_cache(key_prefix="cluster_node")
 async def get_cluster_node(
     namespace: Annotated[str, Path(title="Wikipedia namespace")],
     node_id: Annotated[int, Path(title="Cluster node ID")],
@@ -76,6 +79,7 @@ async def get_cluster_node(
     "/namespace/{namespace}/node_id/{node_id}/children",
     response_model=List[ClusterNodeResponse],
 )
+@async_cache(key_prefix="cluster_node_children")
 async def get_cluster_node_children(
     namespace: Annotated[str, Path(title="Wikipedia namespace")],
     node_id: Annotated[int, Path(title="Cluster node ID")],
@@ -99,6 +103,7 @@ async def get_cluster_node_children(
     "/namespace/{namespace}/node_id/{node_id}/siblings",
     response_model=List[ClusterNodeResponse],
 )
+@async_cache(key_prefix="cluster_node_siblings")
 async def get_cluster_node_siblings(
     namespace: Annotated[str, Path(title="Wikipedia namespace")],
     node_id: Annotated[int, Path(title="Cluster node ID")],
@@ -119,6 +124,7 @@ async def get_cluster_node_siblings(
 
 
 @router.get("/namespace/{namespace}/node_id/{node_id}/parent")
+@async_cache(key_prefix="cluster_node_parent")
 async def get_cluster_node_parent(
     namespace: Annotated[str, Path(title="Wikipedia namespace")],
     node_id: Annotated[int, Path(title="Cluster node ID")],
@@ -139,6 +145,7 @@ async def get_cluster_node_parent(
 
 
 @router.get("/namespace/{namespace}/node_id/{node_id}/ancestors")
+@async_cache(key_prefix="cluster_node_ancestors")
 async def get_cluster_node_ancestors(
     namespace: Annotated[str, Path(title="Wikipedia namespace")],
     node_id: Annotated[int, Path(title="Cluster node ID")],
