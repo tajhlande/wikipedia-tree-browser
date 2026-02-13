@@ -70,7 +70,9 @@ class TestAsyncCacheDecorator:
         result1 = await greet("Alice", greeting="Hi")
         result2 = await greet("Alice", greeting="Hi")  # Cache hit
         result3 = await greet("Bob", greeting="Hi")  # Cache miss
-        result4 = await greet("Alice", greeting="Hello")  # Cache miss (different greeting)
+        result4 = await greet(
+            "Alice", greeting="Hello"
+        )  # Cache miss (different greeting)
 
         assert result1 == "Hi, Alice!"
         assert result2 == "Hi, Alice!"
@@ -110,6 +112,7 @@ class TestAsyncCacheDecorator:
     @pytest.mark.asyncio
     async def test_cache_stats_updates(self):
         """Test that cache stats update correctly"""
+
         @async_cache(key_prefix="test_stats")
         async def dummy_func(x: int) -> int:
             return x

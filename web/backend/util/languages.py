@@ -32,10 +32,13 @@ DEFAULT_LANGUAGE_FILE_PATH = "../../dataprep/languages.csv"
 
 class LanguageDataError(Exception):
     """Custom exception for language data validation errors."""
+
     pass
 
 
-def load_languages_from_csv(filepath: str = DEFAULT_LANGUAGE_FILE_PATH) -> LanguageInfoDict:
+def load_languages_from_csv(
+    filepath: str = DEFAULT_LANGUAGE_FILE_PATH,
+) -> LanguageInfoDict:
     """
     Load language code, name, and namespace data from a CSV file.
 
@@ -62,14 +65,22 @@ def load_languages_from_csv(filepath: str = DEFAULT_LANGUAGE_FILE_PATH) -> Langu
             reader = csv.DictReader(csvfile)
 
             # Validate headers
-            expected_headers = {_LANGUAGE, _ISO_639_1_CODE, _NAMESPACE, _ENGLISH_NAME, _LOCAL_NAME, }
+            expected_headers = {
+                _LANGUAGE,
+                _ISO_639_1_CODE,
+                _NAMESPACE,
+                _ENGLISH_NAME,
+                _LOCAL_NAME,
+            }
             if not expected_headers.issubset(reader.fieldnames or set()):
                 raise LanguageDataError(
                     f"Invalid CSV headers. Expected: {expected_headers}, "
                     f"Got: {set(reader.fieldnames or [])}"
                 )
 
-            for row_num, row in enumerate(reader, start=2):  # Start at 2 (header is row 1)
+            for row_num, row in enumerate(
+                reader, start=2
+            ):  # Start at 2 (header is row 1)
                 try:
                     language = row[_LANGUAGE].strip()
                     iso_code = row[_ISO_639_1_CODE].strip()
@@ -79,24 +90,26 @@ def load_languages_from_csv(filepath: str = DEFAULT_LANGUAGE_FILE_PATH) -> Langu
 
                     # Validate data
                     if not all([language, iso_code, namespace]):
-                        raise LanguageDataError(
-                            f"Empty field in row {row_num}: {row}"
-                        )
+                        raise LanguageDataError(f"Empty field in row {row_num}: {row}")
 
                     # Check for duplicate namespaces
                     if namespace in lang_dict:
-                        logger.warning(f"Duplicate namespace '{namespace}' found in row {row_num}")
+                        logger.warning(
+                            f"Duplicate namespace '{namespace}' found in row {row_num}"
+                        )
 
                     lang_dict[namespace] = LanguageInfo(
                         language=language,
                         iso_639_1_code=iso_code,
                         namespace=namespace,
                         english_wiki_name=english_name,
-                        localized_wiki_name=localized_name
-                        )
+                        localized_wiki_name=localized_name,
+                    )
 
                 except KeyError as e:
-                    raise LanguageDataError(f"Missing required field in row {row_num}: {e}")
+                    raise LanguageDataError(
+                        f"Missing required field in row {row_num}: {e}"
+                    )
 
     except csv.Error as e:
         raise LanguageDataError(f"CSV parsing error: {e}")
@@ -112,7 +125,9 @@ namespace_to_lang_info_dict: LanguageInfoDict = dict()
 _dict_init_lock = Lock()
 
 
-def get_language_info_for_namespace(namespace: str, language_file: str = DEFAULT_LANGUAGE_FILE_PATH) -> LanguageInfo:
+def get_language_info_for_namespace(
+    namespace: str, language_file: str = DEFAULT_LANGUAGE_FILE_PATH
+) -> LanguageInfo:
     """
     Given a namespace, get the name of the corresponding language for it.
     Loads the language data from a CSV file, and uses global dict variables to cache it.
@@ -134,7 +149,9 @@ def get_language_info_for_namespace(namespace: str, language_file: str = DEFAULT
     return namespace_to_lang_info_dict[namespace]
 
 
-def get_language_for_namespace(namespace: str, language_file: str = DEFAULT_LANGUAGE_FILE_PATH) -> str:
+def get_language_for_namespace(
+    namespace: str, language_file: str = DEFAULT_LANGUAGE_FILE_PATH
+) -> str:
     """
     Given a namespace, get the name of the corresponding language for it.
     Loads the language data from a CSV file, and uses global dict variables to cache it.
@@ -142,7 +159,9 @@ def get_language_for_namespace(namespace: str, language_file: str = DEFAULT_LANG
     return get_language_info_for_namespace(namespace, language_file).language
 
 
-def get_localized_wiki_name_for_namespace(namespace: str, language_file: str = DEFAULT_LANGUAGE_FILE_PATH) -> str:
+def get_localized_wiki_name_for_namespace(
+    namespace: str, language_file: str = DEFAULT_LANGUAGE_FILE_PATH
+) -> str:
     """
     Given a namespace, get the name of the corresponding language for it.
     Loads the language data from a CSV file, and uses global dict variables to cache it.

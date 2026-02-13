@@ -77,9 +77,13 @@ frontend_dist = Path(__file__).parent.parent.parent.parent / "web" / "frontend" 
 # Mount the SPA frontend at /app
 if frontend_dist.exists():
     # Mount assets directory separately (index.html references /assets/...)
-    app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
+    app.mount(
+        "/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets"
+    )
     # Mount the rest of the app at /app
-    app.mount("/app", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
+    app.mount(
+        "/app", StaticFiles(directory=str(frontend_dist), html=True), name="frontend"
+    )
 
 
 @app.get("/")

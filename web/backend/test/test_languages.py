@@ -33,7 +33,9 @@ Spanish,es,eswiki_namespace_0,Spanish Wikipedia,Wikipedia en español"""
 @pytest.fixture
 def sample_csv_file(sample_csv_content):
     """Create a temporary CSV file with sample data"""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8') as f:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".csv", delete=False, encoding="utf-8"
+    ) as f:
         f.write(sample_csv_content)
         temp_path = f.name
 
@@ -48,7 +50,9 @@ def minimal_csv_file():
     """Create a minimal CSV file with only required data"""
     content = """Language,ISO 639-1 Code,Namespace,English Name,Local Name
 Test,tt,testwiki,Test Wiki,Test Wiki"""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8') as f:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".csv", delete=False, encoding="utf-8"
+    ) as f:
         f.write(content)
         temp_path = f.name
 
@@ -82,7 +86,9 @@ class TestLoadLanguagesFromCSV:
         """Test that CSV loading strips whitespace from fields"""
         content = """Language,ISO 639-1 Code,Namespace,English Name,Local Name
   English  ,  en  ,  enwiki  ,  English Wikipedia  ,  English Wikipedia  """
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8') as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False, encoding="utf-8"
+        ) as f:
             f.write(content)
             temp_path = f.name
 
@@ -107,7 +113,9 @@ class TestLoadLanguagesFromCSV:
         """Test CSV with missing required headers"""
         content = """Language,ISO 639-1 Code
 English,en"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8') as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False, encoding="utf-8"
+        ) as f:
             f.write(content)
             temp_path = f.name
 
@@ -123,7 +131,9 @@ English,en"""
         """Test CSV with empty required fields"""
         content = """Language,ISO 639-1 Code,Namespace,English Name,Local Name
 English,,enwiki,English Wikipedia,English Wikipedia"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8') as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False, encoding="utf-8"
+        ) as f:
             f.write(content)
             temp_path = f.name
 
@@ -138,7 +148,9 @@ English,,enwiki,English Wikipedia,English Wikipedia"""
     def test_load_csv_no_data_rows(self):
         """Test CSV with only headers (no data)"""
         content = """Language,ISO 639-1 Code,Namespace,English Name,Local Name"""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8') as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False, encoding="utf-8"
+        ) as f:
             f.write(content)
             temp_path = f.name
 
@@ -153,13 +165,17 @@ English,,enwiki,English Wikipedia,English Wikipedia"""
     def test_load_csv_duplicate_namespace_warning(self, sample_csv_file):
         """Test that duplicate namespaces generate a warning"""
         # Read original content
-        with open(sample_csv_file, 'r') as f:
+        with open(sample_csv_file, "r") as f:
             content = f.read()
 
         # Add a duplicate entry
-        duplicate_content = content + "\nEnglish,en,enwiki_namespace_0,Duplicate,Duplicate"
+        duplicate_content = (
+            content + "\nEnglish,en,enwiki_namespace_0,Duplicate,Duplicate"
+        )
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, encoding='utf-8') as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".csv", delete=False, encoding="utf-8"
+        ) as f:
             f.write(duplicate_content)
             temp_path = f.name
 
@@ -184,7 +200,9 @@ class TestLanguageInfoLookup:
         """Clear global dict after each test"""
         util.languages.namespace_to_lang_info_dict.clear()
 
-    def test_get_language_info_for_namespace_loads_on_first_call(self, minimal_csv_file):
+    def test_get_language_info_for_namespace_loads_on_first_call(
+        self, minimal_csv_file
+    ):
         """Test that first call loads from CSV"""
         result = get_language_info_for_namespace("testwiki", minimal_csv_file)
 
@@ -192,7 +210,9 @@ class TestLanguageInfoLookup:
         assert result.language == "Test"
         assert result.namespace == "testwiki"
 
-    def test_get_language_info_for_namespace_uses_cache_on_second_call(self, minimal_csv_file):
+    def test_get_language_info_for_namespace_uses_cache_on_second_call(
+        self, minimal_csv_file
+    ):
         """Test that subsequent calls use cached data"""
         first_result = get_language_info_for_namespace("testwiki", minimal_csv_file)
         second_result = get_language_info_for_namespace("testwiki", minimal_csv_file)
@@ -256,7 +276,9 @@ class TestLanguageInfoLookupMultipleEntries:
 
         # These should use cached data
         lang = get_language_for_namespace("enwiki_namespace_0", sample_csv_file)
-        local_name = get_localized_wiki_name_for_namespace("enwiki_namespace_0", sample_csv_file)
+        local_name = get_localized_wiki_name_for_namespace(
+            "enwiki_namespace_0", sample_csv_file
+        )
 
         assert lang == "English"
         assert local_name == "English Wikipedia"

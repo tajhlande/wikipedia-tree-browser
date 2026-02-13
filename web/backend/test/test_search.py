@@ -29,11 +29,7 @@ class TestSearchAPILogic:
     @pytest.fixture
     def sample_namespace_list(self) -> List[str]:
         """Create a sample list of namespaces for testing"""
-        return [
-            "enwiki_namespace_0",
-            "dewiki_namespace_0",
-            "frwiki_namespace_0"
-        ]
+        return ["enwiki_namespace_0", "dewiki_namespace_0", "frwiki_namespace_0"]
 
     @pytest.fixture
     def sample_language_info(self) -> LanguageInfo:
@@ -43,7 +39,7 @@ class TestSearchAPILogic:
             iso_639_1_code="en",
             namespace="enwiki_namespace_0",
             english_wiki_name="English Wikipedia",
-            localized_wiki_name="English Wikipedia"
+            localized_wiki_name="English Wikipedia",
         )
 
     @pytest.mark.asyncio
@@ -53,7 +49,9 @@ class TestSearchAPILogic:
         """Test successful retrieval of available namespaces"""
         # Setup - override the dependency with mock service
         app.dependency_overrides[get_cluster_service] = lambda: mock_cluster_service
-        mock_cluster_service.get_available_namespaces.return_value = sample_namespace_list
+        mock_cluster_service.get_available_namespaces.return_value = (
+            sample_namespace_list
+        )
 
         try:
             # Test - call the endpoint
@@ -85,7 +83,9 @@ class TestSearchAPILogic:
             app.dependency_overrides.clear()
 
     @pytest.mark.asyncio
-    async def test_get_available_namespaces_logic_empty_result(self, mock_cluster_service):
+    async def test_get_available_namespaces_logic_empty_result(
+        self, mock_cluster_service
+    ):
         """Test retrieval of namespaces when no namespaces are available"""
         # Setup - override the dependency with mock service
         app.dependency_overrides[get_cluster_service] = lambda: mock_cluster_service
@@ -104,7 +104,9 @@ class TestSearchAPILogic:
             app.dependency_overrides.clear()
 
     @pytest.mark.asyncio
-    async def test_get_available_namespaces_logic_service_error(self, mock_cluster_service):
+    async def test_get_available_namespaces_logic_service_error(
+        self, mock_cluster_service
+    ):
         """Test retrieval of namespaces when service throws an exception"""
         # Setup - override the dependency with mock service
         app.dependency_overrides[get_cluster_service] = lambda: mock_cluster_service
@@ -131,7 +133,9 @@ class TestSearchAPILogic:
         """Test retrieval of namespaces when only one namespace is available"""
         # Setup - override the dependency with mock service
         app.dependency_overrides[get_cluster_service] = lambda: mock_cluster_service
-        mock_cluster_service.get_available_namespaces.return_value = ["enwiki_namespace_0"]
+        mock_cluster_service.get_available_namespaces.return_value = [
+            "enwiki_namespace_0"
+        ]
 
         try:
             # Test - call the endpoint
@@ -158,7 +162,9 @@ class TestSearchAPILogic:
         """Test that the response structure contains all expected fields"""
         # Setup - override the dependency with mock service
         app.dependency_overrides[get_cluster_service] = lambda: mock_cluster_service
-        mock_cluster_service.get_available_namespaces.return_value = sample_namespace_list
+        mock_cluster_service.get_available_namespaces.return_value = (
+            sample_namespace_list
+        )
 
         try:
             # Test - call the endpoint
@@ -170,9 +176,16 @@ class TestSearchAPILogic:
 
             # Check that all items have the correct structure
             for item in data:
-                required_fields = ["namespace", "language", "english_wiki_name", "localized_wiki_name"]
+                required_fields = [
+                    "namespace",
+                    "language",
+                    "english_wiki_name",
+                    "localized_wiki_name",
+                ]
                 for field in required_fields:
-                    assert field in item, f"Field '{field}' missing from response item: {item}"
+                    assert (
+                        field in item
+                    ), f"Field '{field}' missing from response item: {item}"
 
                 # Check that fields are not None
                 assert item["namespace"] is not None

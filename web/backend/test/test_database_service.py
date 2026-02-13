@@ -65,7 +65,8 @@ def sample_db(temp_db_dir):
     conn.execute("PRAGMA journal_mode=WAL;")
 
     # Create cluster_tree table
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE cluster_tree (
             namespace TEXT NOT NULL,
             node_id INTEGER NOT NULL,
@@ -77,10 +78,12 @@ def sample_db(temp_db_dir):
             centroid_three_d TEXT,
             PRIMARY KEY (namespace, node_id)
         );
-    """)
+    """
+    )
 
     # Create page_log table
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE page_log (
             namespace TEXT NOT NULL,
             page_id INTEGER NOT NULL,
@@ -89,17 +92,20 @@ def sample_db(temp_db_dir):
             url TEXT,
             PRIMARY KEY (namespace, page_id)
         );
-    """)
+    """
+    )
 
     # Create page_vector table
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE page_vector (
             namespace TEXT NOT NULL,
             page_id INTEGER NOT NULL,
             cluster_node_id INTEGER,
             PRIMARY KEY (namespace, page_id)
         );
-    """)
+    """
+    )
 
     # Insert test cluster data
     clusters = [
@@ -113,7 +119,7 @@ def sample_db(temp_db_dir):
             "(node_id, namespace, parent_id, depth, doc_count, "
             "child_count, final_label, centroid_three_d) "
             "VALUES (?, 'test_namespace', ?, ?, ?, ?, ?, ?)",
-            (node_id, parent_id, depth, doc_count, child_count, label, centroid)
+            (node_id, parent_id, depth, doc_count, child_count, label, centroid),
         )
 
     # Insert test page data
@@ -126,12 +132,12 @@ def sample_db(temp_db_dir):
         conn.execute(
             "INSERT INTO page_log (namespace, page_id, title, abstract, url) "
             "VALUES ('test_namespace', ?, ?, ?, ?)",
-            (page_id, title, abstract, url)
+            (page_id, title, abstract, url),
         )
         conn.execute(
             "INSERT INTO page_vector (namespace, page_id, cluster_node_id) "
             "VALUES ('test_namespace', ?, ?)",
-            (page_id, cluster_node_id)
+            (page_id, cluster_node_id),
         )
 
     conn.commit()
@@ -169,6 +175,7 @@ class TestConnectionManagement:
 
         # Use a temp file instead of :memory: for proper WAL mode verification
         import tempfile
+
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             temp_path = f.name
 
@@ -178,10 +185,15 @@ class TestConnectionManagement:
             journal_mode = cursor.fetchone()[0]
 
             # WAL mode is set, or it falls back to something else depending on platform
-            assert journal_mode in ["wal", "memory", "delete"], f"Expected wal mode, got {journal_mode}"
+            assert journal_mode in [
+                "wal",
+                "memory",
+                "delete",
+            ], f"Expected wal mode, got {journal_mode}"
             conn.close()
         finally:
             import os
+
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
 
@@ -201,6 +213,7 @@ class TestConnectionManagement:
         # Create connections using temp files instead of :memory:
         import tempfile
         import os
+
         temp_files = []
         for i in range(2):
             with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
@@ -246,7 +259,9 @@ class TestRowMapping:
             "CREATE TABLE test (page_id INTEGER, title TEXT, abstract TEXT, url TEXT, "
             "cluster_node_id INTEGER)"
         )
-        conn.execute("INSERT INTO test VALUES (1, 'Test', 'Abstract', 'http://test.com', 5)")
+        conn.execute(
+            "INSERT INTO test VALUES (1, 'Test', 'Abstract', 'http://test.com', 5)"
+        )
         cursor = conn.execute("SELECT * FROM test")
         row = cursor.fetchone()
 
@@ -265,7 +280,9 @@ class TestRowMapping:
         conn.row_factory = sqlite3.Row
 
         # Create table with extra field
-        conn.execute("CREATE TABLE test (page_id INTEGER, title TEXT, extra_field TEXT)")
+        conn.execute(
+            "CREATE TABLE test (page_id INTEGER, title TEXT, extra_field TEXT)"
+        )
         conn.execute("INSERT INTO test VALUES (1, 'Test', 'Extra')")
         cursor = conn.execute("SELECT * FROM test")
         row = cursor.fetchone()
@@ -401,7 +418,9 @@ class TestPageQueries:
 
     def test_get_pages_in_cluster_with_offset(self, db_service, sample_db):
         """Test get_pages_in_cluster with offset"""
-        result = db_service.get_pages_in_cluster("test_namespace", 2, limit=10, offset=1)
+        result = db_service.get_pages_in_cluster(
+            "test_namespace", 2, limit=10, offset=1
+        )
 
         assert len(result) == 1
         assert result[0].page_id == 2
@@ -577,6 +596,7 @@ class TestErrorHandling:
         """Test get_page_by_id with nonexistent namespace raises error"""
         # When the database file doesn't exist, it's created but tables are missing
         import pytest
+
         with pytest.raises(sqlite3.OperationalError, match="no such table"):
             db_service.get_page_by_id("nonexistent", 1)
 
@@ -584,5 +604,6 @@ class TestErrorHandling:
         """Test get_cluster_node with nonexistent namespace raises error"""
         # When the database file doesn't exist, it's created but tables are missing
         import pytest
+
         with pytest.raises(sqlite3.OperationalError, match="no such table"):
             db_service.get_cluster_node("nonexistent", 1)

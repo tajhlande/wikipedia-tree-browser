@@ -37,6 +37,7 @@ class TestClusterAPIUnit:
             doc_count=100,
             child_count=5,
             final_label="Root Topic",
+            centroid_3d=None,
         )
 
     @pytest.fixture
@@ -45,21 +46,23 @@ class TestClusterAPIUnit:
         return [
             ClusterNodeResponse(
                 node_id=2,
-            namespace="enwiki_namespace_0",
+                namespace="enwiki_namespace_0",
                 parent_id=1,
                 depth=1,
                 doc_count=50,
                 child_count=2,
                 final_label="Child Topic 1",
+                centroid_3d=None,
             ),
             ClusterNodeResponse(
                 node_id=3,
-            namespace="enwiki_namespace_0",
+                namespace="enwiki_namespace_0",
                 parent_id=1,
                 depth=1,
                 doc_count=30,
                 child_count=1,
                 final_label="Child Topic 2",
+                centroid_3d=None,
             ),
         ]
 
@@ -69,21 +72,23 @@ class TestClusterAPIUnit:
         return [
             ClusterNodeResponse(
                 node_id=4,
-            namespace="enwiki_namespace_0",
+                namespace="enwiki_namespace_0",
                 parent_id=1,
                 depth=1,
                 doc_count=20,
                 child_count=0,
                 final_label="Sibling Topic 1",
+                centroid_3d=None,
             ),
             ClusterNodeResponse(
                 node_id=5,
-            namespace="enwiki_namespace_0",
+                namespace="enwiki_namespace_0",
                 parent_id=1,
                 depth=1,
                 doc_count=25,
                 child_count=0,
                 final_label="Sibling Topic 2",
+                centroid_3d=None,
             ),
         ]
 
@@ -98,6 +103,7 @@ class TestClusterAPIUnit:
             doc_count=200,
             child_count=1,
             final_label="Parent Topic",
+            centroid_3d=None,
         )
 
     @patch("api.clusters.service_provider")
@@ -261,7 +267,7 @@ class TestClusterAPIUnit:
         assert response.json() == [
             {
                 "node_id": 2,
-            "namespace": "enwiki_namespace_0",
+                "namespace": "enwiki_namespace_0",
                 "parent_id": 1,
                 "depth": 1,
                 "doc_count": 50,
@@ -271,7 +277,7 @@ class TestClusterAPIUnit:
             },
             {
                 "node_id": 3,
-            "namespace": "enwiki_namespace_0",
+                "namespace": "enwiki_namespace_0",
                 "parent_id": 1,
                 "depth": 1,
                 "doc_count": 30,
@@ -332,7 +338,7 @@ class TestClusterAPIUnit:
         assert response.json() == [
             {
                 "node_id": 4,
-            "namespace": "enwiki_namespace_0",
+                "namespace": "enwiki_namespace_0",
                 "parent_id": 1,
                 "depth": 1,
                 "doc_count": 20,
@@ -342,7 +348,7 @@ class TestClusterAPIUnit:
             },
             {
                 "node_id": 5,
-            "namespace": "enwiki_namespace_0",
+                "namespace": "enwiki_namespace_0",
                 "parent_id": 1,
                 "depth": 1,
                 "doc_count": 25,

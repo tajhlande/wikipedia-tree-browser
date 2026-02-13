@@ -48,10 +48,16 @@ def _get_sql_conn_for_file(db_file: str = "chunk_log.db") -> sqlite3.Connection:
         sqlconn.execute("PRAGMA journal_mode=WAL;")
         sqlconn.execute("PRAGMA synchronous=NORMAL;")
         sqlconn.execute("PRAGMA temp_store = MEMORY;")
-        sqlconn.execute("PRAGMA cache_size = -500000;")  # ~20MB cache (adjust as needed)
+        sqlconn.execute(
+            "PRAGMA cache_size = -500000;"
+        )  # ~20MB cache (adjust as needed)
         sqlconn.execute("PRAGMA mmap_size = 8000000000;")  # ~8GB or larger than db
-        sqlconn.execute("PRAGMA temp_store = MEMORY;")  # avoids disk I/O for: Sorts, GROUP BY, temp indices
-        sqlconn.execute("PRAGMA locking_mode = EXCLUSIVE;")  # only use if only one process accesses the db
+        sqlconn.execute(
+            "PRAGMA temp_store = MEMORY;"
+        )  # avoids disk I/O for: Sorts, GROUP BY, temp indices
+        sqlconn.execute(
+            "PRAGMA locking_mode = EXCLUSIVE;"
+        )  # only use if only one process accesses the db
         sqlconn.execute("PRAGMA threads = 4;")  # use multiple threads
         sqlconn.execute("PRAGMA query_only = ON;")  # read only access
     except sqlite3.Error:
@@ -352,35 +358,34 @@ class DatabaseService(ClusterService):
         return [self._map_cluster_row_to_response(row, namespace) for row in rows]
 
     def _map_cluster_row_to_response(
-            self,
-            row: sqlite3.Row,
-            namespace: Optional[str] = None) -> ClusterNodeResponse:
+        self, row: sqlite3.Row, namespace: Optional[str] = None
+    ) -> ClusterNodeResponse:
         """Map database row to ClusterNodeResponse with proper field mapping and defaults"""
         # Convert row to dict for easier manipulation
         row_dict = {k: row[k] for k in row.keys()}
 
         # Handle centroid_three_d - it might be JSON string or None
-        if 'centroid_three_d' in row_dict and row_dict['centroid_three_d']:
+        if "centroid_three_d" in row_dict and row_dict["centroid_three_d"]:
             try:
-                centroid = json.loads(row_dict['centroid_three_d'])
+                centroid = json.loads(row_dict["centroid_three_d"])
                 if isinstance(centroid, list) and len(centroid) == 3:
-                    row_dict['centroid_3d'] = centroid
+                    row_dict["centroid_3d"] = centroid
             except (json.JSONDecodeError, ValueError):
                 # If JSON parsing fails, set to None
-                row_dict['centroid_3d'] = None
+                row_dict["centroid_3d"] = None
         else:
-            row_dict['centroid_3d'] = None
+            row_dict["centroid_3d"] = None
 
         # Ensure all required fields are present with defaults
         required_fields = {
-            'node_id': row_dict.get('node_id'),
-            'namespace': row_dict.get('namespace') or namespace,
-            'parent_id': row_dict.get('parent_id'),
-            'depth': row_dict.get('depth', 0),
-            'doc_count': row_dict.get('doc_count', 0),
-            'child_count': row_dict.get('child_count', 0),
-            'final_label': row_dict.get('final_label') or row_dict.get('first_label'),
-            'centroid_3d': row_dict.get('centroid_3d')
+            "node_id": row_dict.get("node_id"),
+            "namespace": row_dict.get("namespace") or namespace,
+            "parent_id": row_dict.get("parent_id"),
+            "depth": row_dict.get("depth", 0),
+            "doc_count": row_dict.get("doc_count", 0),
+            "child_count": row_dict.get("child_count", 0),
+            "final_label": row_dict.get("final_label") or row_dict.get("first_label"),
+            "centroid_3d": row_dict.get("centroid_3d"),
         }
 
         return ClusterNodeResponse(**required_fields)

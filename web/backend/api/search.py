@@ -58,12 +58,14 @@ async def get_available_namespaces(
         namespace_info_list = []
         for namespace in namespaces:
             language_info = get_language_info_for_namespace(namespace)
-            namespace_info_list.append({
-                "namespace": namespace,
-                "language": language_info.language,
-                "english_wiki_name": language_info.english_wiki_name,
-                "localized_wiki_name": language_info.localized_wiki_name
-            })
+            namespace_info_list.append(
+                {
+                    "namespace": namespace,
+                    "language": language_info.language,
+                    "english_wiki_name": language_info.english_wiki_name,
+                    "localized_wiki_name": language_info.localized_wiki_name,
+                }
+            )
 
         logger.debug("Returning %s", str(namespace_info_list))
         return namespace_info_list
