@@ -45,7 +45,6 @@ None
 
 ## Technical and performance improvements
 
-* Caching in API layer of request + response
 * Migrate to real db backend
 
 ## Aesthetic improvements
