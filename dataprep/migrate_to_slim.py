@@ -41,7 +41,6 @@ def create_slim_schema(conn: sqlite3.Connection) -> None:
     cursor.execute("DROP TABLE IF EXISTS cluster_tree;")
     # Drop FTS5 virtual tables if they exist
     cursor.execute("DROP TABLE IF EXISTS cluster_tree_fts;")
-    cursor.execute("DROP TABLE IF EXISTS page_log_fts;")
 
     # Create page_log table - only columns used by the API
     cursor.execute(
@@ -113,38 +112,27 @@ def create_slim_schema(conn: sqlite3.Connection) -> None:
     """
     )
 
-    # Create FTS5 virtual tables for full-text search
-    # cluster_tree_fts: Search across cluster tree nodes (final_label)
+    # Create FTS5 virtual table for full-text search with aggregated page titles
+    # cluster_tree_fts: Search across cluster tree nodes (final_label) and aggregated page titles
     # Uses unicode61 tokenizer for multi-language support
     # UNINDEXED columns are stored but not tokenized for JOIN operations
+    # page_titles contains space-separated page titles for each node (aggregated content)
+    logger.info("Creating FTS5 virtual table with aggregated content...")
     cursor.execute(
         """
         CREATE VIRTUAL TABLE cluster_tree_fts USING fts5(
-            final_label,
             node_id UNINDEXED,
             namespace UNINDEXED,
-            tokenize='unicode61 remove_diacritics 1'
-        );
-        """
-    )
-
-    # page_log_fts: Search across page titles and abstracts
-    # Uses unicode61 tokenizer for multi-language support
-    # UNINDEXED columns are stored but not tokenized for JOIN operations
-    cursor.execute(
-        """
-        CREATE VIRTUAL TABLE page_log_fts USING fts5(
-            title,
-            abstract,
-            page_id UNINDEXED,
-            namespace UNINDEXED,
+            final_label,
+            page_titles,
+            page_count UNINDEXED,
             tokenize='unicode61 remove_diacritics 1'
         );
         """
     )
 
     conn.commit()
-    logger.info("Created slim database schema with optimized indexes and FTS5 tables")
+    logger.info("Created slim database schema with optimized indexes and FTS5 table")
 
 
 def copy_data(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection) -> None:
@@ -216,50 +204,37 @@ def copy_data(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection) ->
     dest_conn.commit()
 
 
-def populate_fts5_tables(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection) -> None:
-    """Populate FTS5 virtual tables from source database tables."""
-    source_cursor = source_conn.cursor()
+def populate_fts5_table(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection) -> None:
+    """Populate FTS5 virtual table with aggregated page titles per node."""
     dest_cursor = dest_conn.cursor()
 
-    # Populate cluster_tree_fts from cluster_tree
-    logger.info("Populating cluster_tree_fts...")
-    source_cursor.execute(
-        """
-        SELECT final_label, node_id, namespace
-        FROM cluster_tree
-        WHERE final_label IS NOT NULL
-        """
-    )
-    cluster_tree_rows = source_cursor.fetchall()
-    if cluster_tree_rows:
-        dest_cursor.executemany(
-            """
-            INSERT INTO cluster_tree_fts (final_label, node_id, namespace)
-            VALUES (?, ?, ?)
-            """,
-            cluster_tree_rows,
-        )
-    logger.info("Populated %d cluster_tree_fts rows", len(cluster_tree_rows))
+    logger.info("Populating cluster_tree_fts with aggregated content...")
 
-    # Populate page_log_fts from page_log
-    logger.info("Populating page_log_fts...")
-    source_cursor.execute(
+    # Aggregate all page titles for each cluster node
+    # This creates a single FTS5 entry per node with all page titles concatenated
+    dest_cursor.execute(
         """
-        SELECT title, abstract, page_id, namespace
-        FROM page_log
-        WHERE title IS NOT NULL OR abstract IS NOT NULL
+        INSERT INTO cluster_tree_fts(node_id, namespace, final_label, page_titles, page_count)
+        SELECT
+            ct.node_id,
+            ct.namespace,
+            ct.final_label,
+            COALESCE(GROUP_CONCAT(pl.title, ' '), ''),
+            COUNT(pl.page_id) as page_count
+        FROM cluster_tree ct
+        LEFT JOIN page_vector pv ON pv.namespace = ct.namespace AND pv.cluster_node_id = ct.node_id
+        LEFT JOIN page_log pl ON pl.namespace = pv.namespace AND pl.page_id = pv.page_id
+        WHERE ct.final_label IS NOT NULL
+        GROUP BY ct.node_id, ct.namespace, ct.final_label;
         """
     )
-    page_log_rows = source_cursor.fetchall()
-    if page_log_rows:
-        dest_cursor.executemany(
-            """
-            INSERT INTO page_log_fts (title, abstract, page_id, namespace)
-            VALUES (?, ?, ?, ?)
-            """,
-            page_log_rows,
-        )
-    logger.info("Populated %d page_log_fts rows", len(page_log_rows))
+
+    row_count = dest_cursor.rowcount
+    logger.info("Populated cluster_tree_fts with %d nodes", row_count)
+
+    # Optimize FTS5 index for better query performance
+    logger.info("Optimizing FTS5 index...")
+    dest_cursor.execute("INSERT INTO cluster_tree_fts(cluster_tree_fts) VALUES('optimize');")
 
     dest_conn.commit()
 
@@ -288,13 +263,10 @@ def verify_copy(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection) 
             )
             all_ok = False
 
-    # Verify FTS5 tables
-    fts_tables = ["cluster_tree_fts", "page_log_fts"]
-    for table in fts_tables:
-        dest_cursor.execute(f"SELECT COUNT(*) FROM {table}")
-        dest_count = dest_cursor.fetchone()[0]
-
-        logger.info("Verified %s: %d rows", table, dest_count)
+    # Verify FTS5 table
+    dest_cursor.execute("SELECT COUNT(*) FROM cluster_tree_fts")
+    fts_count = dest_cursor.fetchone()[0]
+    logger.info("Verified cluster_tree_fts: %d nodes", fts_count)
 
     return all_ok
 
@@ -369,8 +341,8 @@ def main() -> int:
         # Copy data
         copy_data(source_conn, dest_conn)
 
-        # Populate FTS5 tables
-        populate_fts5_tables(source_conn, dest_conn)
+        # Populate FTS5 table
+        populate_fts5_table(source_conn, dest_conn)
 
         # Verify copy
         if not verify_copy(source_conn, dest_conn):
