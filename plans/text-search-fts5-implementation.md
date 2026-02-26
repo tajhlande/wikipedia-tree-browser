@@ -30,29 +30,34 @@ Add a search bar to the node view that allows users to search across cluster nod
 
 ## 2. Database Schema
 
-### FTS5 Virtual Tables (Created During Migration)
+### FTS5 Virtual Table (Created During Migration)
+
+**Design Philosophy**: Aggregate all searchable text at the node level to eliminate join complexity and result duplication.
 
 ```sql
--- Cluster node labels FTS5 table
+-- Single FTS5 table containing all searchable content per node
 CREATE VIRTUAL TABLE cluster_tree_fts USING fts5(
-    node_id UNINDEXED,    -- Needed for JOIN back to cluster_tree
-    namespace UNINDEXED,  -- Needed for JOIN back to cluster_tree
-    final_label,          -- Indexed for full-text search
-    tokenize='unicode61 remove_diacritics 1'
-);
-
--- Page titles FTS5 table
-CREATE VIRTUAL TABLE page_log_fts USING fts5(
-    page_id UNINDEXED,    -- Needed for JOIN back to page_log
-    namespace UNINDEXED,  -- Needed for JOIN back to page_log
-    title,                -- Indexed for full-text search
+    node_id UNINDEXED,      -- Needed for JOIN back to cluster_tree
+    namespace UNINDEXED,    -- Needed for JOIN back to cluster_tree
+    final_label,            -- Cluster node label (indexed)
+    page_titles,            -- Space-separated page titles for this node (indexed)
     tokenize='unicode61 remove_diacritics 1'
 );
 ```
 
-**Storage Optimization**: By excluding `depth` and `parent_id` from FTS5 tables (retrieved via JOIN), FTS5 overhead is reduced from ~30-50% to ~20-35% of database size.
+**Key Benefits**:
+1. **No result duplication**: Each node appears exactly once in search results
+2. **Simplified queries**: Single table search, no joins to page_log/page_vector needed
+3. **Better relevance**: BM25 scoring considers all page titles as a single document
+4. **Faster performance**: No multi-table joins during search
 
-**Note**: FTS5 tables are created during migration in `migrate_to_slim.py`. Databases are read-only at runtime. If FTS5 tables don't exist, search will fail with SQLite errors (intentional).
+**Storage**: Minimal overhead (~15-25% of database size) since we're only duplicating text content, not full page metadata.
+
+**Data Population** (during migration):
+- For each cluster node, aggregate all page titles (space-separated)
+- Store in `page_titles` column for FTS5 indexing
+
+**Note**: FTS5 table is created during migration in `migrate_to_slim.py`. Databases are read-only at runtime. If FTS5 table doesn't exist, search will fail with SQLite errors (intentional).
 
 ---
 
@@ -77,7 +82,6 @@ CREATE VIRTUAL TABLE page_log_fts USING fts5(
       "namespace": "enwiki_namespace_0",
       "node_label": "Arts and Entertainment",
       "match_type": "node_label",
-      "matched_page_title": null,
       "depth": 2,
       "parent_id": 1
     },
@@ -85,8 +89,7 @@ CREATE VIRTUAL TABLE page_log_fts USING fts5(
       "node_id": 123,
       "namespace": "enwiki_namespace_0",
       "node_label": "Science",
-      "match_type": "page_title",
-      "matched_page_title": "Physics",
+      "match_type": "page_titles",
       "depth": 3,
       "parent_id": 42
     }
@@ -96,6 +99,10 @@ CREATE VIRTUAL TABLE page_log_fts USING fts5(
   "language_code": "en"
 }
 ```
+
+**Field Descriptions**:
+- `match_type`: Either "node_label" (matched the cluster label) or "page_titles" (matched page titles in the cluster)
+
 
 ### 3.2 Language Configuration
 
@@ -120,32 +127,38 @@ FTS5_LANGUAGE_CONFIG = {
 
 ### 3.3 FTS5 Query
 
+**Simplified Single-Table Search**:
+
 ```sql
--- Search node labels
-SELECT DISTINCT
-    ct.node_id, ct.namespace, ct.final_label, 'node_label' as match_type,
-    NULL as matched_page_title, ct.depth, ct.parent_id,
+-- Search across both node labels and aggregated page titles
+SELECT
+    ct.node_id,
+    ct.namespace,
+    ct.final_label,
+    CASE
+        WHEN fts.final_label MATCH :fts_query THEN 'node_label'
+        ELSE 'page_titles'
+    END as match_type,
+    ct.depth,
+    ct.parent_id,
     bm25(fts) as relevance_score
 FROM cluster_tree_fts fts
 INNER JOIN cluster_tree ct ON ct.namespace = fts.namespace AND ct.node_id = fts.node_id
-WHERE fts.final_label MATCH :fts_query AND ct.namespace = :namespace
-
-UNION ALL
-
--- Search page titles
-SELECT DISTINCT
-    ct.node_id, ct.namespace, ct.final_label, 'page_title' as match_type,
-    pl.title as matched_page_title, ct.depth, ct.parent_id,
-    bm25(page_fts) as relevance_score
-FROM page_log_fts page_fts
-INNER JOIN page_log pl ON pl.namespace = page_fts.namespace AND pl.page_id = page_fts.page_id
-INNER JOIN page_vector pv ON pv.namespace = pl.namespace AND pv.page_id = pl.page_id
-INNER JOIN cluster_tree ct ON ct.namespace = pv.namespace AND ct.node_id = pv.cluster_node_id
-WHERE page_fts.title MATCH :fts_query AND pl.namespace = :namespace
-
-ORDER BY relevance_score ASC  -- Lower = more relevant
+WHERE fts MATCH :fts_query
+  AND ct.namespace = :namespace
+ORDER BY relevance_score ASC  -- Lower BM25 score = more relevant
 LIMIT :limit;
 ```
+
+**Key Advantages**:
+1. **Single table scan**: No joins to page_log or page_vector
+2. **No duplicates**: Each node appears once regardless of how many pages match
+3. **Unified relevance**: BM25 considers both label and page titles together
+4. **Simple logic**: FTS5 searches both `final_label` and `page_titles` columns automatically
+
+**Match Type Detection**:
+- If query matches `final_label` column → `match_type = "node_label"`
+- Otherwise (matched `page_titles` column) → `match_type = "page_titles"`
 
 ---
 
@@ -242,7 +255,7 @@ search: {
 
 #### 5.1.1 Update `create_slim_schema()`
 
-Add FTS5 table creation:
+Add FTS5 table creation with aggregated content:
 
 ```python
 def create_slim_schema(conn: sqlite3.Connection) -> None:
@@ -254,84 +267,89 @@ def create_slim_schema(conn: sqlite3.Connection) -> None:
     cursor.execute("DROP TABLE IF EXISTS page_log;")
     cursor.execute("DROP TABLE IF EXISTS cluster_tree;")
     cursor.execute("DROP TABLE IF EXISTS cluster_tree_fts;")  # NEW
-    cursor.execute("DROP TABLE IF EXISTS page_log_fts;")      # NEW
 
     # ... existing table creation code ...
 
-    # NEW: Create FTS5 virtual tables
-    logger.info("Creating FTS5 virtual tables...")
+    # NEW: Create single FTS5 virtual table with aggregated content
+    logger.info("Creating FTS5 virtual table...")
 
     cursor.execute("""
         CREATE VIRTUAL TABLE cluster_tree_fts USING fts5(
             node_id UNINDEXED,
             namespace UNINDEXED,
             final_label,
-            tokenize='unicode61 remove_diacritics 1'
-        );
-    """)
-
-    cursor.execute("""
-        CREATE VIRTUAL TABLE page_log_fts USING fts5(
-            page_id UNINDEXED,
-            namespace UNINDEXED,
-            title,
+            page_titles,
+            page_count UNINDEXED,
             tokenize='unicode61 remove_diacritics 1'
         );
     """)
 
     conn.commit()
-    logger.info("Created slim database schema with FTS5 tables")
+    logger.info("Created slim database schema with FTS5 table")
 ```
 
-#### 5.1.2 Update `copy_data()`
+#### 5.1.2 Add `populate_fts5_table()` Function
 
-Add FTS5 population:
+New function to aggregate page titles per node:
 
 ```python
-def copy_data(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection) -> None:
-    """Copy data from source database to destination database."""
+def populate_fts5_table(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection) -> None:
+    """Populate FTS5 virtual table with aggregated page titles per node."""
     source_cursor = source_conn.cursor()
     dest_cursor = dest_conn.cursor()
 
-    # ... existing copy code for page_log, page_vector, cluster_tree ...
+    logger.info("Populating cluster_tree_fts with aggregated content...")
 
-    # NEW: Populate FTS5 tables
-    logger.info("Populating cluster_tree_fts...")
+    # Aggregate all page titles for each cluster node
     dest_cursor.execute("""
-        INSERT INTO cluster_tree_fts(node_id, namespace, final_label)
-        SELECT node_id, namespace, final_label
-        FROM cluster_tree
-        WHERE final_label IS NOT NULL;
+        INSERT INTO cluster_tree_fts(node_id, namespace, final_label, page_titles)
+        SELECT
+            ct.node_id,
+            ct.namespace,
+            ct.final_label,
+            COALESCE(GROUP_CONCAT(pl.title, ' '), '')
+        FROM cluster_tree ct
+        LEFT JOIN page_vector pv ON pv.namespace = ct.namespace AND pv.cluster_node_id = ct.node_id
+        LEFT JOIN page_log pl ON pl.namespace = pv.namespace AND pl.page_id = pv.page_id
+        WHERE ct.final_label IS NOT NULL
+        GROUP BY ct.node_id, ct.namespace, ct.final_label;
     """)
-    logger.info("Populated cluster_tree_fts with %d rows", dest_cursor.rowcount)
 
-    logger.info("Populating page_log_fts...")
-    dest_cursor.execute("""
-        INSERT INTO page_log_fts(page_id, namespace, title)
-        SELECT page_id, namespace, title
-        FROM page_log
-        WHERE title IS NOT NULL;
-    """)
-    logger.info("Populated page_log_fts with %d rows", dest_cursor.rowcount)
+    row_count = dest_cursor.rowcount
+    logger.info("Populated cluster_tree_fts with %d nodes", row_count)
 
-    # Optimize FTS5 indexes
-    logger.info("Optimizing FTS5 indexes...")
+    # Optimize FTS5 index
+    logger.info("Optimizing FTS5 index...")
     dest_cursor.execute("INSERT INTO cluster_tree_fts(cluster_tree_fts) VALUES('optimize');")
-    dest_cursor.execute("INSERT INTO page_log_fts(page_log_fts) VALUES('optimize');")
 
     dest_conn.commit()
 ```
 
+#### 5.1.3 Update `copy_data()` to Call `populate_fts5_table()`
+
+```python
+def copy_data(source_conn: sqlite3.Connection, dest_conn: sqlite3.Connection) -> None:
+    """Copy data from source database to destination database."""
+    # ... existing copy code for page_log, page_vector, cluster_tree ...
+
+    # NEW: Populate FTS5 table with aggregated content
+    populate_fts5_table(source_conn, dest_conn)
+```
+
 **Note**: DO NOT modify `main()` function - let errors happen if FTS5 fails.
 
-#### 5.1.3 Testing
+#### 5.1.4 Testing
 
 - [ ] Run migration on test database: `python migrate_to_slim.py test_data.db`
-- [ ] Verify FTS5 tables exist: `SELECT name FROM sqlite_master WHERE name LIKE '%_fts';`
-- [ ] Verify row counts match
-- [ ] Test FTS5 query: `SELECT * FROM cluster_tree_fts WHERE final_label MATCH 'physics' LIMIT 5;`
-- [ ] Test phrase search: `SELECT * FROM cluster_tree_fts WHERE final_label MATCH '"quantum physics"' LIMIT 5;`
-- [ ] Verify BM25 scoring: `SELECT final_label, bm25(cluster_tree_fts) FROM cluster_tree_fts WHERE final_label MATCH 'physics';`
+- [ ] Verify FTS5 table exists: `SELECT name FROM sqlite_master WHERE name = 'cluster_tree_fts';`
+- [ ] Verify row counts: `SELECT COUNT(*) FROM cluster_tree_fts;`
+- [ ] Verify page_titles populated: `SELECT node_id, page_titles FROM cluster_tree_fts LIMIT 5;`
+- [ ] Test label search: `SELECT * FROM cluster_tree_fts WHERE final_label MATCH 'physics' LIMIT 5;`
+- [ ] Test page titles search: `SELECT * FROM cluster_tree_fts WHERE page_titles MATCH 'quantum' LIMIT 5;`
+- [ ] Test combined search: `SELECT * FROM cluster_tree_fts WHERE cluster_tree_fts MATCH 'physics' LIMIT 5;`
+- [ ] Test phrase search: `SELECT * FROM cluster_tree_fts WHERE cluster_tree_fts MATCH '"quantum physics"' LIMIT 5;`
+- [ ] Verify BM25 scoring: `SELECT final_label, bm25(cluster_tree_fts) FROM cluster_tree_fts WHERE cluster_tree_fts MATCH 'physics';`
+- [ ] Verify no duplicates: Each node appears exactly once in results
 
 ---
 
@@ -355,8 +373,7 @@ class SearchResultResponse(BaseModel):
     node_id: int
     namespace: str
     node_label: str
-    match_type: Literal["node_label", "page_title"]
-    matched_page_title: Optional[str] = None
+    match_type: Literal["node_label", "page_titles"]
     depth: int
     parent_id: Optional[int] = None
 
@@ -373,7 +390,6 @@ class SearchNodeResponse(BaseModel):
 
 ```python
 import logging
-from typing import Optional
 from services.service_model import ManagedService
 from services.database_service import DatabaseService
 from models.search import SearchResultResponse
@@ -400,7 +416,7 @@ FTS5_LANGUAGE_CONFIG = {
 
 
 class SearchService(ManagedService):
-    """Service for FTS5-based search across cluster nodes and pages."""
+    """Service for FTS5-based search across cluster nodes with aggregated page content."""
 
     def __init__(self, database_service: DatabaseService):
         """Initialize SearchService with DatabaseService dependency."""
@@ -432,31 +448,27 @@ class SearchService(ManagedService):
         language_code: str,
         limit: int = 50
     ) -> list[SearchResultResponse]:
-        """Search cluster nodes using FTS5 full-text search."""
+        """Search cluster nodes using FTS5 full-text search on aggregated content."""
         sqlconn = self.db_service._get_connection(namespace)
         fts_query = self._prepare_fts5_query(query, language_code)
 
+        # Simplified single-table query - no joins, no duplicates
         sql = """
-        SELECT DISTINCT
-            ct.node_id, ct.namespace, ct.final_label, 'node_label' as match_type,
-            NULL as matched_page_title, ct.depth, ct.parent_id,
+        SELECT
+            ct.node_id,
+            ct.namespace,
+            ct.final_label,
+            CASE
+                WHEN fts.final_label MATCH :fts_query THEN 'node_label'
+                ELSE 'page_titles'
+            END as match_type,
+            ct.depth,
+            ct.parent_id,
             bm25(fts) as relevance_score
         FROM cluster_tree_fts fts
         INNER JOIN cluster_tree ct ON ct.namespace = fts.namespace AND ct.node_id = fts.node_id
-        WHERE fts.final_label MATCH :fts_query AND ct.namespace = :namespace
-
-        UNION ALL
-
-        SELECT DISTINCT
-            ct.node_id, ct.namespace, ct.final_label, 'page_title' as match_type,
-            pl.title as matched_page_title, ct.depth, ct.parent_id,
-            bm25(page_fts) as relevance_score
-        FROM page_log_fts page_fts
-        INNER JOIN page_log pl ON pl.namespace = page_fts.namespace AND pl.page_id = page_fts.page_id
-        INNER JOIN page_vector pv ON pv.namespace = pl.namespace AND pv.page_id = pl.page_id
-        INNER JOIN cluster_tree ct ON ct.namespace = pv.namespace AND ct.node_id = pv.cluster_node_id
-        WHERE page_fts.title MATCH :fts_query AND pl.namespace = :namespace
-
+        WHERE fts MATCH :fts_query
+          AND ct.namespace = :namespace
         ORDER BY relevance_score ASC
         LIMIT :limit;
         """
@@ -466,15 +478,18 @@ class SearchService(ManagedService):
             rows = cursor.fetchall()
             return [
                 SearchResultResponse(
-                    node_id=row[0], namespace=row[1], node_label=row[2],
-                    match_type=row[3], matched_page_title=row[4],
-                    depth=row[5], parent_id=row[6]
+                    node_id=row[0],
+                    namespace=row[1],
+                    node_label=row[2],
+                    match_type=row[3],
+                    depth=row[4],
+                    parent_id=row[5]
                 )
                 for row in rows
             ]
         except Exception as e:
             logger.error(f"FTS5 search error for namespace {namespace}: {e}")
-            return []  # Return empty on error (FTS5 tables missing, query syntax error, etc.)
+            return []  # Return empty on error (FTS5 table missing, query syntax error, etc.)
 
     def shutdown(self) -> None:
         """Shutdown the service."""
@@ -603,7 +618,8 @@ async def search_nodes(
 - [ ] Test `_prepare_fts5_query()` escapes double quotes
 - [ ] Test `search_nodes()` returns results for valid query
 - [ ] Test `search_nodes()` returns empty list for invalid query
-- [ ] Test `search_nodes()` returns empty list if FTS5 tables missing
+- [ ] Test `search_nodes()` returns empty list if FTS5 table missing
+- [ ] Test `search_nodes()` returns each node exactly once (no duplicates)
 
 **Integration Tests** (`backend/test/test_search_api.py`):
 - [ ] Test endpoint with basic search: `query=physics&language_code=en`
@@ -616,6 +632,7 @@ async def search_nodes(
 - [ ] Test endpoint returns 500 if namespace missing
 - [ ] Test response includes `language_code` field
 - [ ] Test BM25 ranking (results ordered by relevance)
+- [ ] Test no duplicate nodes in results (critical for aggregated design)
 
 ---
 
@@ -646,8 +663,7 @@ interface SearchResult {
   node_id: number;
   namespace: string;
   node_label: string;
-  match_type: 'node_label' | 'page_title';
-  matched_page_title?: string;
+  match_type: 'node_label' | 'page_titles';
   depth: number;
   parent_id?: number;
 }
@@ -760,9 +776,9 @@ export function SearchBar(props: SearchBarProps) {
                   <div class="font-medium text-gray-900 dark:text-gray-100">
                     {result.node_label}
                   </div>
-                  <Show when={result.matched_page_title}>
+                  <Show when={result.match_type === 'page_titles'}>
                     <div class="text-sm text-gray-600 dark:text-gray-400">
-                      ({result.matched_page_title})
+                      (page titles match)
                     </div>
                   </Show>
                 </button>
