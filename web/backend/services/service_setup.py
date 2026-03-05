@@ -4,6 +4,7 @@ import os
 
 from typing import Any
 from services.database_service import DatabaseService
+from services.search_service import SearchService
 from services.service_model import ManagedService
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,11 @@ def init_services():
         logger.warning("DB directory was not set, using default value")
         db_service = DatabaseService()
     _service_catalog["cluster_service"] = db_service
+
+    # Initialize SearchService with DatabaseService dependency
+    search_service = SearchService(database_service=db_service)
+    _service_catalog["search_service"] = search_service
+
     logger.debug("Service initialization complete")
 
 
@@ -50,3 +56,4 @@ def service_provider(service_name: str) -> Any:
 
 
 get_cluster_service = partial(service_provider, "cluster_service")
+get_search_service = partial(service_provider, "search_service")

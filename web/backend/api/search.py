@@ -2,11 +2,14 @@
 Search functionality API endpoints for Wikipedia Embeddings
 """
 
+from typing import Annotated
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from services.cluster_service import ClusterService
-from services.service_setup import get_cluster_service
+from services.service_setup import get_cluster_service, get_search_service
+from services.search_service import SearchService
+from models.search import SearchNodeResponse
 
 from util.languages import get_language_info_for_namespace
 from util.cache import async_cache
@@ -16,34 +19,34 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-# @router.get("/pages", response_model=List[PageResponse])
-# async def search_pages(
-#     namespace: str = Query(..., description="Wikipedia namespace"),
-#     query: str = Query(..., description="Search query"),
-#     search_type: str = Query("title", description="Type of search: title, abstract, or both"),
-#     limit: int = Query(20, description="Maximum number of results"),
-#     offset: int = Query(0, description="Offset for pagination")
-# ):
-#     """Search for pages by title, abstract, or both"""
-#     try:
-#         pages = db_service.search_pages(namespace, query, search_type, limit, offset)
-#         return [PageResponse.from_db_page(page) for page in pages]
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Error searching pages: {str(e)}")
+@router.get("/nodes", response_model=SearchNodeResponse)
+@async_cache(key_prefix="search_nodes", ttl=300)
+async def search_nodes(
+    namespace: Annotated[str, Query(description="Wikipedia namespace")],
+    query: Annotated[str, Query(min_length=1, max_length=100, description="Search query")],
+    limit: Annotated[int, Query(ge=1, le=100, description="Maximum results")] = 50,
+    search_service: SearchService = Depends(get_search_service),
+):
+    """
+    Search cluster nodes by label or linked page titles using FTS5.
 
+    Supports:
+    - Word search: 'physics'
+    - Prefix search: 'phys*'
+    - Phrase search: '"quantum physics"'
+    - Boolean: 'physics AND quantum', 'physics OR chemistry'
 
-# @router.get("/clusters")
-# async def search_clusters(
-#     namespace: str = Query(..., description="Wikipedia namespace"),
-#     query: str = Query(..., description="Search query for cluster labels"),
-#     limit: int = Query(10, description="Maximum number of results")
-# ):
-#     """Search for clusters by their labels"""
-#     try:
-#         clusters = db_service.search_clusters(namespace, query, limit)
-#         return clusters
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Error searching clusters: {str(e)}")
+    Results ranked by BM25 relevance.
+    """
+    try:
+        language_code = get_language_info_for_namespace(namespace=namespace) . iso_639_1_code
+        results = search_service.search_nodes(namespace, query, language_code, limit)
+        return {
+            "results": results,
+        }
+    except Exception as e:
+        logger.exception("Error searching nodes")
+        raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
 
 
 @router.get("/namespaces")
@@ -74,17 +77,3 @@ async def get_available_namespaces(
         raise HTTPException(
             status_code=500, detail=f"Error retrieving namespaces: {str(e)}"
         )
-
-
-# @router.get("/suggestions")
-# async def get_search_suggestions(
-#     namespace: str = Query(..., description="Wikipedia namespace"),
-#     partial_query: str = Query(..., description="Partial query for autocomplete"),
-#     limit: int = Query(5, description="Maximum number of suggestions")
-# ):
-#     """Get search suggestions based on partial query"""
-#     try:
-#         suggestions = db_service.get_search_suggestions(namespace, partial_query, limit)
-#         return {"suggestions": suggestions}
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Error getting suggestions: {str(e)}")
