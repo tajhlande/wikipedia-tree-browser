@@ -38,7 +38,6 @@ None
 ## Usability improvements
 
 * Add Chinese localization
-* Search across all nodes to cross-navigate tree
 * Mobile layout fixes (controls and info boxes)
 * Reorganize node info boxes
 * Tune the LOD for billboards
