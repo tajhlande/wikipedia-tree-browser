@@ -8,6 +8,23 @@ import type {
   Vector3D
 } from '../types';
 
+// Search-related types
+export interface SearchResult {
+  node_id: number;
+  namespace: string;
+  node_label: string;
+  match_type: 'node_label' | 'page_titles';
+  depth: number;
+  parent_id?: number;
+}
+
+export interface SearchNodeResponse {
+  results: SearchResult[];
+  total_count: number;
+  query: string;
+  language_code: string;
+}
+
 /**
  * API Client for WP Embeddings Visualization
  * Handles all communication with the backend API
@@ -321,6 +338,27 @@ export class ApiClient {
     ]);
 
     return { currentNode, children, parent };
+  }
+
+  /**
+   * Search cluster nodes by label or linked page titles using FTS5
+   */
+  async searchNodes(
+    namespace: string,
+    query: string,
+    languageCode: string,
+    limit: number = 50
+  ): Promise<ApiResponse<SearchNodeResponse>> {
+    const params = new URLSearchParams({
+      namespace,
+      query,
+      language_code: languageCode,
+      limit: limit.toString()
+    });
+
+    return await this.fetchWithErrorHandling<SearchNodeResponse>(
+      `${this.baseUrl}/search/nodes?${params}`
+    );
   }
 
   /**

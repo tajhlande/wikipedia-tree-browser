@@ -66,7 +66,7 @@ class SearchService(ManagedService):
         sqlconn = self.db_service._get_connection(namespace)
         fts_query = self._prepare_fts5_query(query, language_code)
 
-        # Simplified query - FTS5 searches across both columns automatically
+        # Flattened query - bm25() must be called in the outermost query context
         sql = """
         SELECT
             ct.node_id,
@@ -74,12 +74,13 @@ class SearchService(ManagedService):
             'page_titles' as match_type,
             ct.depth,
             ct.parent_id,
-            bm25(fts) as relevance_score
-        FROM cluster_tree_fts fts
-        INNER JOIN cluster_tree ct ON ct.namespace = fts.namespace AND ct.node_id = fts.node_id
-        WHERE fts MATCH :fts_query
-          AND ct.namespace = :namespace
-        ORDER BY relevance_score ASC
+            bm25(cluster_tree_fts) as relevance_score
+        FROM cluster_tree_fts
+        INNER JOIN cluster_tree ct ON ct.namespace = cluster_tree_fts.namespace
+                                   AND ct.node_id = cluster_tree_fts.node_id
+        WHERE cluster_tree_fts MATCH :fts_query
+          AND cluster_tree_fts.namespace = :namespace
+        ORDER BY bm25(cluster_tree_fts) ASC
         LIMIT :limit;
         """
         logger.debug(f"Executing FTS5 search query: {sql}")

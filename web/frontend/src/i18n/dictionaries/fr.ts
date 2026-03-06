@@ -107,6 +107,15 @@ export const dict: Dict = {
     whatsThis: "Qu'est-ce que cette application ?"
   },
 
+  search: {
+    placeholder: "Rechercher...",
+    resultsHeader: "Affichage de {{showing}} résultats",
+    moreResults: "{{count}} résultats supplémentaires disponibles",
+    noResults: "Aucun résultat trouvé",
+    searching: "Recherche en cours...",
+    error: "La recherche a échoué. Veuillez réessayer."
+  },
+
    appInfoOverlay: {
     title: "À propos de Wiki Tree Browser",
     description: [

@@ -105,6 +105,15 @@ export const dict = {
     whatsThis: "What's this application?"
   },
 
+  search: {
+    placeholder: "Search...",
+    resultsHeader: "Showing {{showing}} results",
+    moreResults: "{{count}} more results available",
+    noResults: "No results found",
+    searching: "Searching...",
+    error: "Search failed. Please try again."
+  },
+
   appInfoOverlay: {
     title: "About Wiki Tree Browser",
     description: [
